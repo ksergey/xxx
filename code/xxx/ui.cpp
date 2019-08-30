@@ -39,6 +39,20 @@ XXX_ALWAYS_INLINE xxx::rect reserve_space(int height) noexcept {
   return result;
 }
 
+XXX_ALWAYS_INLINE int align(int inner_width, int parent_width, xxx::align alignment) noexcept {
+  if (XXX_LIKELY(parent_width > inner_width)) {
+    switch (alignment) {
+      case xxx::align::center:
+        return (parent_width - inner_width) / 2;
+      case xxx::align::right:
+        return (parent_width - inner_width);
+      default:
+        break;
+    }
+  }
+  return 0;
+}
+
 }  // namespace detail
 
 void init() {
@@ -48,9 +62,13 @@ void init() {
   }
 
   // Setup default style.
-  ctx.border = {L'│', L'─', L'╭', L'╮', L'╰', L'╯'};
-  ctx.spinner = {{L'⠉', L'⠑', L'⠃', L'⠊', L'⠒', L'⠢', L'⠆', L'⠔', L'⠤', L'⢄', L'⡄', L'⡠',
-                  L'⣀', L'⢄', L'⢠', L'⡠', L'⠤', L'⠢', L'⠰', L'⠔', L'⠒', L'⠑', L'⠘', L'⠊'}};
+  ctx.style.border = {L'│', L'─', L'╭', L'╮', L'╰', L'╯'};
+  ctx.style.spinner_glyphs = {{L'⠉', L'⠑', L'⠃', L'⠊', L'⠒', L'⠢', L'⠆', L'⠔', L'⠤', L'⢄', L'⡄', L'⡠',
+                               L'⣀', L'⢄', L'⢠', L'⡠', L'⠤', L'⠢', L'⠰', L'⠔', L'⠒', L'⠑', L'⠘', L'⠊'}};
+  ctx.style.panel.title_color = color::yellow;
+  ctx.style.panel.border_color = color::green;
+  ctx.style.spinner.spinner_color = color::red;
+  ctx.style.spinner.label_color = color::white;
 
   // Preallocate container resources.
   ctx.layout_stack.reserve(8);
@@ -252,14 +270,14 @@ void panel_begin(std::string_view title) {
   int title_length = 0;
   if (title.size() > 0) {
     title_length = std::min<int>(utf8_string_length(title), panel.size.width);
-    draw_text(panel.pos.x, panel.pos.y - 1, title.data(), title_length, color::yellow, color::default_);
+    draw_text(panel.pos.x, panel.pos.y - 1, title.data(), title_length, ctx.style.panel.title_color);
   }
 
-  auto cell = make_cell(ctx.border.horizontal_line, color::green, color::default_);
+  auto cell = make_cell(ctx.style.border.horizontal_line, ctx.style.panel.border_color);
   draw_horizontal_line(panel.pos.x + title_length, panel.pos.y - 1, panel.size.width - title_length + 1, cell);
-  cell.ch = ctx.border.upper_left_corner;
+  cell.ch = ctx.style.border.upper_left_corner;
   draw_cell(panel.pos.x - 1, panel.pos.y - 1, cell);
-  cell.ch = ctx.border.upper_right_corner;
+  cell.ch = ctx.style.border.upper_right_corner;
   draw_cell(panel.pos.x - 1 + panel.size.width + 1, panel.pos.y - 1, cell);
 
   ctx.layout_stack.push_back(panel);
@@ -277,13 +295,13 @@ void panel_end() {
   auto& parent = ctx.layout_stack.back();
   parent.filled_size.height += filled_height + 2;
 
-  auto cell = make_cell(ctx.border.horizontal_line, color::green, color::default_);
+  auto cell = make_cell(ctx.style.border.horizontal_line, ctx.style.panel.border_color);
   draw_horizontal_line(parent.pos.x + 1, parent.pos.y + parent.filled_size.height - 1, parent.size.width - 2, cell);
-  cell.ch = ctx.border.bottom_left_corner;
+  cell.ch = ctx.style.border.bottom_left_corner;
   draw_cell(parent.pos.x, parent.pos.y + parent.filled_size.height - 1, cell);
-  cell.ch = ctx.border.bottom_right_corner;
+  cell.ch = ctx.style.border.bottom_right_corner;
   draw_cell(parent.pos.x + parent.size.width - 1, parent.pos.y + parent.filled_size.height - 1, cell);
-  cell.ch = ctx.border.vertical_line;
+  cell.ch = ctx.style.border.vertical_line;
   draw_vertical_line(parent.pos.x, parent.pos.y + parent.filled_size.height - (filled_height + 1), filled_height, cell);
   draw_vertical_line(parent.pos.x + parent.size.width - 1,
                      parent.pos.y + parent.filled_size.height - (filled_height + 1), filled_height, cell);
@@ -307,34 +325,43 @@ void spacer(float ratio_or_height) {
   parent.filled_size.height += height;
 }
 
-void text(std::string_view str, color fg, color bg) {
+void text(std::string_view str, color text_color, align alignment) {
   auto rect = detail::reserve_space(1);
   if (XXX_UNLIKELY(rect.width < 1 || rect.height < 1 || str.empty())) {
     return;
   }
 
   int str_length = std::min<int>(utf8_string_length(str), rect.width);
-  draw_text(rect.x, rect.y, str.data(), str_length, fg, bg);
+  int offset_x = detail::align(str_length, rect.width, alignment);
+  draw_text(rect.x + offset_x, rect.y, str.data(), str_length, text_color);
 }
 
-void spinner(float& step_storage, std::string_view text) {
+void spinner(float& step_storage, std::string_view text, align alignment) {
   auto rect = detail::reserve_space(1);
-  if (XXX_UNLIKELY(rect.width < 1 || rect.height < 1 || ctx.spinner.empty())) {
-    assert(!ctx.spinner.empty() && "spinner frames not configured");
+  if (XXX_UNLIKELY(rect.width < 1 || rect.height < 1 || ctx.style.spinner_glyphs.empty())) {
+    assert(!ctx.style.spinner_glyphs.empty() && "spinner frames not configured");
     return;
   }
 
+  int str_length = 0;
+  int inner_length = 1;
+  if (text.size() > 0) {
+    str_length = std::min<int>(utf8_string_length(text), rect.width - 2);
+    inner_length += (str_length + 1);
+  }
+
+  int offset_x = detail::align(inner_length, rect.width, alignment);
+
   // Spinner
-  static constexpr float spin_interval = 0.1;  // 0.5 seconds
+  static constexpr float spin_interval = 0.1;  // 0.1 seconds
   step_storage += ctx.deltaTime;
-  std::size_t const index = std::size_t(std::round(step_storage / spin_interval)) % ctx.spinner.size();
+  std::size_t const index = std::size_t(std::round(step_storage / spin_interval)) % ctx.style.spinner_glyphs.size();
 
   // Spinner text
-  draw_cell(rect.x, rect.y, make_cell(ctx.spinner[index], color::white));
+  draw_cell(rect.x + offset_x, rect.y, make_cell(ctx.style.spinner_glyphs[index], ctx.style.spinner.spinner_color));
 
-  if (text.size() > 0) {
-    int str_length = std::min<int>(utf8_string_length(text), rect.width - 2);
-    draw_text(rect.x + 2, rect.y, text.data(), str_length, color::white);
+  if (str_length > 0) {
+    draw_text(rect.x + offset_x + 2, rect.y, text.data(), str_length, ctx.style.spinner.label_color);
   }
 }
 
