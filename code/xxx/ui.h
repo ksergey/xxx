@@ -11,6 +11,9 @@ namespace xxx {
 /// Colors.
 enum class color : std::uint16_t { default_ = 0x00, black, red, green, yellow, blue, magenta, cyan, white };
 
+/// Align.
+enum class align { left, center, right };
+
 /// Key event.
 struct key {
   std::uint32_t ch;
@@ -73,10 +76,10 @@ void panel_end();
 void spacer(float ratio_or_height = 1.0);
 
 /// Draw text line.
-void text(std::string_view str, color fg = color::default_, color bg = color::default_);
+void text(std::string_view str, color text_color = color::default_, align alignment = align::left);
 
 /// Draw spinner.
-void spinner(float& step_storage, std::string_view text = {});
+void spinner(float& step_storage, std::string_view text = {}, align alignment = align::left);
 
 }  // namespace xxx
 

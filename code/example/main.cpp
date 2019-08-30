@@ -28,8 +28,8 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
         xxx::row_push(0.4);
           xxx::panel_begin("Panel 1");
             xxx::text("Content -3", xxx::color::red);
-            xxx::text("Content -2", xxx::color::cyan);
-            xxx::text("Content -1", xxx::color::magenta);
+            xxx::text("Content -2", xxx::color::magenta);
+            xxx::text("Content -1", xxx::color::cyan);
             xxx::text("Content 0");
           xxx::panel_end();
         xxx::row_push(0.6);
@@ -41,7 +41,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
             xxx::text("Content 2");
           xxx::panel_end();
           xxx::panel_begin("Panel 4");
-            xxx::spinner(spinner_step_storage, "Content loading");
+            xxx::spinner(spinner_step_storage, "Loading", xxx::align::center);
           xxx::panel_end();
       xxx::row_end();
       // clang-format on
