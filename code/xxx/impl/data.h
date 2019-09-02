@@ -1,3 +1,7 @@
+// ------------------------------------------------------------
+// Copyright 2019-present Sergey Kovalevich <inndie@gmail.com>
+// ------------------------------------------------------------
+
 #ifndef KSERGEY_data_300819145443
 #define KSERGEY_data_300819145443
 

@@ -1,3 +1,7 @@
+// ------------------------------------------------------------
+// Copyright 2019-present Sergey Kovalevich <inndie@gmail.com>
+// ------------------------------------------------------------
+
 #ifndef KSERGEY_ui_300819104733
 #define KSERGEY_ui_300819104733
 
@@ -6,10 +10,9 @@
 #include <stdexcept>
 #include <string_view>
 
-namespace xxx {
+#include <xxx/color.h>
 
-/// Colors.
-enum class color : std::uint16_t { default_ = 0x00, black, red, green, yellow, blue, magenta, cyan, white };
+namespace xxx {
 
 /// Align.
 enum class align { left, center, right };

@@ -1,3 +1,7 @@
+// ------------------------------------------------------------
+// Copyright 2019-present Sergey Kovalevich <inndie@gmail.com>
+// ------------------------------------------------------------
+
 #include "ui.h"
 
 #include <algorithm>
@@ -61,14 +65,17 @@ void init() {
     throw std::runtime_error{"Failed to init terminal library"};
   }
 
+  // Use rbg colors.
+  ::tb_select_output_mode(TB_OUTPUT_256);
+
   // Setup default style.
   ctx.style.border = {L'│', L'─', L'╭', L'╮', L'╰', L'╯'};
   ctx.style.spinner_glyphs = {{L'⠉', L'⠑', L'⠃', L'⠊', L'⠒', L'⠢', L'⠆', L'⠔', L'⠤', L'⢄', L'⡄', L'⡠',
                                L'⣀', L'⢄', L'⢠', L'⡠', L'⠤', L'⠢', L'⠰', L'⠔', L'⠒', L'⠑', L'⠘', L'⠊'}};
-  ctx.style.panel.title_color = color::yellow;
-  ctx.style.panel.border_color = color::green;
-  ctx.style.spinner.spinner_color = color::red;
-  ctx.style.spinner.label_color = color::white;
+  ctx.style.panel.title_color = make_color(192, 41, 66);
+  ctx.style.panel.border_color = make_color(84, 36, 55);
+  ctx.style.spinner.spinner_color = make_color(236, 208, 120);
+  ctx.style.spinner.label_color = make_color(217, 91, 67);
 
   // Preallocate container resources.
   ctx.layout_stack.reserve(8);
