@@ -269,16 +269,19 @@ void panel_begin(std::string_view title) {
 
   int title_length = 0;
   if (title.size() > 0) {
-    title_length = std::min<int>(utf8_string_length(title), panel.size.width);
-    draw_text(panel.pos.x, panel.pos.y - 1, title.data(), title_length, ctx.style.panel.title_color);
+    title_length = std::min<int>(utf8_string_length(title), panel.size.width - 2);
   }
 
   auto cell = make_cell(ctx.style.border.horizontal_line, ctx.style.panel.border_color);
-  draw_horizontal_line(panel.pos.x + title_length, panel.pos.y - 1, panel.size.width - title_length + 1, cell);
+  draw_horizontal_line(panel.pos.x, panel.pos.y - 1, panel.size.width + 1, cell);
   cell.ch = ctx.style.border.upper_left_corner;
   draw_cell(panel.pos.x - 1, panel.pos.y - 1, cell);
   cell.ch = ctx.style.border.upper_right_corner;
   draw_cell(panel.pos.x - 1 + panel.size.width + 1, panel.pos.y - 1, cell);
+
+  if (title_length > 0) {
+    draw_text(panel.pos.x + 1, panel.pos.y - 1, title.data(), title_length, ctx.style.panel.title_color);
+  }
 
   ctx.layout_stack.push_back(panel);
 }
