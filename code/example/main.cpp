@@ -50,7 +50,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
           xxx::panel_end();
           xxx::panel_begin("Input");
             if (xxx::text_input(text)) {
-              // Input.
+              text.clear();
             }
           xxx::panel_end();
         xxx::row_push(0.6);

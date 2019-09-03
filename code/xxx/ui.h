@@ -18,6 +18,7 @@ namespace xxx {
 enum class align { left, center, right };
 
 /// Key event.
+//TODO: hide me or remove
 struct key {
   std::uint32_t ch;
   std::uint16_t key;
