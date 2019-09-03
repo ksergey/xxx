@@ -85,6 +85,7 @@ void init() {
 
   // Preallocate container resources.
   ctx.layout_stack.reserve(8);
+  ctx.input_queue_chars.reserve(16);
 }
 
 void shutdown() {
@@ -106,8 +107,13 @@ void update(unsigned ms) {
     bool stop = false;
     switch (result) {
       case TB_EVENT_KEY: {
-        if (ctx.key_event_handler) {
+        if (event.ch == 0 && ctx.key_event_handler) {
           ctx.key_event_handler(key{event.ch, event.key, event.mod});
+        }
+        // FIXME: utf8input.
+        // FIXME: handle backspace and other control chars
+        if (event.ch > 0) {
+          ctx.input_queue_chars.push_back(char(event.ch));
         }
       } break;
       case TB_EVENT_RESIZE:
@@ -149,6 +155,9 @@ void begin() {
 void end() {
   // Flush to terminal.
   ::tb_present();
+
+  // Clear input chars queue.
+  ctx.input_queue_chars.clear();
 }
 
 void row_begin(std::size_t columns) {
@@ -401,6 +410,26 @@ void progress(float& value) {
   int str_length = std::min<int>(text.size(), rect.width);
   int offset_x = detail::align(str_length, rect.width, align::center);
   draw_text(rect.x + offset_x, rect.y, text.data(), str_length, ctx.style.progress.label_color);
+}
+
+bool text_input(std::string& input) {
+  input.append(ctx.input_queue_chars.data(), ctx.input_queue_chars.size());
+  ctx.input_queue_chars.clear();
+  // FIXME: handle backspace and other
+
+  bool result = false;
+
+  auto rect = detail::reserve_space(1);
+  if (XXX_UNLIKELY(rect.width < 1 || rect.height < 1)) {
+    return result;
+  }
+
+  std::string_view str{input};
+
+  auto str_length = std::min<int>(utf8_string_length(str), rect.width);
+  draw_text(rect.x, rect.y, str.data(), str_length, make_color(150, 150, 150));
+
+  return result;
 }
 
 }  // namespace xxx

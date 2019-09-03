@@ -87,6 +87,9 @@ void spinner(float& step_storage, std::string_view text = {}, align alignment = 
 /// Draw progress bar.
 void progress(float& value);
 
+/// Draw text input.
+bool text_input(std::string& str);
+
 }  // namespace xxx
 
 #endif /* KSERGEY_ui_300819104733 */
