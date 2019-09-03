@@ -73,6 +73,9 @@ struct context {
   /// Layout stack.
   std::vector<layout_state> layout_stack;
 
+  /// Text input chars.
+  std::vector<char> input_queue_chars;
+
   /// Screen size (updates once per cycle).
   impl::size screen_size{};
 

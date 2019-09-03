@@ -10,6 +10,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
 
     float spinner_step_storage = 0.0;
     float progress_value = 33.3;
+    std::string text;
 
     xxx::init();
 
@@ -44,8 +45,13 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
             xxx::text("Content c0", 0x556270_c);
             xxx::text("Content c1", xxx::make_color(85, 98, 112));
           xxx::panel_end();
-          xxx::panel_begin("Progress (press `1` or `2`)");
+          xxx::panel_begin("Progress");
             xxx::progress(progress_value);
+          xxx::panel_end();
+          xxx::panel_begin("Input");
+            if (xxx::text_input(text)) {
+              // Input.
+            }
           xxx::panel_end();
         xxx::row_push(0.6);
           xxx::panel_begin("Panel 2");
