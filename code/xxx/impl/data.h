@@ -45,23 +45,26 @@ static_assert(std::is_trivially_copyable_v<layout_state>);
 /// UI global context.
 struct context {
   struct {
-    /// Style for border.
-    style::border border;
-
-    /// Style for spinner.
-    std::vector<std::uint32_t> spinner_glyphs;
-
     /// Panel widget style.
     struct {
       color title_color;
       color border_color;
+      style::border border;
     } panel;
 
     /// Spinner widget style.
     struct {
       color spinner_color;
       color label_color;
+      std::vector<std::uint32_t> glyphs;
     } spinner;
+
+    /// Progress widget style.
+    struct {
+      color bar_color;
+      color label_color;
+      std::uint32_t bar_glyph;
+    } progress;
   } style;
 
   /// Key-press handler.
