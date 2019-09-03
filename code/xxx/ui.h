@@ -84,6 +84,9 @@ void text(std::string_view str, color text_color = color::default_, align alignm
 /// Draw spinner.
 void spinner(float& step_storage, std::string_view text = {}, align alignment = align::left);
 
+/// Draw progress bar.
+void progress(float& value);
+
 }  // namespace xxx
 
 #endif /* KSERGEY_ui_300819104733 */

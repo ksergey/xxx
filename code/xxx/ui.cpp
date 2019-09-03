@@ -8,6 +8,7 @@
 #include <cassert>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 
 #include "impl/data.h"
 #include "impl/draw.h"
@@ -69,13 +70,18 @@ void init() {
   ::tb_select_output_mode(TB_OUTPUT_256);
 
   // Setup default style.
-  ctx.style.border = {L'│', L'─', L'╭', L'╮', L'╰', L'╯'};
-  ctx.style.spinner_glyphs = {{L'⠉', L'⠑', L'⠃', L'⠊', L'⠒', L'⠢', L'⠆', L'⠔', L'⠤', L'⢄', L'⡄', L'⡠',
-                               L'⣀', L'⢄', L'⢠', L'⡠', L'⠤', L'⠢', L'⠰', L'⠔', L'⠒', L'⠑', L'⠘', L'⠊'}};
   ctx.style.panel.title_color = make_color(192, 41, 66);
   ctx.style.panel.border_color = make_color(84, 36, 55);
+  ctx.style.panel.border = {L'│', L'─', L'╭', L'╮', L'╰', L'╯'};
+
   ctx.style.spinner.spinner_color = make_color(236, 208, 120);
-  ctx.style.spinner.label_color = make_color(217, 91, 67);
+  ctx.style.spinner.label_color = color::default_;
+  ctx.style.spinner.glyphs = {{L'⠉', L'⠑', L'⠃', L'⠊', L'⠒', L'⠢', L'⠆', L'⠔', L'⠤', L'⢄', L'⡄', L'⡠',
+                               L'⣀', L'⢄', L'⢠', L'⡠', L'⠤', L'⠢', L'⠰', L'⠔', L'⠒', L'⠑', L'⠘', L'⠊'}};
+
+  ctx.style.progress.bar_color = make_color(14, 83, 180);
+  ctx.style.progress.label_color = color::default_;
+  ctx.style.progress.bar_glyph = L'│';
 
   // Preallocate container resources.
   ctx.layout_stack.reserve(8);
@@ -279,11 +285,11 @@ void panel_begin(std::string_view title) {
     title_length = std::min<int>(utf8_string_length(title), panel.size.width - 2);
   }
 
-  auto cell = make_cell(ctx.style.border.horizontal_line, ctx.style.panel.border_color);
+  auto cell = make_cell(ctx.style.panel.border.horizontal_line, ctx.style.panel.border_color);
   draw_horizontal_line(panel.pos.x, panel.pos.y - 1, panel.size.width + 1, cell);
-  cell.ch = ctx.style.border.upper_left_corner;
+  cell.ch = ctx.style.panel.border.upper_left_corner;
   draw_cell(panel.pos.x - 1, panel.pos.y - 1, cell);
-  cell.ch = ctx.style.border.upper_right_corner;
+  cell.ch = ctx.style.panel.border.upper_right_corner;
   draw_cell(panel.pos.x - 1 + panel.size.width + 1, panel.pos.y - 1, cell);
 
   if (title_length > 0) {
@@ -305,13 +311,13 @@ void panel_end() {
   auto& parent = ctx.layout_stack.back();
   parent.filled_size.height += filled_height + 2;
 
-  auto cell = make_cell(ctx.style.border.horizontal_line, ctx.style.panel.border_color);
+  auto cell = make_cell(ctx.style.panel.border.horizontal_line, ctx.style.panel.border_color);
   draw_horizontal_line(parent.pos.x + 1, parent.pos.y + parent.filled_size.height - 1, parent.size.width - 2, cell);
-  cell.ch = ctx.style.border.bottom_left_corner;
+  cell.ch = ctx.style.panel.border.bottom_left_corner;
   draw_cell(parent.pos.x, parent.pos.y + parent.filled_size.height - 1, cell);
-  cell.ch = ctx.style.border.bottom_right_corner;
+  cell.ch = ctx.style.panel.border.bottom_right_corner;
   draw_cell(parent.pos.x + parent.size.width - 1, parent.pos.y + parent.filled_size.height - 1, cell);
-  cell.ch = ctx.style.border.vertical_line;
+  cell.ch = ctx.style.panel.border.vertical_line;
   draw_vertical_line(parent.pos.x, parent.pos.y + parent.filled_size.height - (filled_height + 1), filled_height, cell);
   draw_vertical_line(parent.pos.x + parent.size.width - 1,
                      parent.pos.y + parent.filled_size.height - (filled_height + 1), filled_height, cell);
@@ -348,8 +354,8 @@ void text(std::string_view str, color text_color, align alignment) {
 
 void spinner(float& step_storage, std::string_view text, align alignment) {
   auto rect = detail::reserve_space(1);
-  if (XXX_UNLIKELY(rect.width < 1 || rect.height < 1 || ctx.style.spinner_glyphs.empty())) {
-    assert(!ctx.style.spinner_glyphs.empty() && "spinner frames not configured");
+  if (XXX_UNLIKELY(rect.width < 1 || rect.height < 1 || ctx.style.spinner.glyphs.empty())) {
+    assert(!ctx.style.spinner.glyphs.empty() && "spinner frames not configured");
     return;
   }
 
@@ -365,14 +371,36 @@ void spinner(float& step_storage, std::string_view text, align alignment) {
   // Spinner
   static constexpr float spin_interval = 0.1;  // 0.1 seconds
   step_storage += ctx.deltaTime;
-  std::size_t const index = std::size_t(std::round(step_storage / spin_interval)) % ctx.style.spinner_glyphs.size();
+  std::size_t const index = std::size_t(std::round(step_storage / spin_interval)) % ctx.style.spinner.glyphs.size();
 
   // Spinner text
-  draw_cell(rect.x + offset_x, rect.y, make_cell(ctx.style.spinner_glyphs[index], ctx.style.spinner.spinner_color));
+  draw_cell(rect.x + offset_x, rect.y, make_cell(ctx.style.spinner.glyphs[index], ctx.style.spinner.spinner_color));
 
   if (str_length > 0) {
     draw_text(rect.x + offset_x + 2, rect.y, text.data(), str_length, ctx.style.spinner.label_color);
   }
+}
+
+void progress(float& value) {
+  auto rect = detail::reserve_space(1);
+  if (XXX_UNLIKELY(rect.width < 1 || rect.height < 1)) {
+    return;
+  }
+
+  // Bar
+  value = std::clamp<float>(value, 0.0, 100.0);
+  int length = std::round((rect.width * value) / 100.0);
+  auto const cell = make_cell(ctx.style.progress.bar_glyph, ctx.style.progress.bar_color);
+  draw_horizontal_line(rect.x, rect.y, length, cell);
+
+  // Text
+  char buffer[sizeof(" 100.0% ")];
+  std::snprintf(buffer, sizeof(buffer), " %02.1f%% ", double(value));
+  std::string_view text{buffer};
+
+  int str_length = std::min<int>(text.size(), rect.width);
+  int offset_x = detail::align(str_length, rect.width, align::center);
+  draw_text(rect.x + offset_x, rect.y, text.data(), str_length, ctx.style.progress.label_color);
 }
 
 }  // namespace xxx

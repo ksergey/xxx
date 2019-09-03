@@ -9,12 +9,17 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     bool running = true;
 
     float spinner_step_storage = 0.0;
+    float progress_value = 33.3;
 
     xxx::init();
 
-    xxx::set_key_event_handler([&running](xxx::key const& key) {
+    xxx::set_key_event_handler([&running, &progress_value](xxx::key const& key) {
       if (key.key == 27 || key.ch == 'q') {
         running = false;
+      } else if (key.ch == '1') {
+        progress_value -= 0.66;
+      } else if (key.ch == '2') {
+        progress_value += 0.66;
       }
     });
 
@@ -38,6 +43,9 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
             xxx::text("Content b", 0xC7F464_c);
             xxx::text("Content c0", 0x556270_c);
             xxx::text("Content c1", xxx::make_color(85, 98, 112));
+          xxx::panel_end();
+          xxx::panel_begin("Progress (press `1` or `2`)");
+            xxx::progress(progress_value);
           xxx::panel_end();
         xxx::row_push(0.6);
           xxx::panel_begin("Panel 2");
