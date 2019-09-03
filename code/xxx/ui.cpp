@@ -58,6 +58,14 @@ XXX_ALWAYS_INLINE int align(int inner_width, int parent_width, xxx::align alignm
   return 0;
 }
 
+XXX_ALWAYS_INLINE void append_utf8_char(std::string& str, std::uint32_t ch) noexcept {
+  char buffer[6];
+  int len = ::tb_utf8_unicode_to_char(buffer, ch);
+  if (XXX_LIKELY(len > 0)) {
+    str.append(buffer, std::size_t(len));
+  }
+}
+
 }  // namespace detail
 
 void init() {
@@ -98,6 +106,8 @@ void update(unsigned ms) {
   auto now = clock::now();
   auto const expiration_time = now + std::chrono::milliseconds{std::min(ms, 1000u)};
 
+  ctx.pressed_keys.fill(false);
+
   ::tb_event event;
 
   while (now < expiration_time) {
@@ -107,13 +117,17 @@ void update(unsigned ms) {
     bool stop = false;
     switch (result) {
       case TB_EVENT_KEY: {
+        if (event.key <= 0xFF) {
+          ctx.pressed_keys[event.key & 0xFF] = true;
+        }
+
         if (event.ch == 0 && ctx.key_event_handler) {
           ctx.key_event_handler(key{event.ch, event.key, event.mod});
         }
-        // FIXME: utf8input.
+
         // FIXME: handle backspace and other control chars
         if (event.ch > 0) {
-          ctx.input_queue_chars.push_back(char(event.ch));
+          detail::append_utf8_char(ctx.input_queue_chars, event.ch);
         }
       } break;
       case TB_EVENT_RESIZE:
@@ -415,9 +429,19 @@ void progress(float& value) {
 bool text_input(std::string& input) {
   input.append(ctx.input_queue_chars.data(), ctx.input_queue_chars.size());
   ctx.input_queue_chars.clear();
-  // FIXME: handle backspace and other
+  if (ctx.pressed_keys[TB_KEY_SPACE]) {
+    input += ' ';
+  }
+  if (ctx.pressed_keys[TB_KEY_CTRL_W]) {
+    input.clear();
+  }
 
-  bool result = false;
+  if (ctx.pressed_keys[TB_KEY_BACKSPACE2] && input.size() > 0) {
+    // FIXME: pop back utf8 char
+    input.pop_back();
+  }
+
+  bool result = ctx.pressed_keys[TB_KEY_ENTER] && input.size() > 0;
 
   auto rect = detail::reserve_space(1);
   if (XXX_UNLIKELY(rect.width < 1 || rect.height < 1)) {
@@ -426,8 +450,10 @@ bool text_input(std::string& input) {
 
   std::string_view str{input};
 
-  auto str_length = std::min<int>(utf8_string_length(str), rect.width);
-  draw_text(rect.x, rect.y, str.data(), str_length, make_color(150, 150, 150));
+  auto str_length = std::min<int>(utf8_string_length(str), rect.width - 2);
+  draw_cell(rect.x, rect.y, make_cell(L'$', make_color(100, 100, 100)));
+  draw_cell(rect.x + 1, rect.y, make_cell(L' '));
+  draw_text(rect.x + 2, rect.y, str.data(), str_length, make_color(150, 150, 150));
 
   return result;
 }
