@@ -417,13 +417,13 @@ void progress(float& value) {
 
 bool text_input(std::string& input) {
   input.append(ctx.input_queue_chars.data(), ctx.input_queue_chars.size());
-  // ctx.input_queue_chars.clear();
 
   if (ctx.pressed_keys[TB_KEY_SPACE]) {
     input += ' ';
   }
 
   if (ctx.pressed_keys[TB_KEY_CTRL_W]) {
+    // FIXME: clear till space.
     input.clear();
   }
 
@@ -441,13 +441,13 @@ bool text_input(std::string& input) {
 
   std::string_view str{input};
 
-  auto str_length = utf8_string_length(str);
-  auto str_offset = std::max<int>(0, str_length - (rect.width - 1));
+  auto const str_length = utf8_string_length(str);
+  auto const str_offset = std::max<int>(0, str_length - (rect.width - 1));
+  auto const leaves_length = rect.width - (str_length - str_offset);
 
   draw_text(rect.x, rect.y, str.data(), str_length, str_offset, ctx.style.text_input.fg, ctx.style.text_input.bg);
 
-  auto leaves_length = rect.width - (str_length - str_offset);
-  if (leaves_length > 0) {
+  if (XXX_LIKELY(leaves_length > 0)) {
     draw_horizontal_line(rect.x + (str_length - str_offset), rect.y, leaves_length,
                          make_cell(' ', ctx.style.text_input.fg, ctx.style.text_input.bg));
   }
