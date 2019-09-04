@@ -11,19 +11,12 @@
 #include <string_view>
 
 #include <xxx/color.h>
+#include <xxx/key.h>
 
 namespace xxx {
 
 /// Align.
 enum class align { left, center, right };
-
-/// Key event.
-//TODO: hide me or remove
-struct key {
-  std::uint32_t ch;
-  std::uint16_t key;
-  std::uint8_t mod;
-};
 
 namespace style {
 
@@ -49,8 +42,8 @@ void shutdown();
 /// Update internal terminal state.
 void update(unsigned ms = 33);
 
-/// Set handler on key press event.
-void set_key_event_handler(std::function<void(key const&)> handler);
+/// Return true on key pressed.
+bool is_key_pressed(key k);
 
 /// Start drawing frame.
 void begin();

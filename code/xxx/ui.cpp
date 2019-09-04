@@ -66,6 +66,10 @@ XXX_ALWAYS_INLINE void append_utf8_char(std::string& str, std::uint32_t ch) noex
   }
 }
 
+constexpr std::size_t get_key_index(std::uint16_t key) noexcept {
+  return key <= 0xFF ? key : (((0xFFFF - key) & 0xFF) + 256);
+}
+
 }  // namespace detail
 
 void init() {
@@ -78,17 +82,17 @@ void init() {
   ::tb_select_output_mode(TB_OUTPUT_256);
 
   // Setup default style.
-  ctx.style.panel.title_color = make_color(192, 41, 66);
+  ctx.style.panel.title_color = make_color(192, 41, 66) | attribute::bold;
   ctx.style.panel.border_color = make_color(84, 36, 55);
   ctx.style.panel.border = {L'│', L'─', L'╭', L'╮', L'╰', L'╯'};
 
-  ctx.style.spinner.spinner_color = make_color(236, 208, 120);
+  ctx.style.spinner.spinner_color = make_color(236, 208, 120) | attribute::bold;
   ctx.style.spinner.label_color = color::default_;
   ctx.style.spinner.glyphs = {{L'⠉', L'⠑', L'⠃', L'⠊', L'⠒', L'⠢', L'⠆', L'⠔', L'⠤', L'⢄', L'⡄', L'⡠',
                                L'⣀', L'⢄', L'⢠', L'⡠', L'⠤', L'⠢', L'⠰', L'⠔', L'⠒', L'⠑', L'⠘', L'⠊'}};
 
   ctx.style.progress.bar_color = make_color(14, 83, 180);
-  ctx.style.progress.label_color = color::default_;
+  ctx.style.progress.label_color = color::default_ | attribute::bold;
   ctx.style.progress.bar_glyph = L'│';
 
   // Preallocate container resources.
@@ -117,17 +121,11 @@ void update(unsigned ms) {
     bool stop = false;
     switch (result) {
       case TB_EVENT_KEY: {
-        if (event.key <= 0xFF) {
-          ctx.pressed_keys[event.key & 0xFF] = true;
-        }
-
-        if (event.ch == 0 && ctx.key_event_handler) {
-          ctx.key_event_handler(key{event.ch, event.key, event.mod});
-        }
-
-        // FIXME: handle backspace and other control chars
         if (event.ch > 0) {
           detail::append_utf8_char(ctx.input_queue_chars, event.ch);
+        }
+        if (event.key > 0) {
+          ctx.pressed_keys[detail::get_key_index(event.key)] = true;
         }
       } break;
       case TB_EVENT_RESIZE:
@@ -149,7 +147,7 @@ void update(unsigned ms) {
   ctx.deltaTime = float(ms) / 1000.0;
 }
 
-void set_key_event_handler(std::function<void(key const&)> handler) { ctx.key_event_handler = std::move(handler); }
+bool is_key_pressed(key k) { return ctx.pressed_keys[detail::get_key_index(static_cast<std::uint16_t>(k))]; }
 
 void begin() {
   ctx.screen_size = {::tb_width(), ::tb_height()};
@@ -428,10 +426,12 @@ void progress(float& value) {
 
 bool text_input(std::string& input) {
   input.append(ctx.input_queue_chars.data(), ctx.input_queue_chars.size());
-  ctx.input_queue_chars.clear();
+  // ctx.input_queue_chars.clear();
+
   if (ctx.pressed_keys[TB_KEY_SPACE]) {
     input += ' ';
   }
+
   if (ctx.pressed_keys[TB_KEY_CTRL_W]) {
     input.clear();
   }
@@ -450,10 +450,16 @@ bool text_input(std::string& input) {
 
   std::string_view str{input};
 
-  auto str_length = std::min<int>(utf8_string_length(str), rect.width - 2);
-  draw_cell(rect.x, rect.y, make_cell(L'$', make_color(100, 100, 100)));
-  draw_cell(rect.x + 1, rect.y, make_cell(L' '));
-  draw_text(rect.x + 2, rect.y, str.data(), str_length, make_color(150, 150, 150));
+  auto str_length = utf8_string_length(str);
+  auto str_offset = std::max<int>(0, str_length - (rect.width - 1));
+
+  auto color = make_color(150, 150, 150) | attribute::underline;
+  draw_text(rect.x, rect.y, str.data(), str_length, str_offset, color);
+
+  auto leaves_length = rect.width - (str_length - str_offset);
+  if (leaves_length > 0) {
+    draw_horizontal_line(rect.x + (str_length - str_offset), rect.y, leaves_length, make_cell(' ', color));
+  }
 
   return result;
 }

@@ -5,9 +5,9 @@
 #ifndef KSERGEY_data_300819145443
 #define KSERGEY_data_300819145443
 
+#include <array>
 #include <string>
 #include <type_traits>
-#include <array>
 #include <vector>
 
 #include <xxx/ui.h>
@@ -69,9 +69,6 @@ struct context {
     } progress;
   } style;
 
-  /// Key-press handler.
-  std::function<void(key const&)> key_event_handler;
-
   /// Layout stack.
   std::vector<layout_state> layout_stack;
 
@@ -79,7 +76,7 @@ struct context {
   std::string input_queue_chars;
 
   /// Pressed keys.
-  std::array<bool, 256> pressed_keys;
+  std::array<bool, 512> pressed_keys;
 
   /// Screen size (updates once per cycle).
   impl::size screen_size{};
