@@ -95,9 +95,15 @@ void init() {
   ctx.style.progress.label_color = color::default_ | attribute::bold;
   ctx.style.progress.bar_glyph = L'│';
 
+  ctx.style.text_input.fg = color::default_ | attribute::underline;
+  ctx.style.text_input.bg = make_color(84, 36, 55);
+
   // Preallocate container resources.
   ctx.layout_stack.reserve(8);
   ctx.input_queue_chars.reserve(16);
+
+  // Update clock.
+  ctx.timestamp = clock::now();
 }
 
 void shutdown() {
@@ -106,45 +112,30 @@ void shutdown() {
 }
 
 void update(unsigned ms) {
-  using clock = std::chrono::steady_clock;
-  auto now = clock::now();
-  auto const expiration_time = now + std::chrono::milliseconds{std::min(ms, 1000u)};
-
   ctx.pressed_keys.fill(false);
 
   ::tb_event event;
 
-  while (now < expiration_time) {
-    int const timeout = std::chrono::duration_cast<std::chrono::milliseconds>(expiration_time - now).count();
-    int result = ::tb_peek_event(&event, timeout);
-
-    bool stop = false;
-    switch (result) {
-      case TB_EVENT_KEY: {
-        if (event.ch > 0) {
-          detail::append_utf8_char(ctx.input_queue_chars, event.ch);
-        }
-        if (event.key > 0) {
-          ctx.pressed_keys[detail::get_key_index(event.key)] = true;
-        }
-      } break;
-      case TB_EVENT_RESIZE:
-      case TB_EVENT_MOUSE:
-        break;
-      default: {
-        // Timeout or error.
-        stop = true;
-      } break;
-    }
-
-    if (stop) {
+  int result = ::tb_peek_event(&event, ms);
+  switch (result) {
+    case TB_EVENT_KEY: {
+      if (event.ch > 0) {
+        detail::append_utf8_char(ctx.input_queue_chars, event.ch);
+      }
+      if (event.key > 0) {
+        ctx.pressed_keys[detail::get_key_index(event.key)] = true;
+      }
+    } break;
+    case TB_EVENT_RESIZE:
+    case TB_EVENT_MOUSE:
       break;
-    }
-
-    now = clock::now();
+    default: {
+    } break;
   }
 
-  ctx.deltaTime = float(ms) / 1000.0;
+  auto now = clock::now();
+  ctx.deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(now - ctx.timestamp).count() / 1000.0;
+  ctx.timestamp = now;
 }
 
 bool is_key_pressed(key k) { return ctx.pressed_keys[detail::get_key_index(static_cast<std::uint16_t>(k))]; }
@@ -453,12 +444,12 @@ bool text_input(std::string& input) {
   auto str_length = utf8_string_length(str);
   auto str_offset = std::max<int>(0, str_length - (rect.width - 1));
 
-  auto color = make_color(150, 150, 150) | attribute::underline;
-  draw_text(rect.x, rect.y, str.data(), str_length, str_offset, color);
+  draw_text(rect.x, rect.y, str.data(), str_length, str_offset, ctx.style.text_input.fg, ctx.style.text_input.bg);
 
   auto leaves_length = rect.width - (str_length - str_offset);
   if (leaves_length > 0) {
-    draw_horizontal_line(rect.x + (str_length - str_offset), rect.y, leaves_length, make_cell(' ', color));
+    draw_horizontal_line(rect.x + (str_length - str_offset), rect.y, leaves_length,
+                         make_cell(' ', ctx.style.text_input.fg, ctx.style.text_input.bg));
   }
 
   return result;
