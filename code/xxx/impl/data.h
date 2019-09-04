@@ -6,6 +6,7 @@
 #define KSERGEY_data_300819145443
 
 #include <array>
+#include <chrono>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -44,6 +45,9 @@ struct layout_state {
 
 static_assert(std::is_trivially_copyable_v<layout_state>);
 
+/// Clock for internal usage.
+using clock = std::chrono::steady_clock;
+
 /// UI global context.
 struct context {
   struct {
@@ -67,6 +71,12 @@ struct context {
       color label_color;
       std::uint32_t bar_glyph;
     } progress;
+
+    /// Text input widget.
+    struct {
+      color fg;
+      color bg;
+    } text_input;
   } style;
 
   /// Layout stack.
@@ -80,6 +90,9 @@ struct context {
 
   /// Screen size (updates once per cycle).
   impl::size screen_size{};
+
+  /// Last clock timestamp.
+  clock::time_point timestamp;
 
   /// Time step.
   float deltaTime{0.0};
