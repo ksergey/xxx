@@ -37,6 +37,7 @@ XXX_ALWAYS_INLINE void draw_vertical_line(int x, int y, int length, cell const& 
   }
 }
 
+/// Draw text. Cheaper to pass offset to function instead of trim `str` from start.
 XXX_ALWAYS_INLINE void draw_text(int x, int y, char const* str, int length, int offset, color fg = color::default_,
                                  color bg = color::default_) {
   if (XXX_UNLIKELY(offset < 0)) {
