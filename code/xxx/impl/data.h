@@ -32,6 +32,20 @@ struct rect {
   int height{0};
 };
 
+namespace style {
+
+/// Border style.
+struct border {
+  std::uint32_t vertical_line;
+  std::uint32_t horizontal_line;
+  std::uint32_t upper_left_corner;
+  std::uint32_t upper_right_corner;
+  std::uint32_t bottom_left_corner;
+  std::uint32_t bottom_right_corner;
+};
+
+}  // namespace style
+
 enum class layout_type { container, row, column };
 
 struct layout_state {
