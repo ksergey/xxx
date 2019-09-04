@@ -1,3 +1,7 @@
+// ------------------------------------------------------------
+// Copyright 2019-present Sergey Kovalevich <inndie@gmail.com>
+// ------------------------------------------------------------
+
 #include <iostream>
 #include <thread>
 
