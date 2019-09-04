@@ -14,18 +14,18 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
 
     xxx::init();
 
-    xxx::set_key_event_handler([&running, &progress_value](xxx::key const& key) {
-      if (key.key == 27 || key.ch == 'q') {
-        running = false;
-      } else if (key.ch == '1') {
-        progress_value -= 0.66;
-      } else if (key.ch == '2') {
-        progress_value += 0.66;
-      }
-    });
-
     while (running) {
       xxx::update();
+
+      if (xxx::is_key_pressed(xxx::key::esc)) {
+        running = false;
+      }
+      if (xxx::is_key_pressed(xxx::key::arrow_left)) {
+        progress_value -= 0.6;
+      }
+      if (xxx::is_key_pressed(xxx::key::arrow_right)) {
+        progress_value += 0.6;
+      }
 
       xxx::begin();
 

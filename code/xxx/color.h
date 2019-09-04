@@ -10,8 +10,16 @@
 
 namespace xxx {
 
-/// Color type
+/// Attributes.
+enum class attribute : std::uint16_t { bold = 0x0100, underline = 0x200, reverse = 0x0400 };
+
+/// Color type.
 enum class color : std::uint16_t { default_ = 0x00 };
+
+/// Add attribute to color.
+constexpr color operator|(color lhs, attribute rhs) noexcept {
+  return static_cast<color>(static_cast<std::uint16_t>(lhs) | static_cast<std::uint16_t>(rhs));
+}
 
 /// Make color from RGB components
 constexpr color make_color(std::uint8_t r, std::uint8_t g, std::uint8_t b) noexcept {
