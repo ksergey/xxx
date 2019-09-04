@@ -18,20 +18,6 @@ namespace xxx {
 /// Align.
 enum class align { left, center, right };
 
-namespace style {
-
-/// Border style.
-struct border {
-  std::uint32_t vertical_line;
-  std::uint32_t horizontal_line;
-  std::uint32_t upper_left_corner;
-  std::uint32_t upper_right_corner;
-  std::uint32_t bottom_left_corner;
-  std::uint32_t bottom_right_corner;
-};
-
-}  // namespace style
-
 /// Init internals.
 /// \throw std::runtime_error on error.
 void init();
