@@ -58,14 +58,6 @@ XXX_ALWAYS_INLINE int align(int inner_width, int parent_width, xxx::align alignm
   return 0;
 }
 
-XXX_ALWAYS_INLINE void append_utf8_char(std::string& str, std::uint32_t ch) noexcept {
-  char buffer[6];
-  int len = ::tb_utf8_unicode_to_char(buffer, ch);
-  if (XXX_LIKELY(len > 0)) {
-    str.append(buffer, std::size_t(len));
-  }
-}
-
 constexpr std::size_t get_key_index(std::uint16_t key) noexcept {
   return key <= 0xFF ? key : (((0xFFFF - key) & 0xFF) + 256);
 }
@@ -86,7 +78,9 @@ void init() {
       case TB_EPIPE_TRAP_ERROR: {
         reason = "pipe trap error";
       } break;
-      default: { reason = "unknown"; } break;
+      default: {
+        reason = "unknown";
+      } break;
     }
     throw std::runtime_error{"Failed to init terminal library (" + reason + ")"};
   }
@@ -108,8 +102,8 @@ void init() {
   ctx.style.progress.label_color = color::default_ | attribute::bold;
   ctx.style.progress.bar_glyph = L'│';
 
-  ctx.style.text_input.fg = color::default_ | attribute::underline;
-  ctx.style.text_input.bg = make_color(84, 36, 55);
+  ctx.style.text_input.fg = color::default_ | attribute::bold;
+  ctx.style.text_input.bg = color::default_;
 
   // Preallocate container resources.
   ctx.layout_stack.reserve(8);
@@ -133,7 +127,7 @@ bool update(unsigned ms) {
   switch (result) {
     case TB_EVENT_KEY: {
       if (event.ch > 0) {
-        detail::append_utf8_char(ctx.input_queue_chars, event.ch);
+        ctx.input_queue_chars.push_back(event.ch);
       }
       if (event.key > 0) {
         ctx.pressed_keys[detail::get_key_index(event.key)] = true;
@@ -142,7 +136,9 @@ bool update(unsigned ms) {
     case TB_EVENT_RESIZE:
     case TB_EVENT_MOUSE:
       break;
-    default: { } break; }
+    default: {
+    } break;
+  }
 
   auto now = clock::now();
   ctx.deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(now - ctx.timestamp).count() / 1000.0;
@@ -428,42 +424,49 @@ void progress(float& value) {
   draw_text(rect.x + offset_x, rect.y, text.data(), str_length, ctx.style.progress.label_color);
 }
 
-bool text_input(std::string& input) {
-  input.append(ctx.input_queue_chars.data(), ctx.input_queue_chars.size());
+void text_input_clear(text_input_context& ctx) {
+  ctx.line.clear();
+  ctx.cursor_pos = 0;
+}
+
+std::string text_input_get(text_input_context& input) {
+  std::string result;
+  utf32_to_utf8(input.line.begin(), input.line.end(), std::back_inserter(result));
+  return result;
+}
+
+bool text_input(text_input_context& input) {
+  input.line.append(ctx.input_queue_chars.begin(), ctx.input_queue_chars.end());
 
   if (ctx.pressed_keys[TB_KEY_SPACE]) {
-    input += ' ';
+    input.line.push_back(L' ');
   }
-
+  if (ctx.pressed_keys[TB_KEY_BACKSPACE2] && !input.line.empty()) {
+    input.line.pop_back();
+  }
   if (ctx.pressed_keys[TB_KEY_CTRL_W]) {
-    // FIXME: clear till space.
-    input.clear();
+    // Remove till first space from back or whole line.
+    auto found = input.line.rfind(' ');
+    if (found == input.line.npos) {
+      input.line.clear();
+    } else {
+      input.line.erase(input.line.begin() + found, input.line.end());
+    }
   }
 
-  if (ctx.pressed_keys[TB_KEY_BACKSPACE2] && input.size() > 0) {
-    // FIXME: pop back utf8 char
-    input.pop_back();
-  }
-
-  bool result = ctx.pressed_keys[TB_KEY_ENTER] && input.size() > 0;
+  bool result = ctx.pressed_keys[TB_KEY_ENTER] && input.line.size() > 0;
 
   auto rect = detail::reserve_space(1);
   if (XXX_UNLIKELY(rect.width < 1 || rect.height < 1)) {
     return result;
   }
 
-  std::string_view str{input};
-
-  auto const str_length = utf8_string_length(str);
-  auto const str_offset = std::max<int>(0, str_length - (rect.width - 1));
-  auto const leaves_length = rect.width - (str_length - str_offset);
-
-  draw_text(rect.x, rect.y, str.data(), str_length, str_offset, ctx.style.text_input.fg, ctx.style.text_input.bg);
-
-  if (XXX_LIKELY(leaves_length > 0)) {
-    draw_horizontal_line(rect.x + (str_length - str_offset), rect.y, leaves_length,
-                         make_cell(' ', ctx.style.text_input.fg, ctx.style.text_input.bg));
+  std::u32string_view str{input.line};
+  if ((rect.width - 1) < static_cast<int>(str.size())) {
+    str.remove_prefix(str.size() - (rect.width - 1));
   }
+
+  draw_text(rect.x, rect.y, str, ctx.style.text_input.fg, ctx.style.text_input.bg);
 
   return result;
 }
