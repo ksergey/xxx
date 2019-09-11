@@ -97,7 +97,7 @@ struct context {
   std::vector<layout_state> layout_stack;
 
   /// Text input chars.
-  std::string input_queue_chars;
+  std::u32string input_queue_chars;
 
   /// Pressed keys.
   std::array<bool, 512> pressed_keys;

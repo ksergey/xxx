@@ -15,6 +15,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     float spinner_step_storage = 0.0;
     float progress_value = 33.3;
     std::string text;
+    xxx::text_input_context text_input;
 
     xxx::init();
 
@@ -53,8 +54,8 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
             xxx::progress(progress_value);
           xxx::panel_end();
           xxx::panel_begin("INPUT");
-            if (xxx::text_input(text)) {
-              text.clear();
+            if (xxx::text_input(text_input)) {
+              xxx::text_input_clear(text_input);
             }
           xxx::panel_end();
         xxx::row_push(0.6);
