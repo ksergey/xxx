@@ -75,7 +75,20 @@ constexpr std::size_t get_key_index(std::uint16_t key) noexcept {
 void init() {
   // Init termbox.
   if (int rc = ::tb_init(); rc < 0) {
-    throw std::runtime_error{"Failed to init terminal library"};
+    std::string reason;
+    switch (rc) {
+      case TB_EUNSUPPORTED_TERMINAL: {
+        reason = "unsuported terminal";
+      } break;
+      case TB_EFAILED_TO_OPEN_TTY: {
+        reason = "failed to open tty";
+      } break;
+      case TB_EPIPE_TRAP_ERROR: {
+        reason = "pipe trap error";
+      } break;
+      default: { reason = "unknown"; } break;
+    }
+    throw std::runtime_error{"Failed to init terminal library (" + reason + ")"};
   }
 
   // Use rbg colors.
@@ -129,9 +142,7 @@ bool update(unsigned ms) {
     case TB_EVENT_RESIZE:
     case TB_EVENT_MOUSE:
       break;
-    default: {
-    } break;
-  }
+    default: { } break; }
 
   auto now = clock::now();
   ctx.deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(now - ctx.timestamp).count() / 1000.0;
