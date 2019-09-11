@@ -19,14 +19,15 @@ namespace xxx {
 enum class align { left, center, right };
 
 /// Init internals.
-/// \throw std::runtime_error on error.
+/// @throw std::runtime_error on error.
 void init();
 
 /// Shutdown internals.
 void shutdown();
 
 /// Update internal terminal state.
-void update(unsigned ms = 33);
+/// @return true on an event processed.
+bool update(unsigned ms = 33);
 
 /// Return true on key pressed.
 bool is_key_pressed(key k);
@@ -55,7 +56,7 @@ void panel_begin(std::string_view title = {});
 void panel_end();
 
 /// Add empty area.
-/// \param[in] ratio_or_height is height percentage or explicit height.
+/// @param[in] ratio_or_height is height percentage or explicit height.
 void spacer(float ratio_or_height = 1.0);
 
 /// Draw text line.

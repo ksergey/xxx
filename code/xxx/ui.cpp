@@ -111,7 +111,7 @@ void shutdown() {
   ::tb_shutdown();
 }
 
-void update(unsigned ms) {
+bool update(unsigned ms) {
   ctx.pressed_keys.fill(false);
 
   ::tb_event event;
@@ -136,6 +136,8 @@ void update(unsigned ms) {
   auto now = clock::now();
   ctx.deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(now - ctx.timestamp).count() / 1000.0;
   ctx.timestamp = now;
+
+  return result > 0;
 }
 
 bool is_key_pressed(key k) { return ctx.pressed_keys[detail::get_key_index(static_cast<std::uint16_t>(k))]; }
