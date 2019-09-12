@@ -421,16 +421,14 @@ void progress(float& value) {
 }
 
 bool text_input(std::string& input) {
-  utf32_to_utf8(ctx.input_queue_chars.begin(), ctx.input_queue_chars.end(), std::back_inserter(input));
+  u32_to_utf8(ctx.input_queue_chars.begin(), ctx.input_queue_chars.end(), std::back_inserter(input));
 
   if (ctx.pressed_keys[TB_KEY_SPACE]) {
     input.push_back(' ');
   }
 
   if (ctx.pressed_keys[TB_KEY_BACKSPACE2] && !input.empty()) {
-    auto end = input.end();
-    utf8_prior(end);
-    input.erase(end, input.end());
+    input.erase(utf8_prev(input.end()), input.end());
   }
 
   if (ctx.pressed_keys[TB_KEY_CTRL_W]) {

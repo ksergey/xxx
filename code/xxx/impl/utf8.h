@@ -50,20 +50,6 @@ constexpr std::size_t utf8_string_length(std::string_view str) noexcept {
   return result;
 }
 
-/// Remove prefix from utf8 string.
-constexpr std::string_view utf8_remove_prefix(std::string_view str, std::size_t count) noexcept {
-  std::size_t count_to_remove{0};
-
-  for (auto it = str.begin(); it != str.end() && count > 0; count--) {
-    auto length = utf8_char_length(*it);
-    it += length;
-    count_to_remove += length;
-  }
-
-  str.remove_prefix(count_to_remove);
-  return str;
-}
-
 namespace test {
 
 inline constexpr auto str = std::string_view{"★"};
@@ -77,11 +63,7 @@ static_assert(is_utf8_trail(str[2]));
 }  // namespace test
 
 template <class OctectIterator>
-XXX_ALWAYS_INLINE std::uint32_t utf8_next(OctectIterator& it) noexcept {
-  if (XXX_UNLIKELY(*it == '\0')) {
-    return 0;
-  }
-
+XXX_ALWAYS_INLINE std::uint32_t utf8_read_ucs(OctectIterator it) noexcept {
   auto const length = utf8_char_length(*it);
   auto const mask = utf8_detail::mask[length - 1];
   std::uint32_t result = *it & mask;
@@ -92,12 +74,21 @@ XXX_ALWAYS_INLINE std::uint32_t utf8_next(OctectIterator& it) noexcept {
   return result;
 }
 
+/// Increment iterator to start of next uft8 symbol.
 template <class OctectIterator>
-XXX_ALWAYS_INLINE std::uint32_t utf8_prior(OctectIterator& it) noexcept {
+[[nodiscard]] XXX_ALWAYS_INLINE OctectIterator utf8_next(OctectIterator it) noexcept {
+  if (XXX_LIKELY(*it != '\0')) {
+    std::advance(it, utf8_char_length(*it));
+  }
+  return it;
+}
+
+/// Decrement iterator to start of prev uft8 symbol.
+template <class OctectIterator>
+[[nodiscard]] XXX_ALWAYS_INLINE OctectIterator utf8_prev(OctectIterator it) noexcept {
   while (is_utf8_trail(*(--it))) {
   }
-  OctectIterator temp{it};
-  return utf8_next(temp);
+  return it;
 }
 
 template <class OctectIterator>
@@ -116,10 +107,7 @@ class utf8_iterator : public std::iterator<std::bidirectional_iterator_tag, std:
   XXX_ALWAYS_INLINE OctectIterator base() const { return it_; }
 
   /// Return utf8 symbol for iterator point to.
-  XXX_ALWAYS_INLINE std::uint32_t operator*() const noexcept {
-    OctectIterator temp{it_};
-    return utf8_next(temp);
-  }
+  XXX_ALWAYS_INLINE std::uint32_t operator*() const noexcept { return utf8_read_ucs(it_); }
 
   /// Compare for equality.
   XXX_ALWAYS_INLINE bool operator==(utf8_iterator const& rhs) const noexcept { return it_ == rhs.it_; }
@@ -142,14 +130,14 @@ class utf8_iterator : public std::iterator<std::bidirectional_iterator_tag, std:
 
   /// Pre-decrement.
   XXX_ALWAYS_INLINE utf8_iterator& operator--() {
-    utf8_prior(it_);
+    it_ = utf8_prev(it_);
     return *this;
   }
 
   /// Post-decrement.
   XXX_ALWAYS_INLINE utf8_iterator operator--(int) {
     utf8_iterator temp{*this};
-    utf8_prior(it_);
+    it_ = utf8_prev(it_);
     return temp;
   }
 };
@@ -160,6 +148,7 @@ XXX_ALWAYS_INLINE auto make_utf8_iterator(OctectIterator it) {
   return utf8_iterator<OctectIterator>{it};
 }
 
+/// Convert ucs charatecter into utf8 sequence.
 template <class OctetIterator>
 XXX_ALWAYS_INLINE OctetIterator utf8_append(std::uint32_t ch, OctetIterator result) {
   if (ch < 0x80)
@@ -180,8 +169,9 @@ XXX_ALWAYS_INLINE OctetIterator utf8_append(std::uint32_t ch, OctetIterator resu
   return result;
 }
 
+/// Convert sequence of uint32_t into utf8 string.
 template <class OctectIterator, class U32Iterator>
-XXX_ALWAYS_INLINE OctectIterator utf32_to_utf8(U32Iterator begin, U32Iterator end, OctectIterator result) {
+XXX_ALWAYS_INLINE OctectIterator u32_to_utf8(U32Iterator begin, U32Iterator end, OctectIterator result) {
   while (begin != end) {
     result = utf8_append(*(begin++), result);
   }
