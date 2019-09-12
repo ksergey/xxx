@@ -61,19 +61,9 @@ XXX_ALWAYS_INLINE void draw_text(int x, int y, char const* str, int length, int 
   }
 }
 
-XXX_ALWAYS_INLINE void draw_text(int x, int y, char const* str, int length, color fg = color::default_,
-                                 color bg = color::default_) {
+XXX_ALWAYS_INLINE
+void draw_text(int x, int y, char const* str, int length, color fg = color::default_, color bg = color::default_) {
   return draw_text(x, y, str, length, 0, fg, bg);
-}
-
-/// Draw text.
-XXX_ALWAYS_INLINE void draw_text(int x, int y, std::u32string_view str, color fg = color::default_,
-                                 color bg = color::default_) {
-  auto cell = make_cell(' ', fg, bg);
-  for (auto ch : str) {
-    cell.ch = ch;
-    draw_cell(x++, y, cell);
-  }
 }
 
 }  // namespace xxx::impl

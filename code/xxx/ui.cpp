@@ -78,9 +78,7 @@ void init() {
       case TB_EPIPE_TRAP_ERROR: {
         reason = "pipe trap error";
       } break;
-      default: {
-        reason = "unknown";
-      } break;
+      default: { reason = "unknown"; } break;
     }
     throw std::runtime_error{"Failed to init terminal library (" + reason + ")"};
   }
@@ -136,9 +134,7 @@ bool update(unsigned ms) {
     case TB_EVENT_RESIZE:
     case TB_EVENT_MOUSE:
       break;
-    default: {
-    } break;
-  }
+    default: { } break; }
 
   auto now = clock::now();
   ctx.deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(now - ctx.timestamp).count() / 1000.0;
@@ -424,49 +420,48 @@ void progress(float& value) {
   draw_text(rect.x + offset_x, rect.y, text.data(), str_length, ctx.style.progress.label_color);
 }
 
-void text_input_clear(text_input_context& ctx) {
-  ctx.line.clear();
-  ctx.cursor_pos = 0;
-}
-
-std::string text_input_get(text_input_context& input) {
-  std::string result;
-  utf32_to_utf8(input.line.begin(), input.line.end(), std::back_inserter(result));
-  return result;
-}
-
-bool text_input(text_input_context& input) {
-  input.line.append(ctx.input_queue_chars.begin(), ctx.input_queue_chars.end());
+bool text_input(std::string& input) {
+  utf32_to_utf8(ctx.input_queue_chars.begin(), ctx.input_queue_chars.end(), std::back_inserter(input));
 
   if (ctx.pressed_keys[TB_KEY_SPACE]) {
-    input.line.push_back(L' ');
+    input.push_back(' ');
   }
-  if (ctx.pressed_keys[TB_KEY_BACKSPACE2] && !input.line.empty()) {
-    input.line.pop_back();
+
+  if (ctx.pressed_keys[TB_KEY_BACKSPACE2] && !input.empty()) {
+    auto end = input.end();
+    utf8_prior(end);
+    input.erase(end, input.end());
   }
+
   if (ctx.pressed_keys[TB_KEY_CTRL_W]) {
+    while (!input.empty() && std::isblank(input.back())) {
+      input.pop_back();
+    }
     // Remove till first space from back or whole line.
-    auto found = input.line.rfind(' ');
-    if (found == input.line.npos) {
-      input.line.clear();
+    auto found = input.rfind(' ');
+    if (found == input.npos) {
+      input.clear();
     } else {
-      input.line.erase(input.line.begin() + found, input.line.end());
+      input.erase(input.begin() + found + 1, input.end());
     }
   }
 
-  bool result = ctx.pressed_keys[TB_KEY_ENTER] && input.line.size() > 0;
+  bool result = ctx.pressed_keys[TB_KEY_ENTER] && input.size() > 0;
 
   auto rect = detail::reserve_space(1);
   if (XXX_UNLIKELY(rect.width < 1 || rect.height < 1)) {
     return result;
   }
 
-  std::u32string_view str{input.line};
-  if ((rect.width - 1) < static_cast<int>(str.size())) {
-    str.remove_prefix(str.size() - (rect.width - 1));
+  int input_length = utf8_string_length(input);
+  int input_offset = input_length - (rect.width - 1);
+  if (input_offset < 0) {
+    input_offset = 0;
   }
 
-  draw_text(rect.x, rect.y, str, ctx.style.text_input.fg, ctx.style.text_input.bg);
+  draw_text(rect.x, rect.y, input.data(), input_length, input_offset, ctx.style.text_input.fg, ctx.style.text_input.bg);
+  draw_cell(rect.x + (input_length - input_offset), rect.y,
+            make_cell(' ', ctx.style.text_input.bg, ctx.style.text_input.fg));
 
   return result;
 }

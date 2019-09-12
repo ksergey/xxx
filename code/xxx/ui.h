@@ -68,20 +68,8 @@ void spinner(float& step_storage, std::string_view text = {}, align alignment = 
 /// Draw progress bar.
 void progress(float& value);
 
-
-struct text_input_context {
-  std::u32string line;
-  std::size_t cursor_pos{0};
-};
-
-/// Clear text input.
-void text_input_clear(text_input_context& ctx);
-
-/// Get utf8 input string.
-std::string text_input_get(text_input_context& input);
-
 /// Draw text input.
-bool text_input(text_input_context& input);
+bool text_input(std::string& input);
 
 }  // namespace xxx
 
