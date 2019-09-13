@@ -18,6 +18,14 @@ namespace xxx {
 /// Align.
 enum class align { left, center, right };
 
+/// Rect.
+struct rect {
+  int x{0};
+  int y{0};
+  int width{0};
+  int height{0};
+};
+
 /// Init internals.
 /// @throw std::runtime_error on error.
 void init();
@@ -54,6 +62,9 @@ void panel_begin(std::string_view title = {});
 
 /// Stop drawing panel.
 void panel_end();
+
+void fixed_panel_begin(rect const& geom, std::string_view title = {});
+void fixed_panel_end();
 
 /// Add empty area.
 /// @param[in] ratio_or_height is height percentage or explicit height.

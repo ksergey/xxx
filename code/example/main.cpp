@@ -14,6 +14,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
 
     float spinner_step_storage = 0.0;
     float progress_value = 33.3;
+    bool show_text_enter{false};
     std::string text;
 
     xxx::init();
@@ -29,6 +30,9 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       }
       if (xxx::is_key_pressed(xxx::key::arrow_right)) {
         progress_value += 0.6;
+      }
+      if (!show_text_enter) {
+        show_text_enter = xxx::is_key_pressed(xxx::key::enter);
       }
 
       xxx::begin();
@@ -52,11 +56,6 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
           xxx::panel_begin("PROGRESS");
             xxx::progress(progress_value);
           xxx::panel_end();
-          xxx::panel_begin("INPUT");
-            if (xxx::text_input(text)) {
-              text.clear();
-            }
-          xxx::panel_end();
         xxx::row_push(0.6);
           xxx::panel_begin("PANEL 2");
             xxx::label("Content 1");
@@ -69,6 +68,16 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
             xxx::spinner(spinner_step_storage, "Loading", xxx::align::center);
           xxx::panel_end();
       xxx::row_end();
+
+      if (show_text_enter) {
+        xxx::fixed_panel_begin({10, 5, 20, 20});
+          xxx::label("Enter a message:");
+          if (xxx::text_input(text)) {
+            text.clear();
+            show_text_enter = false;
+          }
+        xxx::fixed_panel_end();
+      }
       // clang-format on
 
       xxx::end();

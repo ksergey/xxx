@@ -37,6 +37,13 @@ XXX_ALWAYS_INLINE void draw_vertical_line(int x, int y, int length, cell const& 
   }
 }
 
+XXX_ALWAYS_INLINE void fill_rect(int x, int y, int width, int height, cell const& c) noexcept {
+  while (height-- > 0) {
+    draw_horizontal_line(x, y, width, c);
+    y += 1;
+  }
+}
+
 /// Draw text. Cheaper to pass offset to function instead of trim `str` from start.
 XXX_ALWAYS_INLINE void draw_text(int x, int y, char const* str, int length, int offset, color fg = color::default_,
                                  color bg = color::default_) {

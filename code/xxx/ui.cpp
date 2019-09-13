@@ -26,24 +26,6 @@ context ctx;
 
 namespace detail {
 
-XXX_ALWAYS_INLINE xxx::rect reserve_space(int height) noexcept {
-  if (height < 0) {
-    height = 0;
-  }
-
-  auto& layout = ctx.layout_stack.back();
-
-  xxx::rect result;
-  result.x = layout.pos.x;
-  result.y = layout.pos.y + layout.filled_size.height;
-  result.width = layout.size.width;
-  result.height = std::min(height, layout.size.height - layout.filled_size.height);
-
-  layout.filled_size.height += result.height;
-
-  return result;
-}
-
 XXX_ALWAYS_INLINE int align(int inner_width, int parent_width, xxx::align alignment) noexcept {
   if (XXX_LIKELY(parent_width > inner_width)) {
     switch (alignment) {
@@ -60,6 +42,45 @@ XXX_ALWAYS_INLINE int align(int inner_width, int parent_width, xxx::align alignm
 
 constexpr std::size_t get_key_index(std::uint16_t key) noexcept {
   return key <= 0xFF ? key : (((0xFFFF - key) & 0xFF) + 256);
+}
+
+// Return current layout.
+XXX_ALWAYS_INLINE layout_state& layout() noexcept { return ctx.layout_stack.back(); }
+
+// Set current layout.
+XXX_ALWAYS_INLINE void push_layout(layout_state const& layout) {
+  // Copy parent fill_background flag to childs (if set).
+  bool const fill_background = detail::layout().fill_background;
+  auto& result = ctx.layout_stack.emplace_back(layout);
+  if (XXX_UNLIKELY(fill_background)) {
+    result.fill_background = true;
+  }
+}
+
+// Restore previous layout.
+XXX_ALWAYS_INLINE void pop_layout() noexcept { ctx.layout_stack.pop_back(); }
+
+// Reserve space inside layout.
+XXX_ALWAYS_INLINE xxx::rect reserve_space(int height) noexcept {
+  if (height < 0) {
+    height = 0;
+  }
+
+  auto& layout = detail::layout();
+
+  xxx::rect result;
+  result.x = layout.pos.x;
+  result.y = layout.pos.y + layout.filled_size.height;
+  result.width = layout.size.width;
+  result.height = std::min(height, layout.size.height - layout.filled_size.height);
+
+  layout.filled_size.height += result.height;
+
+  if (XXX_UNLIKELY(layout.fill_background)) {
+    fill_rect(result.x, result.y, result.width, result.height, make_cell(' '));
+  }
+
+  return result;
 }
 
 }  // namespace detail
@@ -174,7 +195,7 @@ void row_begin(std::size_t columns) {
   }
 
   // Parent layout for new row layout.
-  auto& parent = ctx.layout_stack.back();
+  auto& parent = detail::layout();
 
   // New layout.
   layout_state row;
@@ -186,7 +207,7 @@ void row_begin(std::size_t columns) {
   row.filled_size = {0, 0};
 
   // Add layout to stack.
-  ctx.layout_stack.push_back(row);
+  detail::push_layout(row);
 }
 
 void row_push(float ratio_or_width) {
@@ -194,8 +215,8 @@ void row_push(float ratio_or_width) {
     ratio_or_width = 0.0;
   }
 
-  if (ctx.layout_stack.back().type == layout_type::row) {
-    auto& row = ctx.layout_stack.back();
+  if (detail::layout().type == layout_type::row) {
+    auto& row = detail::layout();
 
     assert(row.filled_size.width == 0);
     assert(row.column == 0);
@@ -218,14 +239,14 @@ void row_push(float ratio_or_width) {
     row.column += 1;
 
     // Add layout to stack.
-    ctx.layout_stack.push_back(column);
-  } else if (ctx.layout_stack.back().type == layout_type::column) {
-    int filled_height = ctx.layout_stack.back().filled_size.height;
+    detail::push_layout(column);
+  } else if (detail::layout().type == layout_type::column) {
+    int filled_height = detail::layout().filled_size.height;
     // Remove prev column layout.
-    ctx.layout_stack.pop_back();
+    detail::pop_layout();
 
     // Parent row layout.
-    auto& row = ctx.layout_stack.back();
+    auto& row = detail::layout();
 
     if (XXX_UNLIKELY(row.type != layout_type::row)) {
       assert(false && "unexpected layout state");
@@ -258,33 +279,32 @@ void row_push(float ratio_or_width) {
     row.filled_size.width += column.size.width;
     row.column += 1;
 
-    ctx.layout_stack.push_back(column);
+    detail::push_layout(column);
   }
 }
 
 void row_end() {
   int row_filled_height = 0;
 
-  if (ctx.layout_stack.back().type == layout_type::column) {
-    row_filled_height = ctx.layout_stack.back().filled_size.height;
-    ctx.layout_stack.pop_back();
+  if (detail::layout().type == layout_type::column) {
+    row_filled_height = detail::layout().filled_size.height;
+    detail::pop_layout();
   }
 
-  if (XXX_UNLIKELY(ctx.layout_stack.back().type != layout_type::row)) {
+  if (XXX_UNLIKELY(detail::layout().type != layout_type::row)) {
     assert(false && "unexpected layout state");
     return;
   }
 
-  row_filled_height = std::max(row_filled_height, ctx.layout_stack.back().filled_size.height);
-  ctx.layout_stack.pop_back();
+  row_filled_height = std::max(row_filled_height, detail::layout().filled_size.height);
+  detail::pop_layout();
 
   // Update parent layout filled height.
-  auto& parent = ctx.layout_stack.back();
-  parent.filled_size.height += row_filled_height;
+  detail::layout().filled_size.height += row_filled_height;
 }
 
 void panel_begin(std::string_view title) {
-  auto& parent = ctx.layout_stack.back();
+  auto& parent = detail::layout();
 
   if (XXX_UNLIKELY(parent.size.width < 2 || parent.size.height < 2)) {
     // TODO: may be this is wrong
@@ -313,19 +333,19 @@ void panel_begin(std::string_view title) {
     draw_text(panel.pos.x + 1, panel.pos.y - 1, title.data(), title_length, ctx.style.panel.title_color);
   }
 
-  ctx.layout_stack.push_back(panel);
+  detail::push_layout(panel);
 }
 
 void panel_end() {
-  if (XXX_UNLIKELY(ctx.layout_stack.back().type != layout_type::container)) {
+  if (XXX_UNLIKELY(detail::layout().type != layout_type::container)) {
     assert(false && "unexpected layout state");
     return;
   }
 
-  int filled_height = ctx.layout_stack.back().filled_size.height;
-  ctx.layout_stack.pop_back();
+  int filled_height = detail::layout().filled_size.height;
+  detail::pop_layout();
 
-  auto& parent = ctx.layout_stack.back();
+  auto& parent = detail::layout();
   parent.filled_size.height += filled_height + 2;
 
   auto cell = make_cell(ctx.style.panel.border.horizontal_line, ctx.style.panel.border_color);
@@ -340,12 +360,34 @@ void panel_end() {
                      parent.pos.y + parent.filled_size.height - (filled_height + 1), filled_height, cell);
 }
 
+void fixed_panel_begin(rect const& geom, std::string_view title) {
+  layout_state layout;
+  layout.type = layout_type::container;
+  layout.size = {geom.width, geom.height};
+  layout.pos = {geom.x, geom.y};
+  layout.fill_background = true;
+  detail::push_layout(layout);
+
+  panel_begin(title);
+}
+
+void fixed_panel_end() {
+  panel_end();
+
+  if (XXX_UNLIKELY(detail::layout().type != layout_type::container)) {
+    assert(false && "unexpected layout state");
+    return;
+  }
+
+  detail::pop_layout();
+}
+
 void spacer(float ratio_or_height) {
   if (XXX_UNLIKELY(ratio_or_height < 0.0)) {
     ratio_or_height = 0.0;
   }
 
-  auto& parent = ctx.layout_stack.back();
+  auto& parent = detail::layout();
   int available_height = parent.size.height - parent.filled_size.height;
 
   int height = 0;
@@ -355,7 +397,7 @@ void spacer(float ratio_or_height) {
     height = std::min<int>(std::round(ratio_or_height * available_height), available_height);
   }
 
-  parent.filled_size.height += height;
+  detail::reserve_space(height);
 }
 
 void label(std::string_view text, color color, align alignment) {

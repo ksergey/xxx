@@ -25,13 +25,6 @@ struct point {
   int y{0};
 };
 
-struct rect {
-  int x{0};
-  int y{0};
-  int width{0};
-  int height{0};
-};
-
 namespace style {
 
 /// Border style.
@@ -55,6 +48,7 @@ struct layout_state {
   impl::size filled_size{};
   std::size_t columns{0};
   std::size_t column{0};
+  bool fill_background{false};
 };
 
 static_assert(std::is_trivially_copyable_v<layout_state>);

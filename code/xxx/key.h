@@ -12,6 +12,7 @@ namespace xxx {
 /// Keys.
 enum class key : std::uint16_t {
   esc = 0x1B,
+  enter = 0x0D,
   F1 = (0xFFFF - 0),
   F2 = (0xFFFF - 1),
   F3 = (0xFFFF - 2),
