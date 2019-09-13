@@ -60,10 +60,10 @@ void panel_end();
 void spacer(float ratio_or_height = 1.0);
 
 /// Draw text line.
-void text(std::string_view str, color text_color = color::default_, align alignment = align::left);
+void label(std::string_view text, color color = color::default_, align alignment = align::left);
 
 /// Draw spinner.
-void spinner(float& step_storage, std::string_view text = {}, align alignment = align::left);
+void spinner(float& step, std::string_view text = {}, align alignment = align::left);
 
 /// Draw progress bar.
 void progress(float& value);

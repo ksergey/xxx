@@ -358,18 +358,18 @@ void spacer(float ratio_or_height) {
   parent.filled_size.height += height;
 }
 
-void text(std::string_view str, color text_color, align alignment) {
+void label(std::string_view text, color color, align alignment) {
   auto rect = detail::reserve_space(1);
-  if (XXX_UNLIKELY(rect.width < 1 || rect.height < 1 || str.empty())) {
+  if (XXX_UNLIKELY(rect.width < 1 || rect.height < 1 || text.empty())) {
     return;
   }
 
-  int str_length = std::min<int>(utf8_string_length(str), rect.width);
+  int str_length = std::min<int>(utf8_string_length(text), rect.width);
   int offset_x = detail::align(str_length, rect.width, alignment);
-  draw_text(rect.x + offset_x, rect.y, str.data(), str_length, text_color);
+  draw_text(rect.x + offset_x, rect.y, text.data(), str_length, color);
 }
 
-void spinner(float& step_storage, std::string_view text, align alignment) {
+void spinner(float& step, std::string_view text, align alignment) {
   auto rect = detail::reserve_space(1);
   if (XXX_UNLIKELY(rect.width < 1 || rect.height < 1 || ctx.style.spinner.glyphs.empty())) {
     assert(!ctx.style.spinner.glyphs.empty() && "spinner frames not configured");
@@ -387,8 +387,8 @@ void spinner(float& step_storage, std::string_view text, align alignment) {
 
   // Spinner
   static constexpr float spin_interval = 0.1;  // 0.1 seconds
-  step_storage += ctx.deltaTime;
-  std::size_t const index = std::size_t(std::round(step_storage / spin_interval)) % ctx.style.spinner.glyphs.size();
+  step += ctx.deltaTime;
+  std::size_t const index = std::size_t(std::round(step / spin_interval)) % ctx.style.spinner.glyphs.size();
 
   // Spinner text
   draw_cell(rect.x + offset_x, rect.y, make_cell(ctx.style.spinner.glyphs[index], ctx.style.spinner.spinner_color));
