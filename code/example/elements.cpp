@@ -3,9 +3,7 @@
 // ------------------------------------------------------------
 
 #include <iostream>
-#include <thread>
 
-#include <termbox.h>
 #include <xxx/ui.h>
 
 int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
