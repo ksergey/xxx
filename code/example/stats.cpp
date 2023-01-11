@@ -12,8 +12,8 @@
 
 #include <xxx/ui.h>
 
-template <class Range1, class Range2, class Fn2>
-inline void for_each(Range1&& range1, Range2&& range2, Fn2&& fn2) {
+template<class Range1, class Range2, class Fn2>
+inline void forEach(Range1&& range1, Range2&& range2, Fn2&& fn2) {
   using std::begin;
   using std::end;
 
@@ -27,16 +27,16 @@ inline void for_each(Range1&& range1, Range2&& range2, Fn2&& fn2) {
   }
 }
 
-struct cpu_usage {
+struct CPUUsage {
   std::string_view name;
   float value;
 };
 
-class cpu_monitor {
- private:
-  using clock = std::chrono::steady_clock;
+class CPUMonitor {
+private:
+  using Clock = std::chrono::steady_clock;
 
-  struct cpu_stats {
+  struct CPUStats {
     std::string name;
     std::uint64_t total;
     std::uint64_t work;
@@ -44,67 +44,75 @@ class cpu_monitor {
 
   static constexpr std::chrono::seconds interval_{1};
 
-  std::vector<cpu_stats> stats_[2];
-  std::size_t current_stat_index_{0};
-  clock::time_point timestamp_;
-  std::vector<cpu_usage> usage_;
+  std::vector<CPUStats> stats_[2];
+  std::size_t currentStatIndex_{0};
+  Clock::time_point timestamp_;
+  std::vector<CPUUsage> usage_;
 
- public:
-  cpu_monitor() {
-    read_proc_stats();
-    timestamp_ = clock::now();
+public:
+  CPUMonitor() {
+    readProcStats();
+    timestamp_ = Clock::now();
   }
 
   bool update() {
-    auto now = clock::now();
+    auto now = Clock::now();
     if (timestamp_ + interval_ > now) {
       return false;
     }
 
     swap();
-    read_proc_stats();
+    readProcStats();
     timestamp_ = now;
 
     usage_.clear();
 
-    ::for_each(current(), prev(), [this](cpu_stats const& current, cpu_stats const& prev) {
-      auto work_over_period = static_cast<double>(current.work - prev.work);
-      auto total_over_period = static_cast<double>(current.total - prev.total);
+    forEach(current(), prev(), [this](CPUStats const& current, CPUStats const& prev) {
+      auto workOverPeriod = static_cast<double>(current.work - prev.work);
+      auto totalOverPeriod = static_cast<double>(current.total - prev.total);
       auto& entry = usage_.emplace_back();
       entry.name = current.name;
-      entry.value = (work_over_period * 100.0) / total_over_period;
+      entry.value = (workOverPeriod * 100.0) / totalOverPeriod;
     });
 
     return true;
   }
 
-  std::vector<cpu_usage> const& usage() const noexcept { return usage_; }
+  std::vector<CPUUsage> const& usage() const noexcept {
+    return usage_;
+  }
 
- private:
-  // Return current cpu_stats buffer.
-  std::vector<cpu_stats>& current() noexcept { return stats_[current_stat_index_]; }
+private:
+  // Return current cpu stats buffer.
+  std::vector<CPUStats>& current() noexcept {
+    return stats_[currentStatIndex_];
+  }
 
   // Return prev cpu_stats buffer.
-  std::vector<cpu_stats> const& prev() const noexcept { return stats_[(current_stat_index_ + 1) % 2]; }
+  std::vector<CPUStats> const& prev() const noexcept {
+    return stats_[(currentStatIndex_ + 1) % 2];
+  }
 
   // Swap current buffer with prev.
-  void swap() noexcept { current_stat_index_ = (current_stat_index_ + 1) % 2; }
+  void swap() noexcept {
+    currentStatIndex_ = (currentStatIndex_ + 1) % 2;
+  }
 
-  // Read /proc/stat into current cpu_stats buffer.
-  void read_proc_stats() {
-    constexpr std::string_view begin_cpu{"cpu"};
+  // Read /proc/stat into current cpu stats buffer.
+  void readProcStats() {
+    constexpr std::string_view beginCpu("cpu");
 
     auto& out = current();
     out.clear();
 
-    std::ifstream is{"/proc/stat"};
+    std::ifstream is("/proc/stat");
 
     std::string line;
     while (std::getline(is, line)) {
-      if (line.compare(0, begin_cpu.size(), begin_cpu) != 0) {
+      if (line.compare(0, beginCpu.size(), beginCpu) != 0) {
         break;
       }
-      std::istringstream ss{line};
+      std::istringstream ss(line);
 
       auto& entry = out.emplace_back();
       entry.total = 0;
@@ -129,37 +137,37 @@ class cpu_monitor {
 int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
   try {
     bool running = true;
-    float spinner_step_storage{0};
+    float spinnerStepStorage = 0;
 
     xxx::init();
 
-    cpu_monitor monitor;
+    CPUMonitor monitor;
 
     while (running) {
       xxx::update(100);
       monitor.update();
 
-      running = !xxx::is_key_pressed(xxx::key::esc);
+      running = !xxx::isKeyPressed(xxx::Key::Esc);
 
       xxx::begin();
-      xxx::row_begin(1);
-      xxx::row_push(30);
-      xxx::panel_begin("CPU");
+      xxx::rowBegin(1);
+      xxx::rowPush(30);
+      xxx::panelBegin("CPU");
       if (monitor.usage().empty()) {
-        xxx::spinner(spinner_step_storage, "Loading");
+        xxx::spinner(spinnerStepStorage, "Loading");
       } else {
         for (auto const& cpu : monitor.usage()) {
           float value = cpu.value;
-          xxx::row_begin(2);
-          xxx::row_push(5);
+          xxx::rowBegin(2);
+          xxx::rowPush(5);
           xxx::label(cpu.name);
-          xxx::row_push(0.9);
+          xxx::rowPush(0.9);
           xxx::progress(value);
-          xxx::row_end();
+          xxx::rowEnd();
         }
       }
-      xxx::panel_end();
-      xxx::row_end();
+      xxx::panelEnd();
+      xxx::rowEnd();
       xxx::end();
     }
 

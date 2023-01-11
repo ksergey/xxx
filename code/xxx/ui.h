@@ -2,28 +2,23 @@
 // Copyright 2019-present Sergey Kovalevich <inndie@gmail.com>
 // ------------------------------------------------------------
 
-#ifndef KSERGEY_ui_300819104733
-#define KSERGEY_ui_300819104733
+#pragma once
 
 #include <cstdint>
 #include <functional>
 #include <stdexcept>
 #include <string_view>
 
-#include <xxx/color.h>
-#include <xxx/key.h>
+#include <xxx/common.h>
 
 namespace xxx {
 
-/// Align.
-enum class align { left, center, right };
-
 /// Rect.
-struct rect {
-  int x{0};
-  int y{0};
-  int width{0};
-  int height{0};
+struct Rect {
+  int x = 0;
+  int y = 0;
+  int width = 0;
+  int height = 0;
 };
 
 /// Init internals.
@@ -35,10 +30,10 @@ void shutdown();
 
 /// Update internal terminal state.
 /// @return true on an tty event received.
-bool update(unsigned ms = 33);
+bool update(unsigned ms = 33) noexcept;
 
 /// Return true on key pressed.
-bool is_key_pressed(key k);
+bool isKeyPressed(Key key) noexcept;
 
 /// Start drawing frame.
 void begin();
@@ -48,40 +43,41 @@ void end();
 
 /// Start drawing row.
 /// @param[in] columns is number of columns inside row.
-void row_begin(std::size_t columns);
+void rowBegin(std::size_t columns);
 
 /// Start next column in row.
-/// @param[in] ratio_or_width is column percentage width (value <= 1.0) or explicit width.
-void row_push(float ratio_or_width);
+/// @param[in] ratioOrWidth is column percentage width (value <= 1.0) or explicit width.
+void rowPush(float ratioOrWidth);
 
 /// Stop drawing row.
-void row_end();
+void rowEnd();
 
 /// Start drawing panel.
-void panel_begin(std::string_view title = {});
+void panelBegin(std::string_view title = {});
 
 /// Stop drawing panel.
-void panel_end();
+void panelEnd();
 
-void fixed_panel_begin(rect const& geom, std::string_view title = {});
-void fixed_panel_end();
+/// Start drawing fixed size panel
+void fixedPanelBegin(Rect const& geom, std::string_view title = {});
+
+/// Stop drawing fixed size panel
+void fixedPanelEnd();
 
 /// Add empty area.
-/// @param[in] ratio_or_height is height percentage or explicit height.
-void spacer(float ratio_or_height = 1.0);
+/// @param[in] ratioOrHeight is height percentage or explicit height.
+void spacer(float ratioOrHeight = 1.0);
 
 /// Draw text line.
-void label(std::string_view text, color color = color::default_, align alignment = align::left);
+void label(std::string_view text, Color color = Color::Default, Align alignment = Align::Left);
 
 /// Draw spinner.
-void spinner(float& step, std::string_view text = {}, align alignment = align::left);
+void spinner(float& step, std::string_view text = {}, Align alignment = Align::Left);
 
 /// Draw progress bar.
 void progress(float& value);
 
 /// Draw text input.
-bool text_input(std::string& input);
+bool textInput(std::string& input);
 
-}  // namespace xxx
-
-#endif /* KSERGEY_ui_300819104733 */
+} // namespace xxx

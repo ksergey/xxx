@@ -2,8 +2,7 @@
 // Copyright 2019-present Sergey Kovalevich <inndie@gmail.com>
 // ------------------------------------------------------------
 
-#ifndef KSERGEY_draw_300819110406
-#define KSERGEY_draw_300819110406
+#pragma once
 
 #include <memory>
 
@@ -15,45 +14,48 @@
 
 namespace xxx::impl {
 
-using cell = ::tb_cell;
+using Cell = ::tb_cell;
 
-XXX_ALWAYS_INLINE cell make_cell(std::uint32_t ch, color fg = color::default_, color bg = color::default_) noexcept {
-  return {ch, static_cast<std::uint16_t>(fg), static_cast<std::uint16_t>(bg)};
+inline Cell makeCell(std::uint32_t ch, Color fg = Color::Default, Color bg = Color::Default) noexcept {
+  return Cell{ch, static_cast<std::uint16_t>(fg), static_cast<std::uint16_t>(bg)};
 }
 
-XXX_ALWAYS_INLINE void draw_cell(int x, int y, cell const& c) noexcept { ::tb_put_cell(x, y, std::addressof(c)); }
+inline void drawCell(int x, int y, Cell const& cell) noexcept {
+  ::tb_put_cell(x, y, &cell);
+}
 
-XXX_ALWAYS_INLINE void draw_horizontal_line(int x, int y, int length, cell const& c) noexcept {
+inline void drawHorizontalLine(int x, int y, int length, Cell const& cell) noexcept {
   while (length-- > 0) {
-    draw_cell(x, y, c);
+    drawCell(x, y, cell);
     x += 1;
   }
 }
 
-XXX_ALWAYS_INLINE void draw_vertical_line(int x, int y, int length, cell const& c) noexcept {
+inline void drawVerticalLine(int x, int y, int length, Cell const& cell) noexcept {
   while (length-- > 0) {
-    draw_cell(x, y, c);
+    drawCell(x, y, cell);
     y += 1;
   }
 }
 
-XXX_ALWAYS_INLINE void fill_rect(int x, int y, int width, int height, cell const& c) noexcept {
+inline void fillRect(int x, int y, int width, int height, Cell const& cell) noexcept {
   while (height-- > 0) {
-    draw_horizontal_line(x, y, width, c);
+    drawHorizontalLine(x, y, width, cell);
     y += 1;
   }
 }
 
 /// Draw text. Cheaper to pass offset to function instead of trim `str` from start.
-XXX_ALWAYS_INLINE void draw_text(int x, int y, char const* str, int length, int offset, color fg = color::default_,
-                                 color bg = color::default_) {
-  if (XXX_UNLIKELY(offset < 0)) {
+inline void drawText(int x, int y, char const* str, int length, int offset, Color fg = Color::Default,
+                     Color bg = Color::Default) {
+  if (offset < 0) {
     offset = 0;
   }
-  auto cell = make_cell(' ', fg, bg);
+
+  auto cell = makeCell(' ', fg, bg);
   auto it = make_utf8_iterator(str);
 
-  if (XXX_UNLIKELY(offset > 0)) {
+  if (offset > 0) {
     while (length > 0 && offset > 0) {
       --length;
       --offset;
@@ -63,16 +65,13 @@ XXX_ALWAYS_INLINE void draw_text(int x, int y, char const* str, int length, int 
 
   while (length > 0) {
     cell.ch = *it++;
-    draw_cell(x++, y, cell);
+    drawCell(x++, y, cell);
     length -= 1;
   }
 }
 
-XXX_ALWAYS_INLINE
-void draw_text(int x, int y, char const* str, int length, color fg = color::default_, color bg = color::default_) {
-  return draw_text(x, y, str, length, 0, fg, bg);
+inline void drawText(int x, int y, char const* str, int length, Color fg = Color::Default, Color bg = Color::Default) {
+  return drawText(x, y, str, length, 0, fg, bg);
 }
 
-}  // namespace xxx::impl
-
-#endif /* KSERGEY_draw_300819110406 */
+} // namespace xxx::impl
