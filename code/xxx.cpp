@@ -866,6 +866,10 @@ public:
   }
 
   void point(int x, int y, Color color) override {
+    if (x < 0 || x >= width() || y < 0 || y >= height()) {
+      return;
+    }
+
     auto& cell = getCellAt(x, y);
     if (cell.ch >= kBrailleOffset) {
       cell.ch |= kPixelMap[y % 4][x % 2];

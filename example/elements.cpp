@@ -2,7 +2,9 @@
 // Copyright 2019-present Sergey Kovalevich <inndie@gmail.com>
 // ------------------------------------------------------------
 
+#include <cmath>
 #include <iostream>
+#include <numbers>
 
 #include <xxx.h>
 
@@ -68,18 +70,18 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       // clang-format on
 
       xxx::canvas(0.99, [&](xxx::Canvas& c) {
-        for (int i = 0; i < c.width(); i++) {
-          c.point(i, c.height() / 2, xxx::color(66, 128, 255));
-        }
-        for (int i = 0; i < c.width(); i++) {
-          c.point(i, c.height() - 1, xxx::color(255, 128, 33));
-        }
-        for (int i = 0; i < c.width(); i++) {
-          c.point(i, 0, xxx::color(33, 255, 128));
-        }
-        for (int i = 0; i < c.height(); i++) {
-          c.point(c.width() / 3, i, xxx::color(66, 66, 255));
-        }
+        auto const drawCircle = [&](int x0, int y0, int r, xxx::Color color) {
+          for (float angle = 0.0; angle < 360.0; angle += 0.1) {
+            float const arg = angle * std::numbers::pi_v<float> / 180.0;
+            int const x = r * std::cos(arg);
+            int const y = r * std::sin(arg);
+            c.point(x0 + x, y0 + y, color);
+          }
+        };
+        drawCircle(c.width() / 2, c.height() / 2, c.height() / 2 - 1, xxx::color(33, 255, 128));
+        drawCircle(c.width() / 3, c.height() / 3, c.height() / 4 - 1, xxx::color(64, 128, 255));
+        drawCircle(c.width() * 2 / 3, c.height() / 3, c.height() / 5, xxx::color(255, 128, 255));
+        drawCircle(c.width() / 3, c.height() * 2 / 3, c.height() / 3.5, xxx::color(64, 64, 255));
       });
 
       xxx::end();
