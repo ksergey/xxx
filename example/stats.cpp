@@ -10,7 +10,7 @@
 #include <sstream>
 #include <vector>
 
-#include <xxx/ui.h>
+#include <xxx.h>
 
 template<class Range1, class Range2, class Fn2>
 inline void forEach(Range1&& range1, Range2&& range2, Fn2&& fn2) {
@@ -137,7 +137,6 @@ private:
 int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
   try {
     bool running = true;
-    float spinnerStepStorage = 0;
 
     xxx::init();
 
@@ -147,17 +146,17 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       xxx::update(100);
       monitor.update();
 
-      running = !xxx::isKeyPressed(xxx::Key::Esc);
+      running = !xxx::isKeyPressed(xxx::key::Esc);
 
       xxx::begin();
       xxx::rowBegin(1);
       xxx::rowPush(30);
       xxx::panelBegin("CPU");
       if (monitor.usage().empty()) {
-        xxx::spinner(spinnerStepStorage, "Loading");
+        xxx::spinner("Loading");
       } else {
         for (auto const& cpu : monitor.usage()) {
-          float value = cpu.value;
+          double value = cpu.value;
           xxx::rowBegin(2);
           xxx::rowPush(5);
           xxx::label(cpu.name);

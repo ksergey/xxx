@@ -1,0 +1,11 @@
+set(TargetName elements)
+add_executable(${TargetName} elements.cpp)
+target_compile_features(${TargetName} PRIVATE cxx_std_20)
+target_compile_options(${TargetName} PRIVATE -Wall -Wextra -g)
+target_link_libraries(${TargetName} PRIVATE xxx::xxx)
+
+set(TargetName stats)
+add_executable(${TargetName} stats.cpp)
+target_compile_features(${TargetName} PRIVATE cxx_std_20)
+target_compile_options(${TargetName} PRIVATE -Wall -Wextra -g)
+target_link_libraries(${TargetName} PRIVATE xxx::xxx)

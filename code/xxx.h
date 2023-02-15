@@ -48,6 +48,10 @@ namespace key {
 
 static constexpr auto Esc = std::uint16_t(0x1b);
 static constexpr auto Enter = std::uint16_t(0x0d);
+static constexpr auto ArrowUp = std::uint16_t(0xFFFF - 18);
+static constexpr auto ArrowDown = std::uint16_t(0xFFFF - 19);
+static constexpr auto ArrowLeft = std::uint16_t(0xFFFF - 20);
+static constexpr auto ArrowRight = std::uint16_t(0xFFFF - 21);
 
 } // namespace key
 

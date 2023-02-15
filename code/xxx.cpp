@@ -495,6 +495,8 @@ bool isKeyPressed(std::uint16_t key) noexcept {
 }
 
 void begin() {
+  ::tb_clear();
+
   ctx.screenSize = {::tb_width(), ::tb_height()};
   ctx.layoutStack.clear();
 
@@ -503,8 +505,6 @@ void begin() {
   layout.size = ctx.screenSize;
   layout.pos = {0, 0};
   layout.filledSize = {0, 0};
-
-  ::tb_clear();
 }
 
 void end() {
