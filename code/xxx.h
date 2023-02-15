@@ -5,6 +5,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <string_view>
 #include <vector>
 
@@ -25,7 +26,7 @@ constexpr Color operator|(Color lhs, Attr rhs) noexcept {
 }
 
 /// Make Color from RGB components
-constexpr Color makeColor(std::uint8_t r, std::uint8_t g, std::uint8_t b) noexcept {
+constexpr Color color(std::uint8_t r, std::uint8_t g, std::uint8_t b) noexcept {
   int r_ = (r * 5 + 0x7f) / 0xff;
   int g_ = (g * 5 + 0x7f) / 0xff;
   int b_ = (b * 5 + 0x7f) / 0xff;
@@ -119,9 +120,34 @@ void spacer(float ratioOrHeight = 1.0);
 void spinner(std::string_view text = {}, Align align = Align::Left, float& step = detail::getStorageFor<float>());
 
 /// Draw progress bar
-void progress(double& value);
+void progress(float& value);
 
 /// Draw text input. Return true on input finished
 bool textInput(std::string& input);
+
+/// Interface for drawing on canvas
+class Canvas {
+private:
+  int const width_;
+  int const height_;
+
+public:
+  Canvas(int width, int height) noexcept : width_(width), height_(height) {}
+
+  virtual ~Canvas() noexcept {}
+
+  int width() const noexcept {
+    return width_;
+  }
+
+  int height() const noexcept {
+    return height_;
+  }
+
+  virtual void point(int x, int y, Color color = Color::Default) = 0;
+};
+
+/// Draw anything in canvas
+void canvas(float ratioOrHeight, std::function<void(Canvas&)> const& fn);
 
 } // namespace xxx

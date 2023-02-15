@@ -780,7 +780,7 @@ void spinner(std::string_view text, Align align, float& step) {
   }
 }
 
-void progress(double& value) {
+void progress(float& value) {
   auto const& style = ctx.style.progress;
   auto const& backgroundColor = ctx.style.backgroundColor;
 
@@ -789,13 +789,13 @@ void progress(double& value) {
     return;
   }
 
-  value = std::clamp<double>(value, 0.0, 100.0);
+  value = std::clamp<float>(value, 0.0, 100.0);
   int const length = std::round((rect.width * value) / 100.0);
   auto const cell = draw::cell(style.barGlyph, style.barColor, backgroundColor);
   draw::hLine(rect.x, rect.y, length, cell);
 
   char buffer[sizeof(" 100.0% ")];
-  std::snprintf(buffer, sizeof(buffer), " %02.1f%% ", value);
+  std::snprintf(buffer, sizeof(buffer), " %02.1f%% ", double(value));
   std::string_view text(buffer);
 
   int const textLength = std::min<int>(text.size(), rect.width);
@@ -847,6 +847,60 @@ bool textInput(std::string& input) {
   draw::hLine(rect.x + (inputLength - inputOffset), rect.y, rect.width - (inputLength + inputOffset), cell);
 
   return result;
+}
+
+class CanvasImpl final : public Canvas {
+private:
+  static constexpr std::array kPixelMap = {std::array{0x01, 0x08}, std::array{0x02, 0x10}, std::array{0x04, 0x20},
+                                           std::array{0x40, 0x80}};
+  static constexpr std::uint32_t kBrailleOffset = 0x2800;
+
+  int const x_;
+  int const y_;
+
+  ::tb_cell cell_;
+
+public:
+  CanvasImpl(Rect const& rect) noexcept : Canvas(rect.width * 2, rect.height * 4), x_(rect.x), y_(rect.y) {
+    cell_ = draw::cell(' ', ctx.style.errorColor, ctx.style.backgroundColor);
+  }
+
+  void point(int x, int y, Color color) override {
+    auto& cell = getCellAt(x, y);
+    if (cell.ch >= kBrailleOffset) {
+      cell.ch |= kPixelMap[y % 4][x % 2];
+    } else {
+      cell.ch = kBrailleOffset + kPixelMap[y % 4][x % 2];
+    }
+    cell.fg = static_cast<std::uint16_t>(color);
+  }
+
+private:
+  ::tb_cell& getCellAt(int x, int y) const noexcept {
+    int const posX = x_ + x / 2;
+    int const posY = y_ + y / 4;
+    return ::tb_cell_buffer()[posY * ::tb_width() + posX];
+  }
+};
+
+void canvas(float ratioOrHeight, std::function<void(Canvas&)> const& fn) {
+  if (ratioOrHeight < 0.0) [[unlikely]] {
+    ratioOrHeight = 0.0;
+  }
+
+  auto& parent = ctx.layoutStack.back();
+  int const availableHeight = parent.size.height - parent.filledSize.height;
+
+  int height = 0;
+  if (ratioOrHeight > 1.0) {
+    height = std::min<int>(ratioOrHeight, availableHeight);
+  } else {
+    height = std::min<int>(std::round(ratioOrHeight * availableHeight), availableHeight);
+  }
+
+  auto const space = reserveSpace(height);
+  CanvasImpl canvasImpl(space);
+  std::invoke(fn, canvasImpl);
 }
 
 } // namespace xxx

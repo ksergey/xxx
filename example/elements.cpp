@@ -10,7 +10,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
   try {
     bool running = true;
 
-    double progressValue = 33.3;
+    float progressValue = 33.3;
     bool showTextEnter = false;
     std::string text;
 
@@ -66,6 +66,21 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
           xxx::panelEnd();
       xxx::rowEnd();
       // clang-format on
+
+      xxx::canvas(0.99, [&](xxx::Canvas& c) {
+        for (int i = 0; i < c.width(); i++) {
+          c.point(i, c.height() / 2, xxx::color(66, 128, 255));
+        }
+        for (int i = 0; i < c.width(); i++) {
+          c.point(i, c.height() - 1, xxx::color(255, 128, 33));
+        }
+        for (int i = 0; i < c.width(); i++) {
+          c.point(i, 0, xxx::color(33, 255, 128));
+        }
+        for (int i = 0; i < c.height(); i++) {
+          c.point(c.width() / 3, i, xxx::color(66, 66, 255));
+        }
+      });
 
       xxx::end();
     }

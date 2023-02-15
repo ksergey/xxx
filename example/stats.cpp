@@ -156,7 +156,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
         xxx::spinner("Loading");
       } else {
         for (auto const& cpu : monitor.usage()) {
-          double value = cpu.value;
+          float value = cpu.value;
           xxx::rowBegin(2);
           xxx::rowPush(5);
           xxx::label(cpu.name);
