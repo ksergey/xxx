@@ -102,6 +102,9 @@ void panelBegin(std::string_view title = {});
 /// End drawing panel
 void panelEnd();
 
+/// Draw single line text with custom color
+void label(std::string_view text, Color color, Align align = Align::Left);
+
 /// Draw single line text
 void label(std::string_view text, Align align = Align::Left);
 

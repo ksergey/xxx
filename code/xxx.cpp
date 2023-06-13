@@ -700,9 +700,7 @@ void panelEnd() {
               filledHeight, cell);
 }
 
-namespace {
-
-void label(std::string_view text, Align align, Color const& color) noexcept {
+void label(std::string_view text, Color color, Align align) {
   auto const& backgroundColor = ctx.style.backgroundColor;
 
   auto const rect = reserveSpace(1);
@@ -716,18 +714,16 @@ void label(std::string_view text, Align align, Color const& color) noexcept {
   draw::text(rect.x + offsetX, rect.y, text.data(), textLength, color, backgroundColor);
 }
 
-} // namespace
-
 void label(std::string_view text, Align align) {
-  return label(text, align, ctx.style.normalColor);
+  return label(text, ctx.style.normalColor, align);
 }
 
 void warning(std::string_view text, Align align) {
-  return label(text, align, ctx.style.warningColor);
+  return label(text, ctx.style.warningColor, align);
 }
 
 void error(std::string_view text, Align align) {
-  return label(text, align, ctx.style.errorColor);
+  return label(text, ctx.style.errorColor, align);
 }
 
 void spacer(float ratioOrHeight) {
