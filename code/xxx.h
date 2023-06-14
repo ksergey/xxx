@@ -49,6 +49,7 @@ namespace key {
 
 static constexpr auto Esc = std::uint16_t(0x1b);
 static constexpr auto Enter = std::uint16_t(0x0d);
+static constexpr auto Space = std::uint16_t(0x20);
 static constexpr auto ArrowUp = std::uint16_t(0xFFFF - 18);
 static constexpr auto ArrowDown = std::uint16_t(0xFFFF - 19);
 static constexpr auto ArrowLeft = std::uint16_t(0xFFFF - 20);
@@ -105,14 +106,8 @@ void panelEnd();
 /// Draw single line text with custom color
 void label(std::string_view text, Color color, Align align = Align::Left);
 
-/// Draw single line text
+/// Draw single line text (default color)
 void label(std::string_view text, Align align = Align::Left);
-
-/// Draw single line warning text
-void warning(std::string_view text, Align align = Align::Left);
-
-/// Draw single line error text
-void error(std::string_view text, Align align = Align::Left);
 
 /// Add empty area
 /// @param[in] ratioOrHeight is height percentage or explicit height

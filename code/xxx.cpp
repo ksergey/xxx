@@ -81,8 +81,6 @@ struct TextInputStyle {
 struct Style {
   Color backgroundColor;
   Color normalColor;
-  Color warningColor;
-  Color errorColor;
 
   PanelStyle panel;
   SpinnerStyle spinner;
@@ -341,8 +339,6 @@ void initStyle() {
 
   ctx.style.backgroundColor = Color::Default;
   ctx.style.normalColor = Color::Default;
-  ctx.style.warningColor = 0xff9933_c;
-  ctx.style.errorColor = 0xff3333_c;
 
   ctx.style.panel.border = {L'│', L'─', L'╭', L'╮', L'╰', L'╯'};
   ctx.style.panel.borderColor = 0x999999_c;
@@ -718,14 +714,6 @@ void label(std::string_view text, Align align) {
   return label(text, ctx.style.normalColor, align);
 }
 
-void warning(std::string_view text, Align align) {
-  return label(text, ctx.style.warningColor, align);
-}
-
-void error(std::string_view text, Align align) {
-  return label(text, ctx.style.errorColor, align);
-}
-
 void spacer(float ratioOrHeight) {
   if (ratioOrHeight < 0.0) [[unlikely]] {
     ratioOrHeight = 0.0;
@@ -854,12 +842,8 @@ private:
   int const x_;
   int const y_;
 
-  ::tb_cell cell_;
-
 public:
-  CanvasImpl(Rect const& rect) noexcept : Canvas(rect.width * 2, rect.height * 4), x_(rect.x), y_(rect.y) {
-    cell_ = draw::cell(' ', ctx.style.errorColor, ctx.style.backgroundColor);
-  }
+  CanvasImpl(Rect const& rect) noexcept : Canvas(rect.width * 2, rect.height * 4), x_(rect.x), y_(rect.y) {}
 
   void point(int x, int y, Color color) override {
     if (x < 0 || x >= width() || y < 0 || y >= height()) {
