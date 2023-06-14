@@ -45,6 +45,9 @@ constexpr Color operator""_c(unsigned long long int value) noexcept {
 
 } // namespace literals
 
+/// Color ID
+enum class ColorID { Text, Background, Border, Glyph, LAST };
+
 namespace key {
 
 static constexpr auto Esc = std::uint16_t(0x1b);
@@ -86,6 +89,12 @@ void begin();
 /// End frame
 void end();
 
+/// Push style color
+void styleColorPush(ColorID idx, Color color);
+
+/// Pop style color
+void styleColorPop(std::size_t count = 1);
+
 /// Start drawing row
 /// @param[in] columns is number of columns inside row
 void rowBegin(std::size_t columns);
@@ -103,10 +112,7 @@ void panelBegin(std::string_view title = {});
 /// End drawing panel
 void panelEnd();
 
-/// Draw single line text with custom color
-void label(std::string_view text, Color color, Align align = Align::Left);
-
-/// Draw single line text (default color)
+/// Draw single line text
 void label(std::string_view text, Align align = Align::Left);
 
 /// Add empty area

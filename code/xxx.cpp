@@ -57,44 +57,43 @@ struct BorderStyle {
 
 struct PanelStyle {
   BorderStyle border;
-  Color borderColor;
-  Color titleColor;
 };
 
 struct SpinnerStyle {
   std::vector<std::uint32_t> glyphs;
-  Color labelColor;
-  Color glyphColor;
 };
 
 struct ProgressStyle {
   std::uint32_t barGlyph;
-  Color barColor;
-  Color labelColor;
 };
 
-struct TextInputStyle {
-  Color backgroundColor;
-  Color textColor;
+struct ColorState {
+  ColorID idx;
+  Color color;
 };
 
 struct Style {
-  Color backgroundColor;
-  Color normalColor;
-
   PanelStyle panel;
   SpinnerStyle spinner;
   ProgressStyle progress;
-  TextInputStyle textInput;
 };
 
 namespace {
 
+constexpr auto kColorsCount = static_cast<std::size_t>(ColorID::LAST);
+
 struct {
+  // widget styles
   Style style;
+
+  // colors
+  Color colors[kColorsCount];
 
   // layout stack
   std::vector<LayoutState> layoutStack;
+
+  // colors stack
+  std::vector<ColorState> colorsStack;
 
   // input characters during update
   std::vector<int> inputChars;
@@ -332,29 +331,31 @@ inline void text(int x, int y, char const* str, int length, Color fg, Color bg) 
 
 } // namespace draw
 
+// Get current color
+inline Color& colorAt(ColorID idx) noexcept {
+  auto const index = static_cast<std::size_t>(idx);
+  assert(index < kColorsCount);
+  return ctx.colors[index];
+}
+
 namespace {
 
 void initStyle() {
-  using namespace literals;
-
-  ctx.style.backgroundColor = Color::Default;
-  ctx.style.normalColor = Color::Default;
-
   ctx.style.panel.border = {L'│', L'─', L'╭', L'╮', L'╰', L'╯'};
-  ctx.style.panel.borderColor = 0x999999_c;
-  ctx.style.panel.titleColor = 0xffffff_c | Attr::Bold;
 
   ctx.style.spinner.glyphs = {{L'⠉', L'⠑', L'⠃', L'⠊', L'⠒', L'⠢', L'⠆', L'⠔', L'⠤', L'⢄', L'⡄', L'⡠',
                                L'⣀', L'⢄', L'⢠', L'⡠', L'⠤', L'⠢', L'⠰', L'⠔', L'⠒', L'⠑', L'⠘', L'⠊'}};
-  ctx.style.spinner.glyphColor = 0xecd0dd_c | Attr::Bold;
-  ctx.style.spinner.labelColor = Color::Default;
 
-  ctx.style.progress.barColor = 0x0e53b4_c;
-  ctx.style.progress.labelColor = Color::Default | Attr::Bold;
   ctx.style.progress.barGlyph = L'│';
+}
 
-  ctx.style.textInput.backgroundColor = 0x333333_c;
-  ctx.style.textInput.textColor = 0x33ff99_c | Attr::Bold;
+void initColors() {
+  using namespace literals;
+
+  colorAt(ColorID::Text) = Color::Default;
+  colorAt(ColorID::Background) = Color::Default;
+  colorAt(ColorID::Border) = 0x666666_c;
+  colorAt(ColorID::Glyph) = 0x66cc33_c | Attr::Bold;
 }
 
 } // namespace
@@ -433,9 +434,11 @@ void init() {
   ::tb_select_output_mode(TB_OUTPUT_256);
 
   ctx.layoutStack.reserve(32);
+  ctx.colorsStack.reserve(32);
   ctx.inputChars.reserve(32);
 
   initStyle();
+  initColors();
 
   // Update clock.
   ctx.timestamp = clockNow();
@@ -501,12 +504,34 @@ void begin() {
   layout.size = ctx.screenSize;
   layout.pos = {0, 0};
   layout.filledSize = {0, 0};
+
+  styleColorPop(ctx.colorsStack.size());
 }
 
 void end() {
   ::tb_present();
 
   ctx.inputChars.clear();
+}
+
+void styleColorPush(ColorID idx, Color color) {
+  auto& state = ctx.colorsStack.emplace_back();
+  state.idx = idx;
+  state.color = colorAt(idx);
+  colorAt(idx) = color;
+}
+
+void styleColorPop(std::size_t count) {
+  if (ctx.colorsStack.size() < count) [[unlikely]] {
+    assert(false && "calling styleColorPop(...) too many times");
+    count = ctx.colorsStack.size();
+  }
+
+  while (count-- > 0) {
+    auto const& state = ctx.colorsStack.back();
+    colorAt(state.idx) = state.color;
+    ctx.colorsStack.pop_back();
+  }
 }
 
 void rowBegin(std::size_t columns) {
@@ -633,7 +658,9 @@ void rowEnd() {
 
 void panelBegin(std::string_view title) {
   auto const& style = ctx.style.panel;
-  auto const& backgroundColor = ctx.style.backgroundColor;
+  auto const& borderColor = colorAt(ColorID::Border);
+  auto const& titleColor = colorAt(ColorID::Text);
+  auto const& backgroundColor = colorAt(ColorID::Background);
 
   auto& parent = ctx.layoutStack.back();
   if (parent.size.width < 2 || parent.size.height < 2) [[unlikely]] {
@@ -651,7 +678,7 @@ void panelBegin(std::string_view title) {
     titleLength = std::min<int>(utf8::stringLength(title), panel.size.width - 2);
   }
 
-  auto cell = draw::cell(style.border.hLine, style.borderColor, backgroundColor);
+  auto cell = draw::cell(style.border.hLine, borderColor, backgroundColor);
   draw::hLine(panel.pos.x, panel.pos.y - 1, panel.size.width + 1, cell);
   cell.ch = style.border.upperLeft;
   draw::point(panel.pos.x - 1, panel.pos.y - 1, cell);
@@ -659,7 +686,7 @@ void panelBegin(std::string_view title) {
   draw::point(panel.pos.x - 1 + panel.size.width + 1, panel.pos.y - 1, cell);
 
   if (titleLength > 0) {
-    draw::text(panel.pos.x + 1, panel.pos.y - 1, title.data(), titleLength, style.titleColor, backgroundColor);
+    draw::text(panel.pos.x + 1, panel.pos.y - 1, title.data(), titleLength, titleColor, backgroundColor);
   }
 
   pushLayout(panel);
@@ -667,7 +694,8 @@ void panelBegin(std::string_view title) {
 
 void panelEnd() {
   auto const& style = ctx.style.panel;
-  auto const& backgroundColor = ctx.style.backgroundColor;
+  auto const& borderColor = colorAt(ColorID::Border);
+  auto const& backgroundColor = colorAt(ColorID::Background);
 
   auto const layout = []() -> LayoutState& {
     return ctx.layoutStack.back();
@@ -684,7 +712,7 @@ void panelEnd() {
   auto& parent = layout();
   parent.filledSize.height += filledHeight + 2;
 
-  auto cell = draw::cell(style.border.hLine, style.borderColor, backgroundColor);
+  auto cell = draw::cell(style.border.hLine, borderColor, backgroundColor);
   draw::hLine(parent.pos.x + 1, parent.pos.y + parent.filledSize.height - 1, parent.size.width - 2, cell);
   cell.ch = style.border.bottomLeft;
   draw::point(parent.pos.x, parent.pos.y + parent.filledSize.height - 1, cell);
@@ -696,8 +724,9 @@ void panelEnd() {
               filledHeight, cell);
 }
 
-void label(std::string_view text, Color color, Align align) {
-  auto const& backgroundColor = ctx.style.backgroundColor;
+void label(std::string_view text, Align align) {
+  auto const& textColor = colorAt(ColorID::Text);
+  auto const& backgroundColor = colorAt(ColorID::Background);
 
   auto const rect = reserveSpace(1);
   if (rect.width < 1 || rect.height < 1 || text.empty()) [[unlikely]] {
@@ -707,11 +736,7 @@ void label(std::string_view text, Color color, Align align) {
   int const textLength = std::min<int>(utf8::stringLength(text), rect.width);
   int offsetX = alignWidth(textLength, rect.width, align);
 
-  draw::text(rect.x + offsetX, rect.y, text.data(), textLength, color, backgroundColor);
-}
-
-void label(std::string_view text, Align align) {
-  return label(text, ctx.style.normalColor, align);
+  draw::text(rect.x + offsetX, rect.y, text.data(), textLength, textColor, backgroundColor);
 }
 
 void spacer(float ratioOrHeight) {
@@ -734,7 +759,9 @@ void spacer(float ratioOrHeight) {
 
 void spinner(std::string_view text, Align align, float& step) {
   auto const& style = ctx.style.spinner;
-  auto const& backgroundColor = ctx.style.backgroundColor;
+  auto const& glyphColor = colorAt(ColorID::Glyph);
+  auto const& textColor = colorAt(ColorID::Text);
+  auto const& backgroundColor = colorAt(ColorID::Background);
 
   auto const rect = reserveSpace(1);
   if (rect.width < 1 || rect.height < 1 || style.glyphs.empty()) [[unlikely]] {
@@ -756,17 +783,19 @@ void spinner(std::string_view text, Align align, float& step) {
   std::size_t const index = std::size_t(std::round(step / kSpinInterval)) % style.glyphs.size();
 
   // Spinner text
-  auto const& cell = draw::cell(style.glyphs[index], style.glyphColor, backgroundColor);
+  auto const& cell = draw::cell(style.glyphs[index], glyphColor, backgroundColor);
   draw::point(rect.x + offsetX, rect.y, cell);
 
   if (textLength > 0) {
-    draw::text(rect.x + offsetX + 2, rect.y, text.data(), textLength, style.labelColor, backgroundColor);
+    draw::text(rect.x + offsetX + 2, rect.y, text.data(), textLength, textColor, backgroundColor);
   }
 }
 
 void progress(float& value) {
   auto const& style = ctx.style.progress;
-  auto const& backgroundColor = ctx.style.backgroundColor;
+  auto const& glyphColor = colorAt(ColorID::Glyph);
+  auto const& textColor = colorAt(ColorID::Text);
+  auto const& backgroundColor = colorAt(ColorID::Background);
 
   auto const rect = reserveSpace(1);
   if (rect.width < 1 || rect.height < 1) [[unlikely]] {
@@ -775,7 +804,7 @@ void progress(float& value) {
 
   value = std::clamp<float>(value, 0.0, 100.0);
   int const length = std::round((rect.width * value) / 100.0);
-  auto const cell = draw::cell(style.barGlyph, style.barColor, backgroundColor);
+  auto const cell = draw::cell(style.barGlyph, glyphColor, backgroundColor);
   draw::hLine(rect.x, rect.y, length, cell);
 
   char buffer[sizeof(" 100.0% ")];
@@ -784,11 +813,12 @@ void progress(float& value) {
 
   int const textLength = std::min<int>(text.size(), rect.width);
   int const offsetX = alignWidth(textLength, rect.width, Align::Center);
-  draw::text(rect.x + offsetX, rect.y, text.data(), textLength, style.labelColor, backgroundColor);
+  draw::text(rect.x + offsetX, rect.y, text.data(), textLength, textColor, backgroundColor);
 }
 
 bool textInput(std::string& input) {
-  auto const& style = ctx.style.textInput;
+  auto const& textColor = colorAt(ColorID::Text);
+  auto const& backgroundColor = colorAt(ColorID::Background);
 
   utf8::convert(ctx.inputChars.begin(), ctx.inputChars.end(), std::back_inserter(input));
 
@@ -826,8 +856,8 @@ bool textInput(std::string& input) {
     inputOffset = 0;
   }
 
-  draw::text(rect.x, rect.y, input.data(), inputLength, inputOffset, style.textColor, style.backgroundColor);
-  auto const cell = draw::cell(' ', style.textColor, style.backgroundColor);
+  draw::text(rect.x, rect.y, input.data(), inputLength, inputOffset, textColor, backgroundColor);
+  auto const cell = draw::cell(' ', textColor, backgroundColor);
   draw::hLine(rect.x + (inputLength - inputOffset), rect.y, rect.width - (inputLength + inputOffset), cell);
 
   return result;

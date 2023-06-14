@@ -57,13 +57,17 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
           xxx::panelEnd();
         xxx::rowPush(0.6);
           xxx::panelBegin("PANEL 2");
+            xxx::styleColorPush(xxx::ColorID::Text, xxx::color(33, 33, 255));
             xxx::label("Content 1");
+            xxx::styleColorPop();
             xxx::spacer(0.2);
           xxx::panelEnd();
           xxx::panelBegin("PANEL 3");
             xxx::label("Content 2");
           xxx::panelEnd();
+          xxx::styleColorPush(xxx::ColorID::Text, xxx::color(255, 0, 0));
           xxx::panelBegin("PANEL 4");
+          xxx::styleColorPop();
             xxx::spinner("Loading", xxx::Align::Center);
           xxx::panelEnd();
       xxx::rowEnd();

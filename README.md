@@ -10,6 +10,7 @@ Immediate mode text ui library. Build on top of [nsf/termbox](http://github.co:/
 - Text input widget
 - Progress widget
 - Canvas widget
+- Widget colors customization
 
 ![bad sample](assets/screenshot.png)
 [source](example/elements.cpp)
