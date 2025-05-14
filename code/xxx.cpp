@@ -12,7 +12,7 @@
 #include <stdexcept>
 #include <vector>
 
-#include <termbox.h>
+#include <termbox2.h>
 
 namespace xxx {
 
@@ -274,7 +274,7 @@ inline ::tb_cell cell(std::uint32_t ch, Color fg, Color bg) noexcept {
 }
 
 inline void point(int x, int y, ::tb_cell const& cell) noexcept {
-  ::tb_put_cell(x, y, &cell);
+  ::tb_set_cell(x, y, cell.ch, cell.fg, cell.bg);
 }
 
 inline void hLine(int x, int y, int length, ::tb_cell const& cell) noexcept {
@@ -414,24 +414,10 @@ inline Rect reserveSpace(int height) noexcept {
 }
 
 void init() {
-  if (int rc = ::tb_init(); rc < 0) {
-    std::string reason;
-    switch (rc) {
-    case TB_EUNSUPPORTED_TERMINAL: {
-      throw std::runtime_error("failed to init terminal library (unsuported terminal)");
-    } break;
-    case TB_EFAILED_TO_OPEN_TTY: {
-      throw std::runtime_error("failed to init terminal library (can't open tty)");
-    } break;
-    case TB_EPIPE_TRAP_ERROR: {
-      throw std::runtime_error("failed to init terminal library (pipe trap error)");
-    } break;
-    default: {
-      throw std::runtime_error("failed to init terminal library (unknown reason)");
-    } break;
-    }
+  if (int const rc = ::tb_init(); rc != TB_OK) {
+    throw std::runtime_error(::tb_strerror(rc));
   }
-  ::tb_select_output_mode(TB_OUTPUT_256);
+  ::tb_set_output_mode(TB_OUTPUT_TRUECOLOR);
 
   ctx.layoutStack.reserve(32);
   ctx.colorsStack.reserve(32);

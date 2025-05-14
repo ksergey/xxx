@@ -1,0 +1,16 @@
+
+include(FetchContent)
+
+FetchContent_Declare(termbox2
+  URL https://github.com/termbox/termbox2/archive/refs/tags/v2.5.0.tar.gz
+)
+FetchContent_MakeAvailable(termbox2)
+
+add_library(termbox2)
+target_include_directories(termbox2 PUBLIC ${termbox2_SOURCE_DIR})
+target_compile_definitions(termbox2 PRIVATE -DTB_IMPL)
+target_compile_definitions(termbox2 PUBLIC -DTB_OPT_ATTR_W=64)
+target_sources(termbox2 PRIVATE termbox2impl.c)
+
+
+add_library(3rdparty::termbox2 ALIAS termbox2)

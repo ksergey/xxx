@@ -1,6 +1,5 @@
-// ------------------------------------------------------------
-// Copyright 2019-present Sergey Kovalevich <inndie@gmail.com>
-// ------------------------------------------------------------
+// Copyright (c) Sergey Kovalevich <inndie@gmail.com>
+// SPDX-License-Identifier: AGPL-3.0
 
 #pragma once
 
@@ -12,35 +11,29 @@
 namespace xxx {
 
 /// Attributes
-enum class Attr : std::uint16_t { Bold = 0x0100, Underline = 0x200, Reverse = 0x0400 };
+enum class Attr : std::uint32_t { Bold = 0x0100, Underline = 0x200, Reverse = 0x0400 };
 
 /// Color
-enum class Color : std::uint16_t { Default = 0x00 };
+enum class Color : std::uint32_t { Default = 0x00 };
 
 /// Align
 enum class Align { Left, Center, Right };
 
 /// Add attribute to color
 constexpr Color operator|(Color lhs, Attr rhs) noexcept {
-  return static_cast<Color>(static_cast<std::uint16_t>(lhs) | static_cast<std::uint16_t>(rhs));
+  return static_cast<Color>(static_cast<std::uint32_t>(lhs) | static_cast<std::uint32_t>(rhs));
 }
 
 /// Make Color from RGB components
 constexpr Color color(std::uint8_t r, std::uint8_t g, std::uint8_t b) noexcept {
-  int r_ = (r * 5 + 0x7f) / 0xff;
-  int g_ = (g * 5 + 0x7f) / 0xff;
-  int b_ = (b * 5 + 0x7f) / 0xff;
-  return static_cast<Color>(0x10 + (r_ * 36 + g_ * 6 + b_));
+  return Color((std::uint32_t(r) << 16) | std::uint32_t(g) << 8 | std::uint32_t(b));
 }
 
 namespace literals {
 
 /// Make Color from decimal number
 constexpr Color operator""_c(unsigned long long int value) noexcept {
-  int r = (((value >> 16) & 0xff) * 5 + 0x7f) / 0xff;
-  int g = (((value >> 8) & 0xff) * 5 + 0x7f) / 0xff;
-  int b = (((value >> 0) & 0xff) * 5 + 0x7f) / 0xff;
-  return static_cast<Color>(0x10 + (r * 36 + g * 6 + b));
+  return Color(value);
 }
 
 } // namespace literals
