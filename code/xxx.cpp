@@ -13,6 +13,11 @@
 
 namespace xxx {
 
+struct Style {
+  uintattr_t fg = 0;
+  uintattr_t bg = 0;
+};
+
 struct Point {
   int x = 0;
   int y = 0;
@@ -32,7 +37,7 @@ struct Rect {
 
 enum class LayoutType { Container, Row, Column };
 
-struct LayoutState {
+struct Layout {
   LayoutType type = LayoutType::Container;
   Size size;
   Point pos;
@@ -41,7 +46,7 @@ struct LayoutState {
   std::size_t column = 0;
 };
 
-static_assert(std::is_trivially_copyable_v<LayoutState>);
+static_assert(std::is_trivially_copyable_v<Layout>);
 
 struct BorderStyle {
   std::uint32_t vLine;
@@ -64,42 +69,23 @@ struct ProgressStyle {
   std::uint32_t barGlyph;
 };
 
-struct ColorState {
-  ColorID idx;
-  Color color;
-};
-
-struct Style {
-  PanelStyle panel;
-  SpinnerStyle spinner;
-  ProgressStyle progress;
-};
+// struct Style {
+//   PanelStyle panel;
+//   SpinnerStyle spinner;
+//   ProgressStyle progress;
+// };
 
 namespace {
 
-constexpr auto kColorsCount = static_cast<std::size_t>(ColorID::LAST);
-
 struct {
-  // widget styles
-  Style style;
-
   // colors
   Color colors[kColorsCount];
 
   // layout stack
-  std::vector<LayoutState> layoutStack;
+  std::vector<Layout> layoutStack;
 
-  // colors stack
-  std::vector<ColorState> colorsStack;
-
-  // input characters during update
-  std::vector<int> inputChars;
-
-  // pressed keys
-  std::array<bool, 512> pressedKeys;
-
-  // terminal size
-  Size screenSize;
+  // style stack
+  std::vector<Style> styleStack;
 
   std::uint64_t timestamp = 0;
 
@@ -146,7 +132,7 @@ constexpr std::size_t stringLength(std::string_view str) noexcept {
   return result;
 }
 
-template<class OctectIterator>
+template <class OctectIterator>
 constexpr std::uint32_t readUCS(OctectIterator it) noexcept {
   auto const length = charLength(*it);
   auto const mask = maskTable[length - 1];
@@ -158,7 +144,7 @@ constexpr std::uint32_t readUCS(OctectIterator it) noexcept {
   return result;
 }
 
-template<class OctectIterator>
+template <class OctectIterator>
 [[nodiscard]] inline OctectIterator next(OctectIterator it) noexcept {
   if (*it != '\0') [[likely]] {
     std::advance(it, charLength(*it));
@@ -166,14 +152,13 @@ template<class OctectIterator>
   return it;
 }
 
-template<class OctectIterator>
+template <class OctectIterator>
 [[nodiscard]] inline OctectIterator prev(OctectIterator it) noexcept {
-  while (isUtf8Trail(*(--it))) {
-  }
+  while (isUtf8Trail(*(--it))) {}
   return it;
 }
 
-template<class OctectIterator>
+template <class OctectIterator>
 class Iterator {
 private:
   OctectIterator it_{};
@@ -228,12 +213,12 @@ public:
   }
 };
 
-template<class OctectIterator>
+template <class OctectIterator>
 inline auto makeIterator(OctectIterator it) {
   return Iterator<OctectIterator>(it);
 }
 
-template<class OctetIterator>
+template <class OctetIterator>
 inline OctetIterator append(std::uint32_t ch, OctetIterator result) {
   if (ch < 0x80)
     *(result++) = static_cast<char>(ch);
@@ -254,7 +239,7 @@ inline OctetIterator append(std::uint32_t ch, OctetIterator result) {
 }
 
 /// Convert sequence of uint32_t into utf8 string.
-template<class OctectIterator, class U32Iterator>
+template <class OctectIterator, class U32Iterator>
 inline OctectIterator convert(U32Iterator begin, U32Iterator end, OctectIterator result) {
   while (begin != end) {
     result = append(*(begin++), result);
@@ -328,31 +313,15 @@ inline void text(int x, int y, char const* str, int length, Color fg, Color bg) 
 
 } // namespace draw
 
-// Get current color
-inline Color& colorAt(ColorID idx) noexcept {
-  auto const index = static_cast<std::size_t>(idx);
-  assert(index < kColorsCount);
-  return ctx.colors[index];
-}
-
 namespace {
 
 void initStyle() {
   ctx.style.panel.border = {L'│', L'─', L'╭', L'╮', L'╰', L'╯'};
 
-  ctx.style.spinner.glyphs = {{L'⠉', L'⠑', L'⠃', L'⠊', L'⠒', L'⠢', L'⠆', L'⠔', L'⠤', L'⢄', L'⡄', L'⡠',
-                               L'⣀', L'⢄', L'⢠', L'⡠', L'⠤', L'⠢', L'⠰', L'⠔', L'⠒', L'⠑', L'⠘', L'⠊'}};
+  ctx.style.spinner.glyphs = {{L'⠉', L'⠑', L'⠃', L'⠊', L'⠒', L'⠢', L'⠆', L'⠔', L'⠤', L'⢄', L'⡄', L'⡠', L'⣀', L'⢄', L'⢠',
+      L'⡠', L'⠤', L'⠢', L'⠰', L'⠔', L'⠒', L'⠑', L'⠘', L'⠊'}};
 
   ctx.style.progress.barGlyph = L'│';
-}
-
-void initColors() {
-  using namespace literals;
-
-  colorAt(ColorID::Text) = Color::Default;
-  colorAt(ColorID::Background) = Color::Default;
-  colorAt(ColorID::Border) = 0x666666_c;
-  colorAt(ColorID::Glyph) = 0x66cc33_c | Attr::Bold;
 }
 
 } // namespace
@@ -367,13 +336,13 @@ inline std::size_t keyIdx(std::uint16_t key) noexcept {
   return key <= 0xFF ? key : (((0xFFFF - key) & 0xFF) + 256);
 }
 
-inline int alignWidth(int innerWidth, int parentWidth, Align align) noexcept {
-  if (parentWidth > innerWidth) [[likely]] {
+constexpr int alignSize(int innerSize, int outerSize, Alignment align) noexcept {
+  if (outerSize > innerWidth) [[likely]] {
     switch (align) {
-    case Align::Center:
-      return (parentWidth - innerWidth) / 2;
-    case Align::Right:
-      return (parentWidth - innerWidth);
+    case Alignment::Center:
+      return (outerSize - innerSize) / 2;
+    case Alignmentght:
+      return (outerSize - innerSize);
     default:
       break;
     }
@@ -382,7 +351,7 @@ inline int alignWidth(int innerWidth, int parentWidth, Align align) noexcept {
 }
 
 // Set current layout.
-inline void pushLayout(LayoutState const& layout) {
+inline void pushLayout(Layout const& layout) {
   ctx.layoutStack.emplace_back(layout);
 }
 
@@ -417,11 +386,9 @@ void init() {
   ::tb_set_output_mode(TB_OUTPUT_TRUECOLOR);
 
   ctx.layoutStack.reserve(32);
-  ctx.colorsStack.reserve(32);
-  ctx.inputChars.reserve(32);
+  ctx.styleStack.reserve(32);
 
-  initStyle();
-  initColors();
+  // initStyle();
 
   // Update clock.
   ctx.timestamp = clockNow();
@@ -432,8 +399,6 @@ void shutdown() {
 }
 
 bool update(unsigned ms) noexcept {
-  ctx.pressedKeys.fill(false);
-
   ::tb_event event;
 
   std::size_t eventsProcessed = 0;
@@ -479,16 +444,15 @@ bool isKeyPressed(std::uint16_t key) noexcept {
 void begin() {
   ::tb_clear();
 
-  ctx.screenSize = {::tb_width(), ::tb_height()};
   ctx.layoutStack.clear();
-
   auto& layout = ctx.layoutStack.emplace_back();
   layout.type = LayoutType::Container;
-  layout.size = ctx.screenSize;
+  layout.size = {::tb_width(), ::tb_height()};
   layout.pos = {0, 0};
   layout.filledSize = {0, 0};
 
-  styleColorPop(ctx.colorsStack.size());
+  ctx.styleStack.clear();
+  ctx.styleStack.emplace_back();
 }
 
 void end() {
@@ -497,24 +461,15 @@ void end() {
   ctx.inputChars.clear();
 }
 
-void styleColorPush(ColorID idx, Color color) {
-  auto& state = ctx.colorsStack.emplace_back();
-  state.idx = idx;
-  state.color = colorAt(idx);
-  colorAt(idx) = color;
+void stylePush(Color fg, Attrribute attr, Color bg) {
+  auto& style = ctx.styleStack.emplace_back();
+  style.fg = static_cast<uintattr_t>(fg) | static_cast<uintattr_t>(attr);
+  style.bg = static_cast<uintattr_t>(bg);
 }
 
-void styleColorPop(std::size_t count) {
-  if (ctx.colorsStack.size() < count) [[unlikely]] {
-    assert(false && "calling styleColorPop(...) too many times");
-    count = ctx.colorsStack.size();
-  }
-
-  while (count-- > 0) {
-    auto const& state = ctx.colorsStack.back();
-    colorAt(state.idx) = state.color;
-    ctx.colorsStack.pop_back();
-  }
+void stylePop() {
+  assert(ctx.styleStack.size() > 1);
+  ctx.styleStack.pop_back();
 }
 
 void rowBegin(std::size_t columns) {
@@ -526,7 +481,7 @@ void rowBegin(std::size_t columns) {
   auto& parent = ctx.layoutStack.back();
 
   // New layout.
-  LayoutState row;
+  Layout row;
   row.type = LayoutType::Row;
   row.size = {parent.size.width, parent.size.height - parent.filledSize.height};
   row.pos = {parent.pos.x, parent.pos.y + parent.filledSize.height};
@@ -539,7 +494,7 @@ void rowBegin(std::size_t columns) {
 }
 
 void rowPush(float ratioOrWidth) {
-  auto const layout = []() -> LayoutState& {
+  auto const layout = []() -> Layout& {
     return ctx.layoutStack.back();
   };
 
@@ -553,7 +508,7 @@ void rowPush(float ratioOrWidth) {
     assert(row.filledSize.width == 0);
     assert(row.column == 0);
 
-    LayoutState column;
+    Layout column;
     column.type = LayoutType::Column;
     column.pos = row.pos;
 
@@ -593,7 +548,7 @@ void rowPush(float ratioOrWidth) {
     // Calculate new filled height.
     row.filledSize.height = std::max(row.filledSize.height, filledHeight);
 
-    LayoutState column;
+    Layout column;
     column.type = LayoutType::Column;
     column.pos = {row.pos.x + row.filledSize.width, row.pos.y};
 
@@ -616,7 +571,7 @@ void rowPush(float ratioOrWidth) {
 }
 
 void rowEnd() {
-  auto const layout = []() -> LayoutState& {
+  auto const layout = []() -> Layout& {
     return ctx.layoutStack.back();
   };
 
@@ -651,7 +606,7 @@ void panelBegin(std::string_view title) {
   }
 
   // New layout for panel.
-  LayoutState panel;
+  Layout panel;
   panel.type = LayoutType::Container;
   panel.size = {parent.size.width - 2, parent.size.height - parent.filledSize.height - 2};
   panel.pos = {parent.pos.x + 1, parent.pos.y + parent.filledSize.height + 1};
@@ -680,7 +635,7 @@ void panelEnd() {
   auto const& borderColor = colorAt(ColorID::Border);
   auto const& backgroundColor = colorAt(ColorID::Background);
 
-  auto const layout = []() -> LayoutState& {
+  auto const layout = []() -> Layout& {
     return ctx.layoutStack.back();
   };
 
@@ -704,7 +659,7 @@ void panelEnd() {
   cell.ch = style.border.vLine;
   draw::vLine(parent.pos.x, parent.pos.y + parent.filledSize.height - (filledHeight + 1), filledHeight, cell);
   draw::vLine(parent.pos.x + parent.size.width - 1, parent.pos.y + parent.filledSize.height - (filledHeight + 1),
-              filledHeight, cell);
+      filledHeight, cell);
 }
 
 void label(std::string_view text, Align align) {
@@ -848,8 +803,8 @@ bool textInput(std::string& input) {
 
 class CanvasImpl final : public Canvas {
 private:
-  static constexpr std::array kPixelMap = {std::array{0x01, 0x08}, std::array{0x02, 0x10}, std::array{0x04, 0x20},
-                                           std::array{0x40, 0x80}};
+  static constexpr std::array kPixelMap = {
+      std::array{0x01, 0x08}, std::array{0x02, 0x10}, std::array{0x04, 0x20}, std::array{0x40, 0x80}};
   static constexpr std::uint32_t kBrailleOffset = 0x2800;
 
   int const x_;

@@ -12,8 +12,8 @@
 
 namespace xxx {
 
-/// Attributes
-enum class Attr : std::uint32_t {
+/// Attribute
+enum class Attribute : uintattr_t {
   Bold = TB_BOLD,
   Underline = TB_UNDERLINE,
   Reverse = TB_REVERSE,
@@ -23,15 +23,10 @@ enum class Attr : std::uint32_t {
 };
 
 /// Color
-enum class Color : std::uint32_t {};
+enum class Color : uintattr_t {};
 
-/// Align
-enum class Align { Left, Center, Right };
-
-/// Add attribute to color
-constexpr Color operator|(Color lhs, Attr rhs) noexcept {
-  return static_cast<Color>(static_cast<std::uint32_t>(lhs) | static_cast<std::uint32_t>(rhs));
-}
+/// Alignment
+enum class Alignment { Left, Center, Right };
 
 /// Make Color from RGB components
 constexpr Color color(std::uint8_t r, std::uint8_t g, std::uint8_t b) noexcept {
@@ -46,21 +41,6 @@ constexpr Color operator""_c(unsigned long long int value) noexcept {
 }
 
 } // namespace literals
-
-/// Color ID
-enum class ColorID { Text, Background, Border, Glyph, LAST };
-
-namespace key {
-
-static constexpr auto Esc = std::uint16_t(0x1b);
-static constexpr auto Enter = std::uint16_t(0x0d);
-static constexpr auto Space = std::uint16_t(0x20);
-static constexpr auto ArrowUp = std::uint16_t(0xFFFF - 18);
-static constexpr auto ArrowDown = std::uint16_t(0xFFFF - 19);
-static constexpr auto ArrowLeft = std::uint16_t(0xFFFF - 20);
-static constexpr auto ArrowRight = std::uint16_t(0xFFFF - 21);
-
-} // namespace key
 
 namespace detail {
 
@@ -90,6 +70,12 @@ void begin();
 
 /// End frame
 void end();
+
+/// Push drawing style
+void stylePush(Color fg, Attrribute attr = Attrribute::None, Color bg = Color());
+
+/// Pop drawing style
+void stylePop();
 
 /// Push style color
 void styleColorPush(ColorID idx, Color color);
