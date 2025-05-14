@@ -1,5 +1,5 @@
 // Copyright (c) Sergey Kovalevich <inndie@gmail.com>
-// SPDX-License-Identifier: AGPL-3.0
+// SPDX-License-Identifier: MIT
 
 #pragma once
 
@@ -8,13 +8,22 @@
 #include <string_view>
 #include <vector>
 
+#include <termbox2.h>
+
 namespace xxx {
 
 /// Attributes
-enum class Attr : std::uint32_t { Bold = 0x0100, Underline = 0x200, Reverse = 0x0400 };
+enum class Attr : std::uint32_t {
+  Bold = TB_BOLD,
+  Underline = TB_UNDERLINE,
+  Reverse = TB_REVERSE,
+  Italic = TB_ITALIC,
+  Bright = TB_BRIGHT,
+  Dim = TB_DIM
+};
 
 /// Color
-enum class Color : std::uint32_t { Default = 0x00 };
+enum class Color : std::uint32_t {};
 
 /// Align
 enum class Align { Left, Center, Right };
@@ -55,7 +64,7 @@ static constexpr auto ArrowRight = std::uint16_t(0xFFFF - 21);
 
 namespace detail {
 
-template<typename T, typename Tag = struct Default>
+template <typename T, typename Tag = struct Default>
 inline T& getStorageFor() noexcept {
   static T value = T();
   return value;

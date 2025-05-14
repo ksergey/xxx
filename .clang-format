@@ -1,12 +1,14 @@
-BasedOnStyle: LLVM
-ColumnLimit: 120
 ---
 Language: Cpp
 Standard: c++20
-AllowShortFunctionsOnASingleLine: Empty
-AllowShortIfStatementsOnASingleLine: Never
-AllowShortLambdasOnASingleLine: Empty
-AlwaysBreakTemplateDeclarations: Yes
+ColumnLimit: 120
+AccessModifierOffset: -2
+DerivePointerAlignment: false
 PointerAlignment: Left
-SpaceAfterTemplateKeyword: false
-AllowAllArgumentsOnNextLine: true
+SortIncludes: true
+AlwaysBreakTemplateDeclarations: true
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortLambdasOnASingleLine: Empty
+AllowShortBlocksOnASingleLine: Empty
+AlignAfterOpenBracket: DontAlign
+...

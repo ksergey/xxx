@@ -1,6 +1,5 @@
-// ------------------------------------------------------------
-// Copyright 2019-present Sergey Kovalevich <inndie@gmail.com>
-// ------------------------------------------------------------
+// Copyright (c) Sergey Kovalevich <inndie@gmail.com>
+// SPDX-License-Identifier: MIT
 
 #include "xxx.h"
 
@@ -11,8 +10,6 @@
 #include <ctime>
 #include <stdexcept>
 #include <vector>
-
-#include <termbox2.h>
 
 namespace xxx {
 
