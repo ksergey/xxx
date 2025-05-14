@@ -3,7 +3,7 @@ name: build-and-test
 on: [push]
 
 env:
-  CMAKE_VERSION: 3.29.2
+  CMAKE_VERSION: 4.0.2
   NINJA_VERSION: 1.9.0
 
 jobs:
