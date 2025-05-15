@@ -7,9 +7,15 @@
 #include <array>
 #include <cassert>
 #include <cmath>
+#include <cstdio>
 #include <ctime>
-#include <stdexcept>
+#include <optional>
+#include <span>
 #include <vector>
+
+#ifndef XXX_FORCE_INLINE
+#define XXX_FORCE_INLINE inline __attribute__((always_inline))
+#endif
 
 namespace xxx {
 
@@ -42,8 +48,8 @@ struct Layout {
   Size size;
   Point pos;
   Size filledSize;
-  std::size_t columns = 0;
-  std::size_t column = 0;
+  unsigned columnsCount = 0;
+  unsigned column = 0;
 };
 
 static_assert(std::is_trivially_copyable_v<Layout>);
@@ -51,298 +57,96 @@ static_assert(std::is_trivially_copyable_v<Layout>);
 struct BorderStyle {
   std::uint32_t vLine;
   std::uint32_t hLine;
-  std::uint32_t upperLeft;
-  std::uint32_t upperRight;
+  std::uint32_t topLeft;
+  std::uint32_t topRight;
   std::uint32_t bottomLeft;
   std::uint32_t bottomRight;
-};
-
-struct PanelStyle {
-  BorderStyle border;
 };
 
 struct SpinnerStyle {
   std::vector<std::uint32_t> glyphs;
 };
 
-struct ProgressStyle {
-  std::uint32_t barGlyph;
+struct ProgressBarStyle {
+  std::uint32_t glyph;
 };
 
-// struct Style {
-//   PanelStyle panel;
-//   SpinnerStyle spinner;
-//   ProgressStyle progress;
-// };
+struct Context {
+  // Panel border style
+  BorderStyle borderStyle = BorderStyle{L'│', L'─', L'╭', L'╮', L'╰', L'╯'};
 
-namespace {
+  // Spinner style
+  SpinnerStyle spinnerStyle = SpinnerStyle{{L'⠉', L'⠑', L'⠃', L'⠊', L'⠒', L'⠢', L'⠆', L'⠔', L'⠤', L'⢄', L'⡄', L'⡠',
+      L'⣀', L'⢄', L'⢠', L'⡠', L'⠤', L'⠢', L'⠰', L'⠔', L'⠒', L'⠑', L'⠘', L'⠊'}};
 
-struct {
-  // colors
-  Color colors[kColorsCount];
+  // Progress bar style
+  ProgressBarStyle progressBarStyle = ProgressBarStyle{L'■'};
 
-  // layout stack
-  std::vector<Layout> layoutStack;
-
-  // style stack
+  // Stack of styles
   std::vector<Style> styleStack;
 
-  std::uint64_t timestamp = 0;
+  // Stack of layouts
+  std::vector<Layout> layoutStack;
 
-  float timeDelta = 0.0;
+  // Spinner spin interval
+  float const spinnerUpdateInterval = 0.1; // seconds
 
-} ctx;
+  // last key event (tb_event.type = TB_EVENT_KEY)
+  std::optional<InputEvent> lastInputEvent;
 
-} // namespace
+  // previous clockNow() value
+  std::uint64_t previousNow = 0;
 
-namespace utf8 {
+  // elapsed seconds since last update
+  float elapsed = 0.0;
+};
+
 namespace {
 
-// clang-format off
-static constexpr unsigned char lengthTable[256] = {
-  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-  2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-  3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,4,4,4,4,4,4,4,4,5,5,5,5,6,6,1,1
-};
-// clang-format on
-
-static constexpr unsigned char maskTable[6] = {0x7F, 0x1F, 0x0F, 0x07, 0x03, 0x01};
-
-} // namespace
-
-constexpr std::size_t charLength(char ch) noexcept {
-  return lengthTable[static_cast<unsigned char>(ch)];
+XXX_FORCE_INLINE [[nodiscard]] Context* currentContext() noexcept {
+  static Context ctx;
+  return &ctx;
 }
 
-constexpr bool isUtf8Trail(char ch) noexcept {
-  return (static_cast<unsigned char>(ch) >> 6) == 0x2;
+XXX_FORCE_INLINE [[nodiscard]] std::uint64_t clockNowMs() noexcept {
+  ::timespec ts;
+  ::clock_gettime(CLOCK_MONOTONIC, &ts);
+  return ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 
-constexpr std::size_t stringLength(std::string_view str) noexcept {
-  std::size_t result = 0;
-  for (std::size_t i = 0; i < str.size();) {
-    i += charLength(str[i]);
-    ++result;
-  }
-  return result;
-}
+// Result available until next call
+[[nodiscard]] std::span<std::uint32_t const> UTF8CharToUnicode(std::string_view str) noexcept {
+  // Unicode string cache
+  thread_local std::vector<std::uint32_t> cache;
 
-template <class OctectIterator>
-constexpr std::uint32_t readUCS(OctectIterator it) noexcept {
-  auto const length = charLength(*it);
-  auto const mask = maskTable[length - 1];
-  std::uint32_t result = *it & mask;
-  for (std::size_t i = 1; i < length; ++i) {
-    ++it;
-    result = (result << 6) | (*it & 0x3f);
-  }
-  return result;
-}
+  cache.resize(str.size());
 
-template <class OctectIterator>
-[[nodiscard]] inline OctectIterator next(OctectIterator it) noexcept {
-  if (*it != '\0') [[likely]] {
-    std::advance(it, charLength(*it));
-  }
-  return it;
-}
+  char const* begin = str.data();
+  char const* end = begin + str.size();
+  std::size_t pos = 0;
 
-template <class OctectIterator>
-[[nodiscard]] inline OctectIterator prev(OctectIterator it) noexcept {
-  while (isUtf8Trail(*(--it))) {}
-  return it;
-}
-
-template <class OctectIterator>
-class Iterator {
-private:
-  OctectIterator it_{};
-
-public:
-  using iterator_category = std::bidirectional_iterator_tag;
-  using difference_type = std::ptrdiff_t;
-  using value_type = std::uint32_t;
-  using pointer = value_type*;
-  using reference = value_type&;
-
-  Iterator() = default;
-
-  explicit Iterator(OctectIterator it) : it_(std::move(it)) {}
-
-  OctectIterator base() const {
-    return it_;
-  }
-
-  value_type operator*() const noexcept {
-    return readUCS(it_);
-  }
-
-  friend bool operator==(Iterator const& lhs, Iterator const& rhs) noexcept {
-    return lhs.it_ == rhs.it_;
-  }
-
-  friend bool operator!=(Iterator const& lhs, Iterator const& rhs) noexcept {
-    return lhs.it_ != rhs.it_;
-  }
-
-  Iterator& operator++() {
-    std::advance(it_, charLength(*it_));
-    return *this;
-  }
-
-  Iterator operator++(int) {
-    Iterator temp(it_);
-    std::advance(it_, charLength(*it_));
-    return temp;
-  }
-
-  Iterator& operator--() {
-    it_ = prev(it_);
-    return *this;
-  }
-
-  Iterator operator--(int) {
-    Iterator temp(*this);
-    it_ = prev(it_);
-    return temp;
-  }
-};
-
-template <class OctectIterator>
-inline auto makeIterator(OctectIterator it) {
-  return Iterator<OctectIterator>(it);
-}
-
-template <class OctetIterator>
-inline OctetIterator append(std::uint32_t ch, OctetIterator result) {
-  if (ch < 0x80)
-    *(result++) = static_cast<char>(ch);
-  else if (ch < 0x800) {
-    *(result++) = static_cast<char>((ch >> 6) | 0xc0);
-    *(result++) = static_cast<char>((ch & 0x3f) | 0x80);
-  } else if (ch < 0x10000) [[likely]] {
-    *(result++) = static_cast<char>((ch >> 12) | 0xe0);
-    *(result++) = static_cast<char>(((ch >> 6) & 0x3f) | 0x80);
-    *(result++) = static_cast<char>((ch & 0x3f) | 0x80);
-  } else {
-    *(result++) = static_cast<char>((ch >> 18) | 0xf0);
-    *(result++) = static_cast<char>(((ch >> 12) & 0x3f) | 0x80);
-    *(result++) = static_cast<char>(((ch >> 6) & 0x3f) | 0x80);
-    *(result++) = static_cast<char>((ch & 0x3f) | 0x80);
-  }
-  return result;
-}
-
-/// Convert sequence of uint32_t into utf8 string.
-template <class OctectIterator, class U32Iterator>
-inline OctectIterator convert(U32Iterator begin, U32Iterator end, OctectIterator result) {
-  while (begin != end) {
-    result = append(*(begin++), result);
-  }
-  return result;
-}
-
-} // namespace utf8
-
-namespace draw {
-
-inline ::tb_cell cell(std::uint32_t ch, Color fg, Color bg) noexcept {
-  return ::tb_cell{ch, static_cast<std::uint16_t>(fg), static_cast<std::uint16_t>(bg)};
-}
-
-inline void point(int x, int y, ::tb_cell const& cell) noexcept {
-  ::tb_set_cell(x, y, cell.ch, cell.fg, cell.bg);
-}
-
-inline void hLine(int x, int y, int length, ::tb_cell const& cell) noexcept {
-  while (length-- > 0) {
-    point(x, y, cell);
-    x += 1;
-  }
-}
-
-inline void vLine(int x, int y, int length, ::tb_cell const& cell) noexcept {
-  while (length-- > 0) {
-    point(x, y, cell);
-    y += 1;
-  }
-}
-
-inline void fill(int x, int y, int width, int height, ::tb_cell const& cell) noexcept {
-  while (height-- > 0) {
-    hLine(x, y, width, cell);
-    y += 1;
-  }
-}
-
-inline void fill(Rect const& rect, ::tb_cell const& cell) noexcept {
-  return fill(rect.x, rect.y, rect.width, rect.height, cell);
-}
-
-inline void text(int x, int y, char const* str, int length, int offset, Color fg, Color bg) {
-  if (offset < 0) {
-    offset = 0;
-  }
-
-  auto cell = draw::cell(' ', fg, bg);
-  auto it = utf8::makeIterator(str);
-
-  if (offset > 0) {
-    while (length > 0 && offset > 0) {
-      --length;
-      --offset;
-      ++it;
+  while (begin < end) {
+    if (*begin == '\0') {
+      break;
     }
+    auto const length = ::tb_utf8_char_length(*begin);
+    if (begin + length > end) [[unlikely]] {
+      break;
+    }
+    ::tb_utf8_char_to_unicode(&cache[pos++], begin);
+    begin += length;
   }
 
-  while (length > 0) {
-    cell.ch = *it++;
-    point(x++, y, cell);
-    length -= 1;
-  }
+  return std::span(cache.data(), pos);
 }
 
-inline void text(int x, int y, char const* str, int length, Color fg, Color bg) {
-  return text(x, y, str, length, 0, fg, bg);
-}
-
-} // namespace draw
-
-namespace {
-
-void initStyle() {
-  ctx.style.panel.border = {L'│', L'─', L'╭', L'╮', L'╰', L'╯'};
-
-  ctx.style.spinner.glyphs = {{L'⠉', L'⠑', L'⠃', L'⠊', L'⠒', L'⠢', L'⠆', L'⠔', L'⠤', L'⢄', L'⡄', L'⡠', L'⣀', L'⢄', L'⢠',
-      L'⡠', L'⠤', L'⠢', L'⠰', L'⠔', L'⠒', L'⠑', L'⠘', L'⠊'}};
-
-  ctx.style.progress.barGlyph = L'│';
-}
-
-} // namespace
-
-inline std::uint64_t clockNow() noexcept {
-  timespec ts;
-  clock_gettime(CLOCK_MONOTONIC, &ts);
-  return ts.tv_sec * 1000000000ul + ts.tv_nsec;
-}
-
-inline std::size_t keyIdx(std::uint16_t key) noexcept {
-  return key <= 0xFF ? key : (((0xFFFF - key) & 0xFF) + 256);
-}
-
-constexpr int alignSize(int innerSize, int outerSize, Alignment align) noexcept {
-  if (outerSize > innerWidth) [[likely]] {
+XXX_FORCE_INLINE [[nodiscard]] constexpr int alignSize(int innerSize, int parentSize, Alignment align) noexcept {
+  if (parentSize > innerSize) [[likely]] {
     switch (align) {
     case Alignment::Center:
-      return (outerSize - innerSize) / 2;
-    case Alignmentght:
-      return (outerSize - innerSize);
+      return (parentSize - innerSize) / 2;
+    case Alignment::Right:
+      return (parentSize - innerSize);
     default:
       break;
     }
@@ -350,390 +154,439 @@ constexpr int alignSize(int innerSize, int outerSize, Alignment align) noexcept 
   return 0;
 }
 
-// Set current layout.
-inline void pushLayout(Layout const& layout) {
-  ctx.layoutStack.emplace_back(layout);
+} // namespace
+
+namespace draw {
+
+void point(int x, int y, std::uint32_t ch, Style const& style) noexcept {
+  ::tb_set_cell(x, y, ch, style.fg, style.bg);
 }
 
-// Restore previous layout.
-inline void popLayout() noexcept {
-  ctx.layoutStack.pop_back();
-}
-
-// Reserve space inside layout.
-inline Rect reserveSpace(int height) noexcept {
-  if (height < 0) {
-    height = 0;
+void hLine(int x, int y, int length, std::uint32_t ch, Style const& style = {}) noexcept {
+  for (int pos = x, end = pos + length; pos < end; ++pos) {
+    point(pos, y, ch, style);
   }
+}
 
-  auto& layout = ctx.layoutStack.back();
+void vLine(int x, int y, int length, std::uint32_t ch, Style const& style = {}) noexcept {
+  for (int pos = y, end = pos + length; pos < end; ++pos) {
+    point(x, pos, ch, style);
+  }
+}
+
+void text(int x, int y, std::span<std::uint32_t const> text, Style const& style) noexcept {
+  for (auto const ch : text) {
+    point(x++, y, ch, style);
+  }
+}
+
+void text(int x, int y, std::string_view text, Style const& style) noexcept {
+  for (auto const ch : text) {
+    point(x++, y, static_cast<std::uint32_t>(ch), style);
+  }
+}
+
+} // namespace draw
+
+XXX_FORCE_INLINE Rect reserveSpace(int height) noexcept {
+  auto const ctx = currentContext();
+
+  height = std::max<int>(height, 0);
+
+  auto& layout = ctx->layoutStack.back();
 
   Rect result;
   result.x = layout.pos.x;
   result.y = layout.pos.y + layout.filledSize.height;
   result.width = layout.size.width;
-  result.height = std::min(height, layout.size.height - layout.filledSize.height);
+  result.height = std::min<int>(height, layout.size.height - layout.filledSize.height);
 
   layout.filledSize.height += result.height;
 
   return result;
 }
 
+#if 0
+std::string inputEventToKey(InputEvent const& ev)
+{
+    if (ev.ch == 0) {
+        return std::string();
+    }
+
+    std::string key;
+
+    if ((ev.mod & TB_MOD_CTRL) == TB_MOD_CTRL) {
+        key.append("C-");
+    }
+    if ((ev.mod & TB_MOD_ALT) == TB_MOD_ALT) {
+        key.append("M-");
+    }
+    if ((ev.mod & TB_MOD_SHIFT) == TB_MOD_SHIFT) {
+        key.append("S-");
+    }
+
+    if (ev.ch <= 0x10ffff && !(ev.ch >= 0xd800 && ev.ch <= 0xdfff)) {
+        char value[6];
+        ::tb_utf8_unicode_to_char(value, ev.ch);
+        key.append(value);
+    }
+
+    return key;
+}
+#endif
+
 void init() {
-  if (int const rc = ::tb_init(); rc != TB_OK) {
+  auto const ctx = currentContext();
+
+  if (auto const rc = ::tb_init(); rc != TB_OK) {
     throw std::runtime_error(::tb_strerror(rc));
   }
   ::tb_set_output_mode(TB_OUTPUT_TRUECOLOR);
 
-  ctx.layoutStack.reserve(32);
-  ctx.styleStack.reserve(32);
-
-  // initStyle();
-
-  // Update clock.
-  ctx.timestamp = clockNow();
+  ctx->styleStack.reserve(32);
+  ctx->layoutStack.reserve(32);
+  ctx->previousNow = clockNowMs();
 }
 
 void shutdown() {
   ::tb_shutdown();
 }
 
-bool update(unsigned ms) noexcept {
+bool update(unsigned timeoutMs) {
+  auto const ctx = currentContext();
+
   ::tb_event event;
-
-  std::size_t eventsProcessed = 0;
-
-  auto const startTime = clockNow();
-  while (true) {
-    auto const now = clockNow();
-    auto const dt = (now - startTime) / 1000000;
-    if (dt >= ms) {
-      break;
+  auto const rc = ::tb_peek_event(&event, static_cast<int>(timeoutMs));
+  if (rc != TB_OK && rc != TB_ERR_NO_EVENT) [[unlikely]] {
+    if (!(rc == TB_ERR_POLL && tb_last_errno() == EINTR)) {
+      throw std::runtime_error(::tb_strerror(rc));
     }
+  }
 
-    int const result = ::tb_peek_event(&event, ms);
-    switch (result) {
+  // cleanup before update
+  ctx->lastInputEvent = std::nullopt;
+
+  // process event
+  if (rc == TB_OK) {
+    switch (event.type) {
     case TB_EVENT_KEY: {
-      if (event.ch > 0) {
-        ctx.inputChars.push_back(event.ch);
-      }
-      if (event.key > 0) {
-        ctx.pressedKeys[keyIdx(event.key)] = true;
-      }
+      ctx->lastInputEvent = InputEvent{event.mod, event.key, event.ch};
     } break;
-    case TB_EVENT_RESIZE:
-    case TB_EVENT_MOUSE:
-      break;
+    case TB_EVENT_MOUSE: {
+    } break;
+    case TB_EVENT_RESIZE: {
+    } break;
     default: {
     } break;
     }
-    eventsProcessed += 1;
   }
 
-  auto const now = clockNow();
-  ctx.timeDelta = static_cast<double>(now - ctx.timestamp) / 1000000000.0;
-  ctx.timestamp = now;
+  auto const now = clockNowMs();
+  ctx->elapsed += (now - ctx->previousNow) * 0.001f;
+  ctx->previousNow = now;
 
-  return eventsProcessed > 0;
+  return rc == TB_OK;
 }
 
-bool isKeyPressed(std::uint16_t key) noexcept {
-  return ctx.pressedKeys[keyIdx(key)];
+InputEvent const* lastInputEvent() {
+  auto const ctx = currentContext();
+
+  return ctx->lastInputEvent ? &(*ctx->lastInputEvent) : nullptr;
 }
 
-void begin() {
-  ::tb_clear();
+void stylePush(Color fg, Color bg, Attribute attr) {
+  auto const ctx = currentContext();
 
-  ctx.layoutStack.clear();
-  auto& layout = ctx.layoutStack.emplace_back();
-  layout.type = LayoutType::Container;
-  layout.size = {::tb_width(), ::tb_height()};
-  layout.pos = {0, 0};
-  layout.filledSize = {0, 0};
-
-  ctx.styleStack.clear();
-  ctx.styleStack.emplace_back();
-}
-
-void end() {
-  ::tb_present();
-
-  ctx.inputChars.clear();
-}
-
-void stylePush(Color fg, Attrribute attr, Color bg) {
-  auto& style = ctx.styleStack.emplace_back();
+  auto& style = ctx->styleStack.emplace_back();
   style.fg = static_cast<uintattr_t>(fg) | static_cast<uintattr_t>(attr);
   style.bg = static_cast<uintattr_t>(bg);
 }
 
 void stylePop() {
-  assert(ctx.styleStack.size() > 1);
-  ctx.styleStack.pop_back();
+  auto const ctx = currentContext();
+
+  if (ctx->styleStack.size() == 1) [[unlikely]] {
+    assert(false && "Calling stylePop() too many times!");
+    return;
+  }
+  ctx->styleStack.pop_back();
 }
 
-void rowBegin(std::size_t columns) {
-  if (columns == 0) {
+void begin() {
+  auto const ctx = currentContext();
+
+  // init style
+  ctx->styleStack.clear();
+  ctx->styleStack.emplace_back();
+
+  // init layout
+  ctx->layoutStack.clear();
+  auto& layout = ctx->layoutStack.emplace_back();
+  layout.type = LayoutType::Container;
+  layout.size = Size{::tb_width(), ::tb_height()};
+  layout.pos = {0, 0};
+  layout.filledSize = {0, 0};
+
+  ::tb_clear();
+}
+
+void end() {
+  auto const ctx = currentContext();
+
+  ::tb_present();
+
+  ctx->elapsed = 0.0f;
+}
+
+void rowBegin(unsigned columnsCount) {
+  auto const ctx = currentContext();
+
+  if (columnsCount == 0) [[unlikely]] {
     return;
   }
 
-  // Parent layout for new row layout.
-  auto& parent = ctx.layoutStack.back();
+  auto& parent = ctx->layoutStack.back();
 
-  // New layout.
-  Layout row;
-  row.type = LayoutType::Row;
-  row.size = {parent.size.width, parent.size.height - parent.filledSize.height};
-  row.pos = {parent.pos.x, parent.pos.y + parent.filledSize.height};
-  row.columns = columns;
-  row.column = 0;
-  row.filledSize = {0, 0};
+  Layout layout;
+  layout.type = LayoutType::Row;
+  layout.size = {parent.size.width, parent.size.height - parent.filledSize.height};
+  layout.pos = {parent.pos.x, parent.pos.y + parent.filledSize.height};
+  layout.columnsCount = columnsCount;
+  layout.column = 0;
+  layout.filledSize = {0, 0};
 
-  // Add layout to stack.
-  pushLayout(row);
-}
-
-void rowPush(float ratioOrWidth) {
-  auto const layout = []() -> Layout& {
-    return ctx.layoutStack.back();
-  };
-
-  if (ratioOrWidth < 0.0) [[unlikely]] {
-    ratioOrWidth = 0.0;
-  }
-
-  if (layout().type == LayoutType::Row) {
-    auto& row = layout();
-
-    assert(row.filledSize.width == 0);
-    assert(row.column == 0);
-
-    Layout column;
-    column.type = LayoutType::Column;
-    column.pos = row.pos;
-
-    // Calculate column width.
-    int width = 0;
-    if (ratioOrWidth > 1.0) {
-      width = std::min<int>(ratioOrWidth, row.size.width);
-    } else {
-      width = std::round(ratioOrWidth * row.size.width);
-    }
-
-    column.size = {width, row.size.height};
-
-    row.filledSize.width = column.size.width;
-    row.column += 1;
-
-    // Add layout to stack.
-    pushLayout(column);
-  } else if (layout().type == LayoutType::Column) {
-    int const filledHeight = layout().filledSize.height;
-    // Remove prev column layout.
-    popLayout();
-
-    // Parent row layout.
-    auto& row = layout();
-
-    if (row.type != LayoutType::Row) [[unlikely]] {
-      assert(false && "unexpected layout state");
-      return;
-    }
-
-    if (row.column >= row.columns) [[unlikely]] {
-      assert(false && "unexpected layout state");
-      return;
-    }
-
-    // Calculate new filled height.
-    row.filledSize.height = std::max(row.filledSize.height, filledHeight);
-
-    Layout column;
-    column.type = LayoutType::Column;
-    column.pos = {row.pos.x + row.filledSize.width, row.pos.y};
-
-    // Calculate column width.
-    int const availableWidth = row.size.width - row.filledSize.width;
-    int width = 0;
-    if (ratioOrWidth > 1.0) {
-      width = std::min<int>(ratioOrWidth, availableWidth);
-    } else {
-      width = std::min<int>(std::round(ratioOrWidth * row.size.width), availableWidth);
-    }
-
-    column.size = {width, row.size.height};
-
-    row.filledSize.width += column.size.width;
-    row.column += 1;
-
-    pushLayout(column);
-  }
+  ctx->layoutStack.emplace_back(std::move(layout));
 }
 
 void rowEnd() {
-  auto const layout = []() -> Layout& {
-    return ctx.layoutStack.back();
-  };
+  auto const ctx = currentContext();
 
   int rowFilledHeight = 0;
 
-  if (layout().type == LayoutType::Column) {
-    rowFilledHeight = layout().filledSize.height;
-    popLayout();
+  if (auto& layout = ctx->layoutStack.back(); layout.type == LayoutType::Column) {
+    rowFilledHeight = layout.filledSize.height;
+    ctx->layoutStack.pop_back();
   }
 
-  if (layout().type != LayoutType::Row) [[unlikely]] {
-    assert(false && "unexpected layout state");
+  if (auto& layout = ctx->layoutStack.back(); layout.type != LayoutType::Row) [[unlikely]] {
+    // Unexpected layout state
+    assert(false && "out of order call");
     return;
   }
 
-  rowFilledHeight = std::max(rowFilledHeight, layout().filledSize.height);
-  popLayout();
+  rowFilledHeight = std::max<int>(rowFilledHeight, ctx->layoutStack.back().filledSize.height);
+  ctx->layoutStack.pop_back();
 
   // Update parent layout filled height.
-  layout().filledSize.height += rowFilledHeight;
+  ctx->layoutStack.back().filledSize.height += rowFilledHeight;
 }
 
-void panelBegin(std::string_view title) {
-  auto const& style = ctx.style.panel;
-  auto const& borderColor = colorAt(ColorID::Border);
-  auto const& titleColor = colorAt(ColorID::Text);
-  auto const& backgroundColor = colorAt(ColorID::Background);
+void rowPush(float widthOrRatio) {
+  auto const ctx = currentContext();
 
-  auto& parent = ctx.layoutStack.back();
+  widthOrRatio = std::max<float>(widthOrRatio, 0.0f);
+
+  if (auto& parent = ctx->layoutStack.back(); parent.type == LayoutType::Row) {
+    assert(parent.filledSize.width == 0);
+    assert(parent.column == 0);
+
+    Layout layout;
+    layout.type = LayoutType::Column;
+    layout.pos = parent.pos;
+
+    auto const width = widthOrRatio > 1.0f ? std::min<int>(widthOrRatio, parent.size.width)
+                                           : int(std::round(widthOrRatio * parent.size.width));
+
+    layout.size = {width, parent.size.height};
+
+    parent.filledSize.width = layout.size.width;
+    parent.column += 1;
+
+    ctx->layoutStack.emplace_back(std::move(layout));
+
+    return;
+  }
+
+  if (auto& parent = ctx->layoutStack.back(); parent.type != LayoutType::Column) {
+    return;
+  }
+
+  auto const filledHeight = ctx->layoutStack.back().filledSize.height;
+  ctx->layoutStack.pop_back();
+
+  auto& parent = ctx->layoutStack.back();
+  if (parent.type != LayoutType::Row) [[unlikely]] {
+    assert(false && "out of order call");
+    return;
+  }
+  if (parent.column >= parent.columnsCount) [[unlikely]] {
+    assert(false && "out of order call");
+    return;
+  }
+
+  parent.filledSize.height = std::max<int>(parent.filledSize.height, filledHeight);
+
+  Layout layout;
+  layout.type = LayoutType::Column;
+  layout.pos = {parent.pos.x + parent.filledSize.width, parent.pos.y};
+  auto const availableWidth = parent.size.width - parent.filledSize.width;
+  auto const width = widthOrRatio > 1.0f ? std::min<int>(widthOrRatio, availableWidth)
+                                         : std::min<int>(std::round(widthOrRatio * parent.size.width), availableWidth);
+  layout.size = {width, parent.size.height};
+
+  parent.filledSize.width += layout.size.width;
+  parent.column += 1;
+
+  ctx->layoutStack.emplace_back(std::move(layout));
+}
+
+void panelBegin() {
+  auto const ctx = currentContext();
+
+  auto& parent = ctx->layoutStack.back();
   if (parent.size.width < 2 || parent.size.height < 2) [[unlikely]] {
     return;
   }
 
-  // New layout for panel.
-  Layout panel;
-  panel.type = LayoutType::Container;
-  panel.size = {parent.size.width - 2, parent.size.height - parent.filledSize.height - 2};
-  panel.pos = {parent.pos.x + 1, parent.pos.y + parent.filledSize.height + 1};
+  Layout layout;
+  layout.type = LayoutType::Container;
+  layout.size = {parent.size.width - 2, parent.size.height - parent.filledSize.height - 2};
+  layout.pos = {parent.pos.x + 1, parent.pos.y + parent.filledSize.height + 1};
 
-  int titleLength = 0;
-  if (title.size() > 0) {
-    titleLength = std::min<int>(utf8::stringLength(title), panel.size.width - 2);
-  }
+  auto const& style = ctx->styleStack.back();
+  auto const& borderStyle = ctx->borderStyle;
 
-  auto cell = draw::cell(style.border.hLine, borderColor, backgroundColor);
-  draw::hLine(panel.pos.x, panel.pos.y - 1, panel.size.width + 1, cell);
-  cell.ch = style.border.upperLeft;
-  draw::point(panel.pos.x - 1, panel.pos.y - 1, cell);
-  cell.ch = style.border.upperRight;
-  draw::point(panel.pos.x - 1 + panel.size.width + 1, panel.pos.y - 1, cell);
+  draw::point(layout.pos.x - 1, layout.pos.y - 1, borderStyle.topLeft, style);
+  draw::hLine(layout.pos.x, layout.pos.y - 1, layout.size.width + 1, borderStyle.hLine, style);
+  draw::point(layout.pos.x - 1 + layout.size.width + 1, layout.pos.y - 1, borderStyle.topRight, style);
 
-  if (titleLength > 0) {
-    draw::text(panel.pos.x + 1, panel.pos.y - 1, title.data(), titleLength, titleColor, backgroundColor);
-  }
-
-  pushLayout(panel);
+  ctx->layoutStack.emplace_back(std::move(layout));
 }
 
 void panelEnd() {
-  auto const& style = ctx.style.panel;
-  auto const& borderColor = colorAt(ColorID::Border);
-  auto const& backgroundColor = colorAt(ColorID::Background);
+  auto const ctx = currentContext();
 
-  auto const layout = []() -> Layout& {
-    return ctx.layoutStack.back();
-  };
-
-  if (layout().type != LayoutType::Container) [[unlikely]] {
-    assert(false && "unexpected layout state");
+  if (auto const& layout = ctx->layoutStack.back(); layout.type != LayoutType::Container) [[unlikely]] {
+    assert(false && "out of order call");
     return;
   }
 
-  int const filledHeight = layout().filledSize.height;
-  popLayout();
+  auto const filledHeight = ctx->layoutStack.back().filledSize.height;
+  ctx->layoutStack.pop_back();
 
-  auto& parent = layout();
+  auto& parent = ctx->layoutStack.back();
   parent.filledSize.height += filledHeight + 2;
 
-  auto cell = draw::cell(style.border.hLine, borderColor, backgroundColor);
-  draw::hLine(parent.pos.x + 1, parent.pos.y + parent.filledSize.height - 1, parent.size.width - 2, cell);
-  cell.ch = style.border.bottomLeft;
-  draw::point(parent.pos.x, parent.pos.y + parent.filledSize.height - 1, cell);
-  cell.ch = style.border.bottomRight;
-  draw::point(parent.pos.x + parent.size.width - 1, parent.pos.y + parent.filledSize.height - 1, cell);
-  cell.ch = style.border.vLine;
-  draw::vLine(parent.pos.x, parent.pos.y + parent.filledSize.height - (filledHeight + 1), filledHeight, cell);
+  auto const& style = ctx->styleStack.back();
+  auto const& borderStyle = ctx->borderStyle;
+
+  draw::point(parent.pos.x, parent.pos.y + parent.filledSize.height - 1, borderStyle.bottomLeft, style);
+  draw::hLine(
+      parent.pos.x + 1, parent.pos.y + parent.filledSize.height - 1, parent.size.width - 2, borderStyle.hLine, style);
+  draw::point(parent.pos.x + parent.size.width - 1, parent.pos.y + parent.filledSize.height - 1,
+      borderStyle.bottomRight, style);
+  draw::vLine(parent.pos.x, parent.pos.y + parent.filledSize.height - (filledHeight + 1), filledHeight,
+      borderStyle.vLine, style);
   draw::vLine(parent.pos.x + parent.size.width - 1, parent.pos.y + parent.filledSize.height - (filledHeight + 1),
-      filledHeight, cell);
+      filledHeight, borderStyle.vLine, style);
 }
 
-void label(std::string_view text, Align align) {
-  auto const& textColor = colorAt(ColorID::Text);
-  auto const& backgroundColor = colorAt(ColorID::Background);
+void panelTitle(std::string_view text, Alignment align) {
+  auto const ctx = currentContext();
 
-  auto const rect = reserveSpace(1);
-  if (rect.width < 1 || rect.height < 1 || text.empty()) [[unlikely]] {
+  if (auto const& layout = ctx->layoutStack.back(); layout.type != LayoutType::Container) [[unlikely]] {
+    assert(false && "out of order call");
     return;
   }
 
-  int const textLength = std::min<int>(utf8::stringLength(text), rect.width);
-  int offsetX = alignWidth(textLength, rect.width, align);
+  auto& parent = ctx->layoutStack.back();
 
-  draw::text(rect.x + offsetX, rect.y, text.data(), textLength, textColor, backgroundColor);
+  auto const unicodeStr = UTF8CharToUnicode(text);
+  if (parent.size.width < 2 || unicodeStr.empty()) [[unlikely]] {
+    // nothing to draw or no space
+    return;
+  }
+
+  auto const textSize = std::min<int>(unicodeStr.size(), parent.size.width - 2);
+  auto const textOffsetX = alignSize(textSize, parent.size.width - 2, align);
+
+  assert(!ctx->styleStack.empty() && "styles stack empty");
+
+  auto const& style = ctx->styleStack.back();
+
+  draw::text(parent.pos.x + textOffsetX + 1, parent.pos.y - 1, unicodeStr.subspan(0, textSize), style);
 }
 
-void spacer(float ratioOrHeight) {
-  if (ratioOrHeight < 0.0) [[unlikely]] {
-    ratioOrHeight = 0.0;
+void label(std::string_view text, Alignment align) {
+  auto const ctx = currentContext();
+
+  auto const unicodeStr = UTF8CharToUnicode(text);
+  auto const rect = reserveSpace(1);
+
+  if (rect.width < 1 || rect.height < 1 || unicodeStr.empty()) [[unlikely]] {
+    // nothing to draw or no space
+    return;
   }
 
-  auto& parent = ctx.layoutStack.back();
-  int const availableHeight = parent.size.height - parent.filledSize.height;
+  auto const textSize = std::min<int>(unicodeStr.size(), rect.width);
+  auto const textOffsetX = alignSize(textSize, rect.width, align);
 
-  int height = 0;
-  if (ratioOrHeight > 1.0) {
-    height = std::min<int>(ratioOrHeight, availableHeight);
-  } else {
-    height = std::min<int>(std::round(ratioOrHeight * availableHeight), availableHeight);
-  }
+  assert(!ctx->styleStack.empty() && "styles stack empty");
 
+  auto const& style = ctx->styleStack.back();
+
+  draw::text(rect.x + textOffsetX, rect.y, unicodeStr.subspan(0, textSize), style);
+}
+
+void spacer(float heightOrRatio) {
+  auto const ctx = currentContext();
+
+  heightOrRatio = std::max<float>(heightOrRatio, 0.0f);
+
+  auto& parent = ctx->layoutStack.back();
+  auto const availableHeight = parent.size.height - parent.filledSize.height;
+
+  auto const height = heightOrRatio > 1.0f
+                          ? std::min<int>(heightOrRatio, availableHeight)
+                          : std::min<int>(std::round(heightOrRatio * availableHeight), availableHeight);
   reserveSpace(height);
 }
 
-void spinner(std::string_view text, Align align, float& step) {
-  auto const& style = ctx.style.spinner;
-  auto const& glyphColor = colorAt(ColorID::Glyph);
-  auto const& textColor = colorAt(ColorID::Text);
-  auto const& backgroundColor = colorAt(ColorID::Background);
+namespace impl {
 
+void spinner(std::string_view text, Alignment align, float& step) {
+  auto const ctx = currentContext();
+
+  auto const unicodeStr = UTF8CharToUnicode(text);
   auto const rect = reserveSpace(1);
-  if (rect.width < 1 || rect.height < 1 || style.glyphs.empty()) [[unlikely]] {
+
+  auto const length = static_cast<int>(unicodeStr.size() + 1);
+
+  if (rect.width < 1 || rect.height < 1) [[unlikely]] {
+    // nothing to draw or no space
     return;
   }
 
-  int textLength = 0;
-  int innerLength = 1;
-  if (text.size() > 0) {
-    textLength = std::min<int>(utf8::stringLength(text), rect.width - 2);
-    innerLength += (textLength + 1);
-  }
+  auto const textSize = std::min<int>(length, rect.width);
+  auto const textOffsetX = alignSize(textSize, rect.width, align);
 
-  int const offsetX = alignWidth(innerLength, rect.width, align);
+  step += ctx->elapsed;
+  auto const index = std::size_t(std::round(step / ctx->spinnerUpdateInterval)) % ctx->spinnerStyle.glyphs.size();
 
-  // Spinner
-  static constexpr float kSpinInterval = 0.1; // 0.1 seconds
-  step += ctx.timeDelta;
-  std::size_t const index = std::size_t(std::round(step / kSpinInterval)) % style.glyphs.size();
+  assert(!ctx->spinnerStyle.glyphs.empty() && "spinner style glyphs empty");
+  assert(!ctx->styleStack.empty() && "styles stack empty");
 
-  // Spinner text
-  auto const& cell = draw::cell(style.glyphs[index], glyphColor, backgroundColor);
-  draw::point(rect.x + offsetX, rect.y, cell);
+  auto const& style = ctx->styleStack.back();
+  auto const& spinnerStyle = ctx->spinnerStyle;
 
-  if (textLength > 0) {
-    draw::text(rect.x + offsetX + 2, rect.y, text.data(), textLength, textColor, backgroundColor);
-  }
+  draw::point(rect.x + textOffsetX, rect.y, spinnerStyle.glyphs[index], style);
+  draw::text(rect.x + textOffsetX + 1, rect.y, unicodeStr.subspan(0, textSize - 1), style);
 }
 
+} // namespace impl
+
 void progress(float& value) {
-  auto const& style = ctx.style.progress;
-  auto const& glyphColor = colorAt(ColorID::Glyph);
-  auto const& textColor = colorAt(ColorID::Text);
-  auto const& backgroundColor = colorAt(ColorID::Background);
+  auto const ctx = currentContext();
 
   auto const rect = reserveSpace(1);
   if (rect.width < 1 || rect.height < 1) [[unlikely]] {
@@ -741,118 +594,97 @@ void progress(float& value) {
   }
 
   value = std::clamp<float>(value, 0.0, 100.0);
-  int const length = std::round((rect.width * value) / 100.0);
-  auto const cell = draw::cell(style.barGlyph, glyphColor, backgroundColor);
-  draw::hLine(rect.x, rect.y, length, cell);
+  auto const length = static_cast<int>(std::round((rect.width * value) / 100.0));
 
-  char buffer[sizeof(" 100.0% ")];
-  std::snprintf(buffer, sizeof(buffer), " %02.1f%% ", double(value));
-  std::string_view text(buffer);
+  assert(!ctx->styleStack.empty() && "styles stack empty");
 
-  int const textLength = std::min<int>(text.size(), rect.width);
-  int const offsetX = alignWidth(textLength, rect.width, Align::Center);
-  draw::text(rect.x + offsetX, rect.y, text.data(), textLength, textColor, backgroundColor);
+  char buffer[sizeof(" 100.0%  ")];
+  std::snprintf(buffer, sizeof(buffer), " %02.1f%% ", static_cast<double>(value));
+  auto const text = std::string_view(buffer);
+
+  auto const textSize = std::min<int>(text.size(), rect.width);
+  auto const textOffsetX = alignSize(textSize, rect.width, Alignment::Center);
+
+  auto const& style = ctx->styleStack.back();
+  auto const& progressBarStyle = ctx->progressBarStyle;
+
+  draw::hLine(rect.x, rect.y, length, progressBarStyle.glyph, style);
+  draw::hLine(rect.x + length, rect.y, rect.width - length, L' ', style);
+  draw::text(rect.x + textOffsetX, rect.y, std::string_view(buffer), style);
 }
 
-bool textInput(std::string& input) {
-  auto const& textColor = colorAt(ColorID::Text);
-  auto const& backgroundColor = colorAt(ColorID::Background);
+bool textInput(std::string& input, bool active, Alignment align) {
+  auto const ctx = currentContext();
 
-  utf8::convert(ctx.inputChars.begin(), ctx.inputChars.end(), std::back_inserter(input));
+  bool isEnterPressed = false;
 
-  if (ctx.pressedKeys[TB_KEY_SPACE]) {
-    input.push_back(' ');
-  }
-
-  if (ctx.pressedKeys[TB_KEY_BACKSPACE2] && !input.empty()) {
-    input.erase(utf8::prev(input.end()), input.end());
-  }
-
-  if (ctx.pressedKeys[TB_KEY_CTRL_W]) {
-    while (!input.empty() && std::isblank(input.back())) {
-      input.pop_back();
+  if (active && ctx->lastInputEvent) {
+    auto const& lastInput = *ctx->lastInputEvent;
+    if (lastInput.key == TB_KEY_CTRL_W) {
+      while (!input.empty() && std::isblank(input.back())) {
+        input.pop_back();
+      }
+      auto const found = input.rfind(' ');
+      if (found == input.npos) {
+        input.clear();
+      } else {
+        input.erase(input.begin() + found + 1, input.end());
+      }
+    } else if (lastInput.key == TB_KEY_ENTER) {
+      isEnterPressed = true;
     }
-    // Remove till first space from back or whole line.
-    auto const found = input.rfind(' ');
-    if (found == input.npos) {
-      input.clear();
-    } else {
-      input.erase(input.begin() + found + 1, input.end());
+    // TODO: backspace, space, etc...
+    if (lastInput.ch > 0) {
+      input += lastInput.ch;
     }
   }
 
-  bool const result = ctx.pressedKeys[TB_KEY_ENTER] && input.size() > 0;
+  label(input, align);
 
-  auto const rect = reserveSpace(1);
-  if (rect.width < 1 || rect.height < 1) [[unlikely]] {
-    return result;
-  }
-
-  int const inputLength = utf8::stringLength(input);
-  int inputOffset = inputLength - rect.width;
-  if (inputOffset < 0) {
-    inputOffset = 0;
-  }
-
-  draw::text(rect.x, rect.y, input.data(), inputLength, inputOffset, textColor, backgroundColor);
-  auto const cell = draw::cell(' ', textColor, backgroundColor);
-  draw::hLine(rect.x + (inputLength - inputOffset), rect.y, rect.width - (inputLength + inputOffset), cell);
-
-  return result;
+  return isEnterPressed;
 }
 
-class CanvasImpl final : public Canvas {
-private:
-  static constexpr std::array kPixelMap = {
-      std::array{0x01, 0x08}, std::array{0x02, 0x10}, std::array{0x04, 0x20}, std::array{0x40, 0x80}};
-  static constexpr std::uint32_t kBrailleOffset = 0x2800;
+namespace {
 
-  int const x_;
-  int const y_;
+constexpr std::array kBraillePixelMap = {
+    std::array{0x01, 0x08}, std::array{0x02, 0x10}, std::array{0x04, 0x20}, std::array{0x40, 0x80}};
+constexpr std::uint32_t kBrailleOffset = 0x2800;
 
-public:
-  CanvasImpl(Rect const& rect) noexcept : Canvas(rect.width * 2, rect.height * 4), x_(rect.x), y_(rect.y) {}
+} // namespace
 
-  void point(int x, int y, Color color) override {
-    if (x < 0 || x >= width() || y < 0 || y >= height()) {
-      return;
-    }
+Canvas::Canvas(int startX, int startY, int width, int height) noexcept
+    : startX_(startX), startY_(startY), width_(width), height_(height) {}
 
-    auto& cell = getCellAt(x, y);
-    if (cell.ch >= kBrailleOffset) {
-      cell.ch |= kPixelMap[y % 4][x % 2];
-    } else {
-      cell.ch = kBrailleOffset + kPixelMap[y % 4][x % 2];
-    }
-    cell.fg = static_cast<std::uint16_t>(color);
+void Canvas::point(int x, int y, Color color) {
+  if (x < 0 || x >= width() || y < 0 || y >= height()) [[unlikely]] {
+    return;
   }
 
-private:
-  ::tb_cell& getCellAt(int x, int y) const noexcept {
-    int const posX = x_ + x / 2;
-    int const posY = y_ + y / 4;
-    return ::tb_cell_buffer()[posY * ::tb_width() + posX];
+  auto const posX = startX_ + x / 2;
+  auto const posY = startY_ + y / 4;
+  auto& cell = ::tb_cell_buffer()[posY * ::tb_width() + posX];
+
+  if (cell.ch < kBrailleOffset) {
+    cell.ch = kBrailleOffset;
   }
-};
+  cell.ch |= kBraillePixelMap[y % 4][x % 2];
+  cell.fg = static_cast<uintattr_t>(color);
+}
 
-void canvas(float ratioOrHeight, std::function<void(Canvas&)> const& fn) {
-  if (ratioOrHeight < 0.0) [[unlikely]] {
-    ratioOrHeight = 0.0;
-  }
+Canvas canvas(float heightOrRatio) {
+  auto const ctx = currentContext();
 
-  auto& parent = ctx.layoutStack.back();
-  int const availableHeight = parent.size.height - parent.filledSize.height;
+  heightOrRatio = std::max<float>(heightOrRatio, 0.0f);
 
-  int height = 0;
-  if (ratioOrHeight > 1.0) {
-    height = std::min<int>(ratioOrHeight, availableHeight);
-  } else {
-    height = std::min<int>(std::round(ratioOrHeight * availableHeight), availableHeight);
-  }
+  auto& parent = ctx->layoutStack.back();
+  auto const availableHeight = parent.size.height - parent.filledSize.height;
 
-  auto const space = reserveSpace(height);
-  CanvasImpl canvasImpl(space);
-  std::invoke(fn, canvasImpl);
+  auto const height = heightOrRatio > 1.0f
+                          ? std::min<int>(heightOrRatio, availableHeight)
+                          : std::min<int>(std::round(heightOrRatio * availableHeight), availableHeight);
+  auto const rect = reserveSpace(height);
+
+  return Canvas(rect.x, rect.y, rect.width * 2, rect.height * 4);
 }
 
 } // namespace xxx

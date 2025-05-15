@@ -4,16 +4,33 @@
 #pragma once
 
 #include <cstdint>
-#include <functional>
+#include <stdexcept>
 #include <string_view>
-#include <vector>
 
 #include <termbox2.h>
 
 namespace xxx {
+namespace impl {
 
-/// Attribute
+template <typename T, typename Tag>
+[[nodiscard]] T& getStorageFor() noexcept {
+  static T value = T();
+  return value;
+}
+
+} // namespace impl
+
+/// Color
+enum class Color : uintattr_t {};
+
+/// Construct \c Color from RGB components
+constexpr Color rgb(std::uint8_t r, std::uint8_t g, std::uint8_t b) noexcept {
+  return Color((std::uint32_t(r) << 16) | std::uint32_t(g) << 8 | std::uint32_t(b));
+}
+
+/// Text attributes
 enum class Attribute : uintattr_t {
+  None = 0,
   Bold = TB_BOLD,
   Underline = TB_UNDERLINE,
   Reverse = TB_REVERSE,
@@ -22,124 +39,105 @@ enum class Attribute : uintattr_t {
   Dim = TB_DIM
 };
 
-/// Color
-enum class Color : uintattr_t {};
+/// Text alignment
+enum class Alignment { Left, Right, Center };
 
-/// Alignment
-enum class Alignment { Left, Center, Right };
+/// Keyboard input event
+struct InputEvent {
+  std::uint8_t mod;  // bitwise `TB_MOD_*` constants
+  std::uint16_t key; // one of `TB_KEY_*` constants
+  std::uint32_t ch;  // a Unicode codepoint
+};
 
-/// Make Color from RGB components
-constexpr Color color(std::uint8_t r, std::uint8_t g, std::uint8_t b) noexcept {
-  return Color((std::uint32_t(r) << 16) | std::uint32_t(g) << 8 | std::uint32_t(b));
-}
+#if 0
+std::string inputEventToKey(InputEvent const& ev);
+#endif
 
-namespace literals {
-
-/// Make Color from decimal number
-constexpr Color operator""_c(unsigned long long int value) noexcept {
-  return Color(value);
-}
-
-} // namespace literals
-
-namespace detail {
-
-template <typename T, typename Tag = struct Default>
-inline T& getStorageFor() noexcept {
-  static T value = T();
-  return value;
-}
-
-} // namespace detail
-
-/// Init. Throws on error
+/// Init internals
 void init();
 
-/// Shutdown
+/// Shutdown internals
 void shutdown();
 
-/// Process terminal events
-/// @return true on an tty event received
-bool update(unsigned ms = 33) noexcept;
+/// Read mouse/keyboard/etc events
+/// \param[in] timeoutMs is number of milliseconds to wait event
+/// \return true on an event read
+bool update(unsigned timeoutMs = 100);
 
-/// Return true on key pressed
-bool isKeyPressed(std::uint16_t key) noexcept;
+/// Return last input event
+[[nodiscard]] InputEvent const* lastInputEvent();
 
-/// Begin frame
-void begin();
+/// Push draw style
+void stylePush(Color fg, Color bg = Color(), Attribute attr = Attribute::None);
 
-/// End frame
-void end();
-
-/// Push drawing style
-void stylePush(Color fg, Attrribute attr = Attrribute::None, Color bg = Color());
-
-/// Pop drawing style
+/// Pop draw style
 void stylePop();
 
-/// Push style color
-void styleColorPush(ColorID idx, Color color);
+/// Start draw frame
+void begin();
 
-/// Pop style color
-void styleColorPop(std::size_t count = 1);
+/// Finish draw frame
+void end();
 
-/// Start drawing row
-/// @param[in] columns is number of columns inside row
-void rowBegin(std::size_t columns);
-
-/// Start next column in row
-/// @param[in] ratioOrWidth is column percentage width (value <= 1.0) or explicit width
-void rowPush(float ratioOrWidth);
-
-/// Stop drawing row
+void rowBegin(unsigned columnsCount);
 void rowEnd();
+void rowPush(float widthOrRatio);
 
-/// Begin drawing panel
-void panelBegin(std::string_view title = {});
-
-/// End drawing panel
+void panelBegin();
 void panelEnd();
+void panelTitle(std::string_view text, Alignment align = Alignment::Center);
 
-/// Draw single line text
-void label(std::string_view text, Align align = Align::Left);
+/// Draw single line label
+void label(std::string_view text, Alignment align = Alignment::Left);
 
-/// Add empty area
-/// @param[in] ratioOrHeight is height percentage or explicit height
-void spacer(float ratioOrHeight = 1.0);
+/// Draw spacer
+/// \param[in] heightOrRatio - spacer size if heightOrRatio > 1 or spacer ratio if heightOrRatio <= 1.0
+void spacer(float heightOrRatio);
+
+namespace impl {
+
+void spinner(std::string_view text, Alignment align, float& step);
+
+} // namespace impl
 
 /// Draw spinner
-/// @param step is storage for spinner state
-void spinner(std::string_view text = {}, Align align = Align::Left, float& step = detail::getStorageFor<float>());
+template <typename Tag = struct Tag_DefaultSpinner>
+void spinner(std::string_view text = {}, Alignment align = Alignment::Center) {
+  impl::spinner(text, align, impl::getStorageFor<float, Tag>());
+}
 
 /// Draw progress bar
 void progress(float& value);
 
-/// Draw text input. Return true on input finished
-bool textInput(std::string& input);
+/// Text input
+bool textInput(std::string& input, bool active, Alignment align = Alignment::Left);
 
-/// Interface for drawing on canvas
+/// Canvas for drawing
 class Canvas {
 private:
-  int const width_;
-  int const height_;
+  int startX_ = -1;
+  int startY_ = -1;
+  int width_ = -1;
+  int height_ = -1;
 
 public:
-  Canvas(int width, int height) noexcept : width_(width), height_(height) {}
+  Canvas(int startX, int startY, int width, int height) noexcept;
 
-  virtual ~Canvas() noexcept {}
-
-  int width() const noexcept {
+  /// Canvas width
+  [[nodiscard]] int width() const noexcept {
     return width_;
   }
 
-  int height() const noexcept {
+  /// Canvas height
+  [[nodiscard]] int height() const noexcept {
     return height_;
   }
 
-  virtual void point(int x, int y, Color color = Color::Default) = 0;
+  /// Draw point
+  void point(int x, int y, Color color = {});
 };
 
-/// Draw anything in canvas
-void canvas(float ratioOrHeight, std::function<void(Canvas&)> const& fn);
+/// Create cavas for drawing
+[[nodiscard]] Canvas canvas(float heightOrRatio);
 
 } // namespace xxx
