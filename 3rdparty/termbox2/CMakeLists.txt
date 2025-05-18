@@ -2,7 +2,7 @@
 include(FetchContent)
 
 FetchContent_Declare(termbox2
-  GIT https://github.com/termbox/termbox2.git
+  GIT_REPOSITORY https://github.com/termbox/termbox2.git
   GIT_TAG 8ee9dc17e1ca61c630f91db0aa7f81fa29a32040
 )
 FetchContent_MakeAvailable(termbox2)
