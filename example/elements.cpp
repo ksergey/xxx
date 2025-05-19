@@ -79,20 +79,20 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       xxx::rowEnd();
       // clang-format on
 
-      // xxx::canvas(0.99, [&](xxx::Canvas& c) {
-      //   auto const drawCircle = [&](int x0, int y0, int r, xxx::Color color) {
-      //     for (float angle = 0.0; angle < 360.0; angle += 0.1) {
-      //       float const arg = angle * std::numbers::pi_v<float> / 180.0;
-      //       int const x = r * std::cos(arg);
-      //       int const y = r * std::sin(arg);
-      //       c.point(x0 + x, y0 + y, color);
-      //     }
-      //   };
-      //   drawCircle(c.width() / 2, c.height() / 2, c.height() / 2 - 1, xxx::color(33, 255, 128));
-      //   drawCircle(c.width() / 3, c.height() / 3, c.height() / 4 - 1, xxx::color(64, 128, 255));
-      //   drawCircle(c.width() * 2 / 3, c.height() / 3, c.height() / 5, xxx::color(255, 128, 255));
-      //   drawCircle(c.width() / 3, c.height() * 2 / 3, c.height() / 3.5, xxx::color(64, 64, 255));
-      // });
+      auto const drawCircle = [](xxx::Canvas c, int x0, int y0, int r, xxx::Color color) {
+        for (float angle = 0.0; angle < 360.0; angle += 0.1) {
+          float const arg = angle * std::numbers::pi_v<float> / 180.0;
+          int const x = r * std::cos(arg);
+          int const y = r * std::sin(arg);
+          c.point(x0 + x, y0 + y, color);
+        }
+      };
+
+      auto canvas = xxx::canvas(1.0);
+      drawCircle(canvas, canvas.width() / 2, canvas.height() / 2, canvas.height() / 2 - 1, xxx::rgb(33, 255, 128));
+      drawCircle(canvas, canvas.width() / 3, canvas.height() / 3, canvas.height() / 4 - 1, xxx::rgb(64, 128, 255));
+      drawCircle(canvas, canvas.width() * 2 / 3, canvas.height() / 3, canvas.height() / 5, xxx::rgb(255, 128, 255));
+      drawCircle(canvas, canvas.width() / 3, canvas.height() * 2 / 3, canvas.height() / 3.5, xxx::rgb(64, 64, 255));
 
       xxx::end();
     }
