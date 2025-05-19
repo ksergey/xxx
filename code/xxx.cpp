@@ -103,12 +103,12 @@ struct Context {
 
 namespace {
 
-XXX_FORCE_INLINE [[nodiscard]] Context* currentContext() noexcept {
+[[nodiscard]] XXX_FORCE_INLINE Context* currentContext() noexcept {
   static Context ctx;
   return &ctx;
 }
 
-XXX_FORCE_INLINE [[nodiscard]] std::uint64_t clockNowMs() noexcept {
+[[nodiscard]] XXX_FORCE_INLINE std::uint64_t clockNowMs() noexcept {
   ::timespec ts;
   ::clock_gettime(CLOCK_MONOTONIC, &ts);
   return ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
@@ -140,7 +140,7 @@ XXX_FORCE_INLINE [[nodiscard]] std::uint64_t clockNowMs() noexcept {
   return std::span(cache.data(), pos);
 }
 
-XXX_FORCE_INLINE [[nodiscard]] constexpr int alignSize(int innerSize, int parentSize, Alignment align) noexcept {
+[[nodiscard]] XXX_FORCE_INLINE constexpr int alignSize(int innerSize, int parentSize, Alignment align) noexcept {
   if (parentSize > innerSize) [[likely]] {
     switch (align) {
     case Alignment::Center:
@@ -158,29 +158,29 @@ XXX_FORCE_INLINE [[nodiscard]] constexpr int alignSize(int innerSize, int parent
 
 namespace draw {
 
-void point(int x, int y, std::uint32_t ch, Style const& style) noexcept {
+XXX_FORCE_INLINE void point(int x, int y, std::uint32_t ch, Style const& style) noexcept {
   ::tb_set_cell(x, y, ch, style.fg, style.bg);
 }
 
-void hLine(int x, int y, int length, std::uint32_t ch, Style const& style = {}) noexcept {
+XXX_FORCE_INLINE void hLine(int x, int y, int length, std::uint32_t ch, Style const& style = {}) noexcept {
   for (int pos = x, end = pos + length; pos < end; ++pos) {
     point(pos, y, ch, style);
   }
 }
 
-void vLine(int x, int y, int length, std::uint32_t ch, Style const& style = {}) noexcept {
+XXX_FORCE_INLINE void vLine(int x, int y, int length, std::uint32_t ch, Style const& style = {}) noexcept {
   for (int pos = y, end = pos + length; pos < end; ++pos) {
     point(x, pos, ch, style);
   }
 }
 
-void text(int x, int y, std::span<std::uint32_t const> text, Style const& style) noexcept {
+XXX_FORCE_INLINE void text(int x, int y, std::span<std::uint32_t const> text, Style const& style) noexcept {
   for (auto const ch : text) {
     point(x++, y, ch, style);
   }
 }
 
-void text(int x, int y, std::string_view text, Style const& style) noexcept {
+XXX_FORCE_INLINE void text(int x, int y, std::string_view text, Style const& style) noexcept {
   for (auto const ch : text) {
     point(x++, y, static_cast<std::uint32_t>(ch), style);
   }

@@ -68,12 +68,14 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
           xxx::panelTitle("PANEL 3");
             xxx::label("Content 2");
           xxx::panelEnd();
-          xxx::stylePush(xxx::rgb(255, 0, 0));
+          xxx::stylePush(xxx::rgb(255, 0, 128));
           xxx::panelBegin();
+          xxx::stylePush(xxx::rgb(255, 0, 0));
           xxx::panelTitle("PANEL 4");
           xxx::stylePop();
             xxx::spinner("Loading", xxx::Alignment::Center);
           xxx::panelEnd();
+          xxx::stylePop();
       xxx::rowEnd();
       // clang-format on
 
