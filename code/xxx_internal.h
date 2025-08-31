@@ -22,17 +22,24 @@ static_assert(std::is_same_v<uintattr_t, std::uint64_t>, "termbox2 invalid confi
 using clock = std::chrono::steady_clock;
 
 // ------------------------------------
-// basic containers
+// layout
 // ------------------------------------
-template <typename T>
-using im_vector = std::vector<T>;
+enum class im_layout_type { container, column, row };
 
-template <typename T, std::size_t N>
-using im_array = std::array<T, N>;
+struct im_layout {
+  im_layout_type type = im_layout_type::container;
+  im_vec2 pos;
+  im_vec2 size;
+  im_vec2 filled;
+  std::size_t columns;
+  std::size_t column;
+};
 
 // ------------------------------------
 // context
 // ------------------------------------
-struct im_context {};
+struct im_context {
+  std::vector<im_layout> layouts_stack;
+};
 
 } // namespace xxx

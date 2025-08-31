@@ -5,6 +5,7 @@
 
 #include <span>
 #include <stdexcept>
+#include <vector>
 
 #include "xxx_internal.h"
 
@@ -43,6 +44,39 @@ void text(int x, int y, std::span<im_char const> text, im_style const& style) no
 }
 
 } // namespace draw
+
+namespace utf8 {
+
+[[nodiscard]] auto utf8_to_unicode(std::string_view input) -> std::span<im_char const> {
+  thread_local std::vector<im_char> cache;
+
+  cache.resize(input.size());
+
+  char const* begin = input.data();
+  char const* end = begin + input.size();
+  std::size_t pos = 0;
+
+  while (begin < end) {
+    if (*begin == '\0') {
+      break;
+    }
+    auto const length = ::tb_utf8_char_length(*begin);
+    if (begin + length > end) [[unlikely]] {
+      break;
+    }
+    ::tb_utf8_char_to_unicode((std::uint32_t*)&cache[pos++], begin);
+    begin += length;
+  }
+
+  return std::span(cache.data(), pos);
+}
+
+[[nodiscard]] auto utf8_to_unicode(char const* input) -> std::span<im_char const> {
+  // TODO: optimize
+  return utf8_to_unicode(std::string_view(input));
+}
+
+} // namespace utf8
 
 void init() {
   // TODO: return std::expected?
@@ -83,8 +117,10 @@ void poll_events(std::chrono::milliseconds timeout) {
       };
     } else if (rc == TB_ERR_NO_EVENT) {
       // nothing to do
-    } else if (!(rc == TB_ERR_POLL && tb_last_errno() == EINTR)) {
-      throw std::runtime_error(::tb_strerror(rc));
+    } else if (rc == TB_ERR_POLL) {
+      if (::tb_last_errno() != EINTR) {
+        throw std::runtime_error(::tb_strerror(rc));
+      }
     }
 
     auto const now = clock::now();
@@ -98,12 +134,32 @@ void poll_events(std::chrono::milliseconds timeout) {
   // what next
 }
 
+auto is_key_pressed(im_key key) -> bool {
+  // TODO: fix me
+  return false;
+}
+
 void new_frame() {
+  ctx.layouts_stack.resize(1);
+
+  auto top_level_layout = ctx.layouts_stack.back();
+  top_level_layout.type = im_layout_type::container;
+  top_level_layout.pos = {0, 0};
+  top_level_layout.size = {::tb_width(), ::tb_height()};
+  top_level_layout.filled = {0, 0};
+  top_level_layout.columns = 0;
+  top_level_layout.column = 0;
+
   ::tb_clear();
 }
 
 void render() {
   ::tb_present();
+}
+
+void label(char const* text) {
+  // TODO
+  draw::text(5, 5, utf8::utf8_to_unicode(text), {TB_DEFAULT, TB_DEFAULT});
 }
 
 } // namespace v2

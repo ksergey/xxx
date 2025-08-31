@@ -16,6 +16,8 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
 
       xxx::new_frame();
 
+      xxx::label("🔑 hello 🔒");
+
       xxx::render();
     }
 

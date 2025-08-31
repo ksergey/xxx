@@ -87,9 +87,13 @@ void shutdown();
 
 void poll_events(std::chrono::milliseconds timeout);
 
+auto is_key_pressed(im_key key) -> bool;
+
 void new_frame();
 
 void render();
+
+void label(char const* text);
 
 } // namespace v2
 } // namespace xxx
