@@ -7,7 +7,7 @@
 
 int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
   try {
-    xxx::create_context();
+    xxx::init();
 
     bool done = false;
 
@@ -19,7 +19,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       xxx::render();
     }
 
-    xxx::destroy_context();
+    xxx::shutdown();
   } catch (std::exception const& e) {
     std::print(stderr, "ERROR: {}\n", e.what());
     return EXIT_FAILURE;

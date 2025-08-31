@@ -4,13 +4,11 @@
 #pragma once
 
 #include <array>
-#include <variant>
 #include <vector>
 
 #include <termbox2.h>
 
 #include "xxx2.h"
-#include "xxx_io.h"
 
 namespace xxx {
 
@@ -33,48 +31,8 @@ template <typename T, std::size_t N>
 using im_array = std::array<T, N>;
 
 // ------------------------------------
-// commands
-// ------------------------------------
-struct im_command_nop {};
-
-struct im_command_hline {
-  im_vec2 begin;
-  int legnth;
-  im_color color;
-};
-
-struct im_command_vline {
-  im_vec2 begin;
-  int legnth;
-  im_color color;
-};
-
-struct im_command_rect {
-  im_vec2 begin;
-  im_vec2 end;
-  im_color color;
-};
-
-struct im_command_rect_filled {
-  im_vec2 begin;
-  im_vec2 end;
-  im_color color;
-};
-
-struct im_command_text {
-  // TODO
-};
-
-using im_command = std::variant<im_command_nop, im_command_hline, im_command_vline, im_command_rect,
-    im_command_rect_filled, im_command_text>;
-
-// ------------------------------------
 // context
 // ------------------------------------
-struct im_context {
-  im_io io;
-};
-
-im_context* ctx = nullptr;
+struct im_context {};
 
 } // namespace xxx

@@ -3,14 +3,48 @@
 
 #include "xxx2.h"
 
+#include <span>
 #include <stdexcept>
 
 #include "xxx_internal.h"
-#include "xxx_io.h"
 
 namespace xxx {
+namespace {
 
-void create_context() {
+im_context ctx;
+
+} // namespace
+
+namespace v2 {
+
+namespace draw {
+
+void point(int x, int y, im_char ch, im_style const& style) noexcept {
+  ::tb_set_cell(
+      x, y, static_cast<std::uint32_t>(ch), static_cast<uintattr_t>(style.fg), static_cast<uintattr_t>(style.bg));
+}
+
+void hline(int x, int y, int length, im_char ch, im_style const& style = {}) noexcept {
+  for (int pos = x, end = pos + length; pos < end; ++pos) {
+    point(pos, y, ch, style);
+  }
+}
+
+void vline(int x, int y, int length, im_char ch, im_style const& style = {}) noexcept {
+  for (int pos = y, end = pos + length; pos < end; ++pos) {
+    point(x, pos, ch, style);
+  }
+}
+
+void text(int x, int y, std::span<im_char const> text, im_style const& style) noexcept {
+  for (auto const ch : text) {
+    point(x++, y, ch, style);
+  }
+}
+
+} // namespace draw
+
+void init() {
   // TODO: return std::expected?
 
   // init termbox2 library
@@ -18,13 +52,9 @@ void create_context() {
     throw std::runtime_error(::tb_strerror(rc));
   }
   ::tb_set_output_mode(TB_OUTPUT_TRUECOLOR);
-
-  ctx = new im_context;
 }
 
-void destroy_context() {
-  delete ctx;
-
+void shutdown() {
   ::tb_shutdown();
 }
 
@@ -39,9 +69,9 @@ void poll_events(std::chrono::milliseconds timeout) {
       switch (event.type) {
       case TB_EVENT_KEY: {
         if (event.ch > 0) {
-          ctx->io.add_input_character(event.ch);
+          // input text
         } else if (event.key > 0) {
-          ctx->io.add_key_event(im_key(event.key));
+          // input key
         }
       } break;
       case TB_EVENT_MOUSE: {
@@ -68,8 +98,13 @@ void poll_events(std::chrono::milliseconds timeout) {
   // what next
 }
 
-void new_frame() {}
+void new_frame() {
+  ::tb_clear();
+}
 
-void render() {}
+void render() {
+  ::tb_present();
+}
 
+} // namespace v2
 } // namespace xxx
