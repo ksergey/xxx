@@ -78,6 +78,16 @@ namespace utf8 {
 
 } // namespace utf8
 
+namespace layout {
+
+auto reserve_space(int height) noexcept -> im_rect {
+  // FIXME
+  (void)height;
+  return {};
+}
+
+} // namespace layout
+
 void init() {
   // TODO: return std::expected?
 
