@@ -5,7 +5,6 @@
 
 #include <chrono>
 #include <cstdint>
-#include <expected>
 #include <string_view>
 
 namespace xxx {
@@ -19,11 +18,13 @@ struct im_color {
   std::uint64_t value = 0;
 };
 
-auto create_context() -> std::expected<void, std::string_view>;
+enum class im_key : std::uint16_t {};
+
+void create_context();
 
 void destroy_context();
 
-void poll_events();
+void poll_events(std::chrono::milliseconds timeout);
 
 void new_frame();
 

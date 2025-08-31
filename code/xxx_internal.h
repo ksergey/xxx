@@ -10,10 +10,18 @@
 #include <termbox2.h>
 
 #include "xxx2.h"
+#include "xxx_io.h"
 
 namespace xxx {
 
 static_assert(std::is_same_v<uintattr_t, std::uint64_t>, "termbox2 invalid configuration");
+
+// ------------------------------------
+// common
+// ------------------------------------
+
+// clock type
+using clock = std::chrono::steady_clock;
 
 // ------------------------------------
 // basic containers
@@ -61,31 +69,12 @@ using im_command = std::variant<im_command_nop, im_command_hline, im_command_vli
     im_command_rect_filled, im_command_text>;
 
 // ------------------------------------
-// input
-// ------------------------------------
-struct im_mouse_button {
-  bool down;
-  unsigned clicked;
-  im_vec2 pos;
-};
-
-struct im_mouse {};
-
-struct im_key {
-  bool down;
-  unsigned clicked;
-};
-
-struct im_keyboard {};
-
-struct im_input {
-  im_mouse mouse;
-  im_keyboard keyboard;
-};
-
-// ------------------------------------
 // context
 // ------------------------------------
-struct im_context {};
+struct im_context {
+  im_io io;
+};
+
+im_context* ctx = nullptr;
 
 } // namespace xxx
