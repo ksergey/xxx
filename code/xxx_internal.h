@@ -26,6 +26,9 @@ using clock = std::chrono::steady_clock;
 // ------------------------------------
 enum class im_layout_type { container, column, row };
 
+// TODO: im_layout_row
+//       im_layout_column?
+
 struct im_layout {
   im_layout_type type = im_layout_type::container;
   im_vec2 pos;

@@ -16,8 +16,8 @@ struct im_vec2 {
 };
 
 struct im_rect {
-  im_vec2 min;
-  im_vec2 max;
+  im_vec2 min; // upper-left
+  im_vec2 max; // bottom-right
 
   constexpr im_rect() = default;
   constexpr im_rect(im_vec2 const& mi, im_vec2 const& ma) noexcept : min(mi), max(ma) {}
