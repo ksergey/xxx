@@ -12,10 +12,15 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     bool done = false;
 
     while (!done) {
-      xxx::poll_events(std::chrono::milliseconds(25));
+      xxx::poll_terminal_events(std::chrono::milliseconds(25));
+
+      if (xxx::is_key_pressed(xxx::im_key_id::quit)) {
+        break;
+      }
 
       xxx::new_frame();
 
+      xxx::show_debug();
       xxx::label("🔑 hello 🔒");
 
       xxx::render();

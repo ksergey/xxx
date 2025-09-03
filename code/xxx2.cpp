@@ -3,90 +3,101 @@
 
 #include "xxx2.h"
 
+#include <cassert>
 #include <span>
 #include <stdexcept>
 #include <vector>
 
+#include "xxx_draw.h"
+#include "xxx_input.h"
 #include "xxx_internal.h"
+#include "xxx_layout.h"
+#include "xxx_unicode.h"
 
-namespace xxx {
+namespace xxx::v2 {
 namespace {
 
-im_context ctx;
+void handle_terminal_key_event(::tb_event const& event) {
+  switch (event.key) {
+  case TB_KEY_TAB:
+    return add_key_event(im_key_id::tab);
+  case TB_KEY_ENTER:
+    return add_key_event(im_key_id::enter);
+  case TB_KEY_ESC:
+    return add_key_event(im_key_id::esc);
+  case TB_KEY_CTRL_Q:
+    return add_key_event(im_key_id::quit);
+  case TB_KEY_CTRL_C:
+    return add_key_event(im_key_id::quit);
+  default:
+    break;
+  }
+}
+
+void handle_terminal_mouse_event(::tb_event const& event) {
+  add_mouse_pos_event(event.x, event.y);
+
+  if (event.key > 0) {
+    switch (event.key) {
+    case TB_KEY_MOUSE_LEFT:
+      return add_mouse_button_event(im_mouse_button_id::left, event.x, event.y);
+    case TB_KEY_MOUSE_RIGHT:
+      return add_mouse_button_event(im_mouse_button_id::right, event.x, event.y);
+    case TB_KEY_MOUSE_MIDDLE:
+      return add_mouse_button_event(im_mouse_button_id::middle, event.x, event.y);
+    default:
+      break;
+    }
+  }
+}
 
 } // namespace
 
-namespace v2 {
-
-namespace draw {
-
-void point(int x, int y, im_char ch, im_style const& style) noexcept {
-  ::tb_set_cell(
-      x, y, static_cast<std::uint32_t>(ch), static_cast<uintattr_t>(style.fg), static_cast<uintattr_t>(style.bg));
+auto get_default_color() noexcept -> im_color {
+  return im_color(TB_DEFAULT);
 }
 
-void hline(int x, int y, int length, im_char ch, im_style const& style = {}) noexcept {
-  for (int pos = x, end = pos + length; pos < end; ++pos) {
-    point(pos, y, ch, style);
-  }
+auto is_key_pressed(im_key_id id) -> bool {
+  assert(id < im_key_id::last);
+
+  auto const ctx = get_context();
+  assert(ctx);
+
+  auto& keyboard = ctx->input.keyboard;
+  return keyboard.keys[static_cast<std::size_t>(id)].clicked > 0;
 }
 
-void vline(int x, int y, int length, im_char ch, im_style const& style = {}) noexcept {
-  for (int pos = y, end = pos + length; pos < end; ++pos) {
-    point(x, pos, ch, style);
-  }
+auto is_mouse_pressed(im_mouse_button_id id) -> bool {
+  assert(id < im_mouse_button_id::last);
+
+  auto const ctx = get_context();
+  assert(ctx);
+
+  auto const& mouse = ctx->input.mouse;
+  return mouse.buttons[static_cast<std::size_t>(id)].clicked > 0;
 }
 
-void text(int x, int y, std::span<im_char const> text, im_style const& style) noexcept {
-  for (auto const ch : text) {
-    point(x++, y, ch, style);
-  }
+auto is_mouse_hovering_rect(im_rect const& rect) -> bool {
+  return rect.contains(get_mouse_pos());
 }
 
-} // namespace draw
+auto get_mouse_pos() -> im_vec2 {
+  auto const ctx = get_context();
+  assert(ctx);
 
-namespace utf8 {
-
-[[nodiscard]] auto utf8_to_unicode(std::string_view input) -> std::span<im_char const> {
-  thread_local std::vector<im_char> cache;
-
-  cache.resize(input.size());
-
-  char const* begin = input.data();
-  char const* end = begin + input.size();
-  std::size_t pos = 0;
-
-  while (begin < end) {
-    if (*begin == '\0') {
-      break;
-    }
-    auto const length = ::tb_utf8_char_length(*begin);
-    if (begin + length > end) [[unlikely]] {
-      break;
-    }
-    ::tb_utf8_char_to_unicode((std::uint32_t*)&cache[pos++], begin);
-    begin += length;
-  }
-
-  return std::span(cache.data(), pos);
+  auto const& mouse = ctx->input.mouse;
+  return mouse.pos;
 }
 
-[[nodiscard]] auto utf8_to_unicode(char const* input) -> std::span<im_char const> {
-  // TODO: optimize
-  return utf8_to_unicode(std::string_view(input));
+auto get_window_size() -> im_vec2 {
+  auto const ctx = get_context();
+  assert(ctx);
+
+  auto const& layouts_stack = ctx->layouts_stack;
+  assert(!layouts_stack.empty());
+
+  return layouts_stack.front().size;
 }
-
-} // namespace utf8
-
-namespace layout {
-
-auto reserve_space(int height) noexcept -> im_rect {
-  // FIXME
-  (void)height;
-  return {};
-}
-
-} // namespace layout
 
 void init() {
   // TODO: return std::expected?
@@ -95,16 +106,22 @@ void init() {
   if (auto const rc = ::tb_init(); rc != TB_OK) {
     throw std::runtime_error(::tb_strerror(rc));
   }
+  ::tb_set_input_mode(TB_INPUT_ESC | TB_INPUT_MOUSE);
   ::tb_set_output_mode(TB_OUTPUT_TRUECOLOR);
+  ::tb_sendf("\x1b[?%d;%dh", 1003, 1006);
 }
 
 void shutdown() {
+  ::tb_sendf("\x1b[?%d;%dl", 1003, 1006);
   ::tb_shutdown();
 }
 
-void poll_events(std::chrono::milliseconds timeout) {
+void poll_terminal_events(std::chrono::milliseconds timeout) {
   auto const start = clock::now();
   auto const expiration = start + timeout;
+
+  clear_input_keys();
+  clear_input_mouse();
 
   ::tb_event event;
   while (true) {
@@ -113,12 +130,13 @@ void poll_events(std::chrono::milliseconds timeout) {
       switch (event.type) {
       case TB_EVENT_KEY: {
         if (event.ch > 0) {
-          // input text
+          add_input_character(event.ch);
         } else if (event.key > 0) {
-          // input key
+          handle_terminal_key_event(event);
         }
       } break;
       case TB_EVENT_MOUSE: {
+        handle_terminal_mouse_event(event);
       } break;
       case TB_EVENT_RESIZE: {
       } break;
@@ -140,25 +158,10 @@ void poll_events(std::chrono::milliseconds timeout) {
 
     timeout = std::chrono::duration_cast<std::chrono::milliseconds>(expiration - now);
   }
-
-  // what next
-}
-
-auto is_key_pressed(im_key key) -> bool {
-  // TODO: fix me
-  return false;
 }
 
 void new_frame() {
-  ctx.layouts_stack.resize(1);
-
-  auto top_level_layout = ctx.layouts_stack.back();
-  top_level_layout.type = im_layout_type::container;
-  top_level_layout.pos = {0, 0};
-  top_level_layout.size = {::tb_width(), ::tb_height()};
-  top_level_layout.filled = {0, 0};
-  top_level_layout.columns = 0;
-  top_level_layout.column = 0;
+  clear_layout();
 
   ::tb_clear();
 }
@@ -167,10 +170,49 @@ void render() {
   ::tb_present();
 }
 
-void label(char const* text) {
+void layout_row_begin(int min_height, std::size_t columns) {}
+
+void layout_row_push(float width_or_ratio) {}
+
+void layout_row_end() {}
+
+void label(std::string_view text) {
+  auto rect = reserve_space(1);
+  if (rect.empty() || text.empty()) {
+    return;
+  }
+
+  auto const glyphs = utf8_to_unicode(text);
+  auto const glyphs_length = static_cast<int>(glyphs.size());
+
+  if (auto const width = rect.get_width(); glyphs_length < width) {
+    rect.max.x -= (width - glyphs_length);
+  }
+
   // TODO
-  draw::text(5, 5, utf8::utf8_to_unicode(text), {TB_DEFAULT, TB_DEFAULT});
+  auto const hovered = is_mouse_hovering_rect(rect);
+  auto const clicked = is_mouse_pressed(im_mouse_button_id::left);
+  auto const style = make_style(hovered ? (clicked ? 0x99ffee_c : 0xff9999_c) : 0xee6666_c);
+
+  if (auto const width = rect.get_width(); glyphs_length > width) {
+    draw_text(rect.min.x, rect.min.y, glyphs.subspan(0, width), style);
+  } else {
+    draw_text(rect.min.x, rect.min.y, glyphs, style);
+  }
+
+  commit_space(rect.get_height());
 }
 
-} // namespace v2
-} // namespace xxx
+void show_debug() {
+  auto const ctx = get_context();
+  assert(ctx);
+
+  auto const& mouse = ctx->input.mouse;
+  label("mouse-pos: ({}, {})", mouse.pos.x, mouse.pos.y);
+  label("mouse-prev: ({}, {})", mouse.prev.x, mouse.prev.y);
+
+  auto const window_size = get_window_size();
+  label("screen: ({}, {})", window_size.x, window_size.y);
+}
+
+} // namespace xxx::v2
