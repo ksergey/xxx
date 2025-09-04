@@ -24,57 +24,60 @@ struct im_vec2 {
 };
 
 struct im_rect {
-  im_vec2 min; // upper-left
-  im_vec2 max; // bottom-right
+  int x;
+  int y;
+  int width;
+  int height;
 
   constexpr im_rect() = default;
-  constexpr im_rect(im_vec2 const& mi, im_vec2 const& ma) noexcept : min(mi), max(ma) {}
-  constexpr im_rect(int x1, int y1, int x2, int y2) noexcept : min(x1, y1), max(x2, y2) {}
+  constexpr im_rect(int x0, int y0, int width0, int height0) noexcept : x(x0), y(y0), width(width0), height(height0) {}
+  constexpr im_rect(im_vec2 const& min, im_vec2 const& max) noexcept
+      : x(min.x), y(min.y), width(max.x - min.x), height(max.y - min.y) {}
 
-  [[nodiscard]] constexpr auto get_top_left() const noexcept -> im_vec2 {
-    return min;
+  [[nodiscard]] constexpr auto top_left() const noexcept -> im_vec2 {
+    return im_vec2{x, y};
   }
-  [[nodiscard]] constexpr auto get_top_right() const noexcept -> im_vec2 {
-    return im_vec2{max.x, min.y};
+  [[nodiscard]] constexpr auto top_right() const noexcept -> im_vec2 {
+    return im_vec2{x + width, y};
   }
-  [[nodiscard]] constexpr auto get_bottom_left() const noexcept -> im_vec2 {
-    return im_vec2{min.x, max.y};
+  [[nodiscard]] constexpr auto bottom_left() const noexcept -> im_vec2 {
+    return im_vec2{x, y + height};
   }
-  [[nodiscard]] constexpr auto get_bottom_right() const noexcept -> im_vec2 {
-    return max;
+  [[nodiscard]] constexpr auto bottom_right() const noexcept -> im_vec2 {
+    return im_vec2{x + width, y + height};
+  }
+  [[nodiscard]] constexpr auto get_pos() const noexcept -> im_vec2 {
+    return im_vec2{x, y};
   }
   [[nodiscard]] constexpr auto get_center() const noexcept -> im_vec2 {
-    return im_vec2{(min.x + max.x) / 2, (min.y + max.y) / 2};
+    return im_vec2{x + width / 2, y + height / 2};
   }
   [[nodiscard]] constexpr auto get_size() const noexcept -> im_vec2 {
-    return im_vec2{max.x - min.x, max.y - min.y};
-  }
-  [[nodiscard]] constexpr auto get_width() const noexcept -> int {
-    return get_size().x;
-  }
-  [[nodiscard]] constexpr auto get_height() const noexcept -> int {
-    return get_size().y;
+    return im_vec2{width, height};
   }
   [[nodiscard]] constexpr auto contains(im_vec2 const& p) const noexcept -> bool {
+    auto const min = this->top_left();
+    auto const max = this->bottom_right();
     return p.x >= min.x && p.y >= min.y && p.x < max.x && p.y < max.y;
   }
   [[nodiscard]] constexpr auto contains(im_rect const& r) const noexcept -> bool {
-    return r.min.x >= min.x && r.min.y >= min.y && r.max.x <= max.x && r.max.y <= max.y;
+    auto const min = this->top_left();
+    auto const max = this->bottom_right();
+    auto const r_min = r.top_left();
+    auto const r_max = r.bottom_right();
+    return r_min.x >= min.x && r_min.y >= min.y && r_max.x <= max.x && r_max.y <= max.y;
   }
-  [[nodiscard]] constexpr auto empty() const noexcept -> bool {
-    return min.x == max.x || min.y == max.y;
+  [[nodiscard]] constexpr auto empty_area() const noexcept -> bool {
+    return width == 0 || height == 0;
   }
-  constexpr void expand(int amount) noexcept {
-    min.x -= amount;
-    min.y -= amount;
-    max.x += amount;
-    max.y += amount;
+  [[nodiscard]] constexpr auto expanded(int amount) const noexcept -> im_rect {
+    return this->expanded(im_vec2{amount, amount});
   }
-  constexpr void expand(im_vec2 const& amount) noexcept {
-    min.x -= amount.x;
-    min.y -= amount.y;
-    max.x += amount.x;
-    max.y += amount.y;
+  [[nodiscard]] constexpr auto expanded(im_vec2 const& amount) const noexcept -> im_rect {
+    return im_rect(x - amount.x, y - amount.y, width + amount.x * 2, height + amount.y * 2);
+  }
+  [[nodiscard]] constexpr auto translated(im_vec2 const& distance) const noexcept -> im_rect {
+    return im_rect(x + distance.x, y + distance.y, width, height);
   }
 };
 
@@ -128,10 +131,6 @@ void poll_terminal_events(std::chrono::milliseconds timeout);
 
 void new_frame();
 void render();
-
-void layout_row_begin(int min_height, std::size_t columns);
-void layout_row_push(float width_or_ratio);
-void layout_row_end();
 
 void label(std::string_view text);
 

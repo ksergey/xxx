@@ -96,11 +96,15 @@ auto get_window_size() -> im_vec2 {
   auto const& layouts_stack = ctx->layouts_stack;
   assert(!layouts_stack.empty());
 
-  return layouts_stack.front().size;
+  return layouts_stack.front().bounds.get_size();
 }
 
 void init() {
   // TODO: return std::expected?
+
+  auto const ctx = get_context();
+  assert(ctx);
+  ctx->layouts_stack = im_fixed_vector<im_layout>(64);
 
   // init termbox2 library
   if (auto const rc = ::tb_init(); rc != TB_OK) {
@@ -161,7 +165,7 @@ void poll_terminal_events(std::chrono::milliseconds timeout) {
 }
 
 void new_frame() {
-  clear_layout();
+  layout_reset();
 
   ::tb_clear();
 }
@@ -170,37 +174,30 @@ void render() {
   ::tb_present();
 }
 
-void layout_row_begin(int min_height, std::size_t columns) {}
-
-void layout_row_push(float width_or_ratio) {}
-
-void layout_row_end() {}
-
 void label(std::string_view text) {
-  auto rect = reserve_space(1);
-  if (rect.empty() || text.empty()) {
+  auto rect = layout_space_reserve();
+  if (rect.empty_area() || text.empty()) {
     return;
   }
 
   auto const glyphs = utf8_to_unicode(text);
   auto const glyphs_length = static_cast<int>(glyphs.size());
 
-  if (auto const width = rect.get_width(); glyphs_length < width) {
-    rect.max.x -= (width - glyphs_length);
-  }
+  rect.width = std::min<int>(glyphs_length, rect.width);
+  rect.height = 1;
 
   // TODO
   auto const hovered = is_mouse_hovering_rect(rect);
   auto const clicked = is_mouse_pressed(im_mouse_button_id::left);
   auto const style = make_style(hovered ? (clicked ? 0x99ffee_c : 0xff9999_c) : 0xee6666_c);
 
-  if (auto const width = rect.get_width(); glyphs_length > width) {
-    draw_text(rect.min.x, rect.min.y, glyphs.subspan(0, width), style);
+  if (glyphs_length > rect.width) {
+    draw_text(rect.get_pos(), glyphs.subspan(0, rect.width), style);
   } else {
-    draw_text(rect.min.x, rect.min.y, glyphs, style);
+    draw_text(rect.get_pos(), glyphs, style);
   }
 
-  commit_space(rect.get_height());
+  layout_space_commit(1);
 }
 
 void show_debug() {
@@ -208,11 +205,27 @@ void show_debug() {
   assert(ctx);
 
   auto const& mouse = ctx->input.mouse;
-  label("mouse-pos: ({}, {})", mouse.pos.x, mouse.pos.y);
-  label("mouse-prev: ({}, {})", mouse.prev.x, mouse.prev.y);
-
   auto const window_size = get_window_size();
+
+  layout_row_begin(0, 3);
+  layout_row_push(0.25f);
+  label("mouse-pos: ({}, {})", mouse.pos.x, mouse.pos.y);
+  layout_row_end();
+
+  layout_row_begin(0, 3);
+  layout_row_push(0.25f);
+  layout_row_push(0.50f);
+  label("mouse-prev: ({}, {})", mouse.prev.x, mouse.prev.y);
+  layout_row_push(0.25f);
+  label("-");
+  layout_row_end();
+
+  layout_row_begin(0, 3);
+  layout_row_push(0.75f);
+  label("-");
+  layout_row_push(0.25f);
   label("screen: ({}, {})", window_size.x, window_size.y);
+  layout_row_end();
 }
 
 } // namespace xxx::v2

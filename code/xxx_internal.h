@@ -4,12 +4,14 @@
 #pragma once
 
 #include <array>
+#include <cassert>
+#include <memory>
 #include <utility>
-#include <vector>
 
 #include <termbox2.h>
 
 #include "xxx2.h"
+#include "xxx_fixed_vector.h"
 
 namespace xxx::v2 {
 
@@ -26,25 +28,24 @@ using clock = std::chrono::steady_clock;
 // layout
 // ------------------------------------
 struct im_row_layout {
-  int height;
-  int min_height;
-  int filled_width;
-  std::size_t columns;
-  std::size_t column;
+  int filled_width; // row filled width
+  int index;        // next column index
+  int columns;      // columns count
 };
 
 enum class im_layout_type { container, row, column };
 
-struct im_layout {
-  im_vec2 pos;
-  im_vec2 size;
-  im_vec2 filled;
-  std::size_t columns;
-  std::size_t column;
+// |-------|
+// |-------|
+// |---    |
+// filled_x -> 3
+// filled_y -> 2
 
+struct im_layout {
   // new version
   im_layout_type type;
   im_rect bounds;
+  int filled_height;
   im_row_layout row;
 };
 
@@ -88,7 +89,7 @@ struct im_input {
 // ------------------------------------
 struct im_context {
   im_input input;
-  std::vector<im_layout> layouts_stack;
+  im_fixed_vector<im_layout> layouts_stack;
 };
 
 [[nodiscard]] inline auto get_context() -> im_context* {

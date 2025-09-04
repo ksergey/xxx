@@ -7,8 +7,13 @@
 
 namespace xxx::v2 {
 
-void clear_layout();
-auto reserve_space(int height) -> im_rect;
-void commit_space(int height);
+void layout_reset();
+
+[[nodiscard]] auto layout_space_reserve() -> im_rect;
+void layout_space_commit(int height);
+
+void layout_row_begin(int height, std::size_t columns);
+void layout_row_push(float ratio_or_width);
+void layout_row_end();
 
 } // namespace xxx::v2
