@@ -20,9 +20,13 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
 
       xxx::new_frame();
 
-      xxx::show_debug();
+      xxx::debug();
       xxx::label("🔑 hello 🔒");
+      xxx::label("");
 
+      auto bounds = xxx::layout_get_space_bounds();
+      xxx::label("space bound: ({}, {}, {}, {})", bounds.x, bounds.y, bounds.width, bounds.height);
+      xxx::debug_rect();
       xxx::render();
     }
 

@@ -99,6 +99,10 @@ auto get_window_size() -> im_vec2 {
   return layouts_stack.front().bounds.get_size();
 }
 
+[[nodiscard]] auto layout_get_space_bounds() -> im_rect {
+  return layout_space_prepare();
+}
+
 void init() {
   // TODO: return std::expected?
 
@@ -175,7 +179,7 @@ void render() {
 }
 
 void label(std::string_view text) {
-  auto rect = layout_space_reserve();
+  auto rect = layout_space_prepare();
   if (rect.empty_area() || text.empty()) {
     return;
   }
@@ -189,18 +193,18 @@ void label(std::string_view text) {
   // TODO
   auto const hovered = is_mouse_hovering_rect(rect);
   auto const clicked = is_mouse_pressed(im_mouse_button_id::left);
-  auto const style = make_style(hovered ? (clicked ? 0x99ffee_c : 0xff9999_c) : 0xee6666_c);
+  auto const style = im_style(hovered ? (clicked ? 0x99ffee_c : 0xff9999_c) : 0xee6666_c);
 
   if (glyphs_length > rect.width) {
-    draw_text(rect.get_pos(), glyphs.subspan(0, rect.width), style);
+    basic_drawer().draw_text(rect.get_pos(), glyphs.subspan(0, rect.width), style);
   } else {
-    draw_text(rect.get_pos(), glyphs, style);
+    basic_drawer().draw_text(rect.get_pos(), glyphs, style);
   }
 
   layout_space_commit(1);
 }
 
-void show_debug() {
+void debug() {
   auto const ctx = get_context();
   assert(ctx);
 
@@ -209,6 +213,7 @@ void show_debug() {
 
   layout_row_begin(0, 3);
   layout_row_push(0.25f);
+  layout_set_min_height(3);
   label("mouse-pos: ({}, {})", mouse.pos.x, mouse.pos.y);
   layout_row_end();
 
@@ -226,6 +231,18 @@ void show_debug() {
   layout_row_push(0.25f);
   label("screen: ({}, {})", window_size.x, window_size.y);
   layout_row_end();
+}
+
+void debug_rect() {
+  auto const bounds = layout_space_prepare().adjusted_bottom(-1);
+  auto const style = im_style(get_default_color(), 0x222222_c);
+
+  basic_drawer().draw_hline(bounds.top_left(), bounds.width, '-', style);
+  basic_drawer().draw_hline(bounds.bottom_left(), bounds.width, '-', style);
+  basic_drawer().draw_vline(
+      bounds.adjusted_left(-bounds.width / 2).adjusted_top(-1).top_left(), bounds.height - 1, '|', style);
+
+  layout_space_commit(bounds.height);
 }
 
 } // namespace xxx::v2

@@ -7,17 +7,6 @@
 #include <cmath>
 
 namespace xxx::v2 {
-namespace {
-
-constexpr auto consume_top(im_rect const& rect, int height) noexcept -> im_rect {
-  return im_rect(rect.x, rect.y + height, rect.width, rect.height - height);
-}
-
-constexpr auto consume_left(im_rect const& rect, int width) noexcept -> im_rect {
-  return im_rect(rect.x + width, rect.y, rect.width - width, rect.height);
-}
-
-} // namespace
 
 void layout_reset() {
   auto const ctx = get_context();
@@ -29,20 +18,35 @@ void layout_reset() {
   auto& layout = layouts_stack.emplace_back();
   layout.type = im_layout_type::container;
   layout.bounds = im_rect(0, 0, ::tb_width(), tb_height());
+  layout.min_height = 0;
   layout.filled_height = 0;
   layout.row.filled_width = 0;
   layout.row.index = 0;
   layout.row.columns = 0;
 }
 
-auto layout_space_reserve() -> im_rect {
+auto layout_space_prepare(int height) -> im_rect {
   auto const ctx = get_context();
   assert(ctx);
 
   auto& layouts_stack = ctx->layouts_stack;
   auto& layout = layouts_stack.back();
 
-  return consume_top(layout.bounds, layout.filled_height);
+  auto rect = layout.bounds.adjusted_top(-layout.filled_height);
+  if (height > 0) {
+    rect.height = std::min<int>(height, rect.height);
+  }
+  return rect;
+}
+
+void layout_set_min_height(int height) {
+  auto const ctx = get_context();
+  assert(ctx);
+
+  auto& layouts_stack = ctx->layouts_stack;
+  auto& layout = layouts_stack.back();
+
+  layout.min_height = height;
 }
 
 void layout_space_commit(int height) {
@@ -71,10 +75,11 @@ void layout_row_begin(int height, std::size_t columns) {
   auto& row_layout = layouts_stack.emplace_back();
 
   row_layout.type = im_layout_type::row;
-  row_layout.bounds = consume_top(container_layout.bounds, container_layout.filled_height);
+  row_layout.bounds = container_layout.bounds.adjusted_top(-container_layout.filled_height);
   if (height > 0) {
-    row_layout.bounds.height = std::min<int>(row_layout.bounds.height, height);
+    row_layout.bounds.height = std::min<int>(height, row_layout.bounds.height);
   }
+  row_layout.min_height = 0;
   row_layout.filled_height = 0;
   row_layout.row.filled_width = 0;
   row_layout.row.index = 0;
@@ -82,7 +87,7 @@ void layout_row_begin(int height, std::size_t columns) {
 }
 
 void layout_row_push(float ratio_or_width) {
-  ratio_or_width = std::max<float>(ratio_or_width, 0.0f);
+  ratio_or_width = std::max<float>(0.0f, ratio_or_width);
 
   auto const ctx = get_context();
   assert(ctx);
@@ -93,7 +98,7 @@ void layout_row_push(float ratio_or_width) {
   int filled_width = 0;
 
   if (auto& column_layout = layouts_stack.back(); column_layout.type == im_layout_type::column) {
-    filled_height = column_layout.filled_height;
+    filled_height = std::max<int>(column_layout.filled_height, column_layout.min_height);
     filled_width = column_layout.bounds.width;
     layouts_stack.pop_back();
   }
@@ -108,7 +113,7 @@ void layout_row_push(float ratio_or_width) {
     return;
   }
 
-  row_layout.filled_height = std::max<int>(row_layout.filled_height, filled_height);
+  row_layout.filled_height = std::max<int>(filled_height, row_layout.filled_height);
   row_layout.row.filled_width += filled_width;
   assert(row_layout.row.filled_width <= row_layout.bounds.width);
 
@@ -117,8 +122,9 @@ void layout_row_push(float ratio_or_width) {
 
   auto& column_layout = layouts_stack.emplace_back();
   column_layout.type = im_layout_type::column;
-  column_layout.bounds = consume_left(row_layout.bounds, row_layout.row.filled_width);
+  column_layout.bounds = row_layout.bounds.adjusted_left(-row_layout.row.filled_width);
   column_layout.bounds.width = std::min<int>(width, column_layout.bounds.width);
+  column_layout.min_height = 0;
   column_layout.filled_height = 0;
   column_layout.row.filled_width = 0;
   column_layout.row.index = 0;
@@ -136,7 +142,7 @@ void layout_row_end() {
   int filled_height = 0;
 
   if (auto& column_layout = layouts_stack.back(); column_layout.type == im_layout_type::column) {
-    filled_height = column_layout.filled_height;
+    filled_height = std::max<int>(column_layout.filled_height, column_layout.min_height);
     layouts_stack.pop_back();
   }
 
@@ -146,7 +152,7 @@ void layout_row_end() {
     return;
   }
 
-  filled_height = std::max<int>(row_layout.filled_height, filled_height);
+  filled_height = std::max<int>({row_layout.filled_height, row_layout.min_height, filled_height});
   layouts_stack.pop_back();
 
   auto& container_layout = layouts_stack.back();

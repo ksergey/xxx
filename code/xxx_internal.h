@@ -15,43 +15,18 @@
 
 namespace xxx::v2 {
 
-static_assert(std::is_same_v<uintattr_t, std::uint64_t>, "termbox2 invalid configuration");
-
-// ------------------------------------
+// ----------------------------------------------------------------------------
 // common
-// ------------------------------------
+// ----------------------------------------------------------------------------
+
+static_assert(std::is_same_v<uintattr_t, std::uint64_t>, "termbox2 invalid configuration");
 
 // clock type
 using clock = std::chrono::steady_clock;
 
-// ------------------------------------
-// layout
-// ------------------------------------
-struct im_row_layout {
-  int filled_width; // row filled width
-  int index;        // next column index
-  int columns;      // columns count
-};
-
-enum class im_layout_type { container, row, column };
-
-// |-------|
-// |-------|
-// |---    |
-// filled_x -> 3
-// filled_y -> 2
-
-struct im_layout {
-  // new version
-  im_layout_type type;
-  im_rect bounds;
-  int filled_height;
-  im_row_layout row;
-};
-
-// ------------------------------------
+// ----------------------------------------------------------------------------
 // input
-// ------------------------------------
+// ----------------------------------------------------------------------------
 struct im_key_state {
   std::size_t clicked = 0;
 };
@@ -68,6 +43,7 @@ struct im_keyboard {
 struct im_mouse_button_state {
   std::size_t clicked;
   im_vec2 clicked_pos;
+  // TODO: down? see TB_KEY_MOUSE_RELEASE
 };
 
 struct im_mouse {
@@ -84,9 +60,28 @@ struct im_input {
   im_mouse mouse;
 };
 
-// ------------------------------------
+// ----------------------------------------------------------------------------
+// layout
+// ----------------------------------------------------------------------------
+struct im_row_layout {
+  int filled_width; // row filled width
+  int index;        // next column index
+  int columns;      // columns count
+};
+
+enum class im_layout_type { container, row, column };
+
+struct im_layout {
+  im_layout_type type;
+  im_rect bounds;
+  int min_height;
+  int filled_height;
+  im_row_layout row;
+};
+
+// ----------------------------------------------------------------------------
 // context
-// ------------------------------------
+// ----------------------------------------------------------------------------
 struct im_context {
   im_input input;
   im_fixed_vector<im_layout> layouts_stack;

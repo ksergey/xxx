@@ -7,10 +7,14 @@
 
 namespace xxx::v2 {
 
+// reset
 void layout_reset();
 
-[[nodiscard]] auto layout_space_reserve() -> im_rect;
+[[nodiscard]] auto layout_space_prepare(int height = 0) -> im_rect;
 void layout_space_commit(int height);
+
+// set layout minimal height
+void layout_set_min_height(int height);
 
 void layout_row_begin(int height, std::size_t columns);
 void layout_row_push(float ratio_or_width);
