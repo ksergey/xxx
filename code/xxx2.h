@@ -35,10 +35,10 @@ struct im_vec2 {
 };
 
 struct im_rect {
-  int x;
-  int y;
-  int width;
-  int height;
+  int x = 0;
+  int y = 0;
+  int width = 0;
+  int height = 0;
 
   constexpr im_rect() = default;
   constexpr im_rect(int x0, int y0, int width0, int height0) noexcept : x(x0), y(y0), width(width0), height(height0) {}
