@@ -25,7 +25,8 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       xxx::label("");
 
       auto bounds = xxx::layout_get_space_bounds();
-      xxx::label("space bound: ({}, {}, {}, {})", bounds.x, bounds.y, bounds.width, bounds.height);
+      xxx::label("space bound: (({}, {}), ({}, {}))", bounds.min.x, bounds.min.y, bounds.max.x, bounds.max.y);
+      xxx::debug_xxx();
       xxx::debug_rect();
       xxx::render();
     }

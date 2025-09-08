@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <format>
@@ -35,59 +36,68 @@ struct im_vec2 {
 };
 
 struct im_rect {
-  int x = 0;
-  int y = 0;
-  int width = 0;
-  int height = 0;
+  im_vec2 min; // top-left
+  im_vec2 max; // bottom-right
 
   constexpr im_rect() = default;
-  constexpr im_rect(int x0, int y0, int width0, int height0) noexcept : x(x0), y(y0), width(width0), height(height0) {}
-  constexpr im_rect(im_vec2 const& min, im_vec2 const& max) noexcept
-      : x(min.x), y(min.y), width(max.x - min.x), height(max.y - min.y) {}
+  constexpr im_rect(im_vec2 const& mi, im_vec2 const& ma) noexcept : min(mi), max(ma) {}
+  constexpr im_rect(int x1, int y1, int x2, int y2) noexcept : min(x1, y1), max(x2, y2) {}
 
   constexpr auto operator<=>(im_rect const&) const noexcept = default;
 
-  [[nodiscard]] constexpr auto top_left() const noexcept -> im_vec2 {
-    return im_vec2{x, y};
-  }
-  [[nodiscard]] constexpr auto top_right() const noexcept -> im_vec2 {
-    return im_vec2{x + width, y};
-  }
-  [[nodiscard]] constexpr auto bottom_left() const noexcept -> im_vec2 {
-    return im_vec2{x, y + height};
-  }
-  [[nodiscard]] constexpr auto bottom_right() const noexcept -> im_vec2 {
-    return im_vec2{x + width, y + height};
-  }
   [[nodiscard]] constexpr auto get_pos() const noexcept -> im_vec2 {
-    return im_vec2{x, y};
+    return min;
   }
   [[nodiscard]] constexpr auto get_center() const noexcept -> im_vec2 {
-    return im_vec2{x + width / 2, y + height / 2};
+    return im_vec2((min.x + max.x) / 2, (min.y + max.y) / 2);
   }
   [[nodiscard]] constexpr auto get_size() const noexcept -> im_vec2 {
-    return im_vec2{width, height};
+    return max - min;
+  }
+  [[nodiscard]] constexpr auto get_width() const noexcept -> int {
+    return max.x - min.x;
+  }
+  [[nodiscard]] constexpr auto get_height() const noexcept -> int {
+    return max.y - min.y;
+  }
+  [[nodiscard]] constexpr auto get_area() const noexcept -> int {
+    return this->get_width() * this->get_height();
+  }
+  [[nodiscard]] constexpr auto top_left() const noexcept -> im_vec2 {
+    return min;
+  }
+  [[nodiscard]] constexpr auto top_right() const noexcept -> im_vec2 {
+    return im_vec2{max.x, min.y};
+  }
+  [[nodiscard]] constexpr auto bottom_left() const noexcept -> im_vec2 {
+    return im_vec2{min.x, max.y};
+  }
+  [[nodiscard]] constexpr auto bottom_right() const noexcept -> im_vec2 {
+    return max;
   }
   [[nodiscard]] constexpr auto contains(im_vec2 const& p) const noexcept -> bool {
-    auto const min = this->top_left();
-    auto const max = this->bottom_right();
     return p.x >= min.x && p.y >= min.y && p.x < max.x && p.y < max.y;
   }
   [[nodiscard]] constexpr auto contains(im_rect const& r) const noexcept -> bool {
-    auto const min = this->top_left();
-    auto const max = this->bottom_right();
-    auto const r_min = r.top_left();
-    auto const r_max = r.bottom_right();
-    return r_min.x >= min.x && r_min.y >= min.y && r_max.x <= max.x && r_max.y <= max.y;
+    return r.min.x >= min.x && r.min.y >= min.y && r.max.x <= max.x && r.max.y <= max.y;
   }
   [[nodiscard]] constexpr auto empty_area() const noexcept -> bool {
-    return width == 0 || height == 0;
+    return (min.x == max.x) || (min.y == max.y);
+  }
+  constexpr void set_size(im_vec2 const& value) noexcept {
+    max = min + value;
+  }
+  constexpr void set_width(int value) noexcept {
+    max.x = min.x + value;
+  }
+  constexpr void set_height(int value) noexcept {
+    max.y = min.y + value;
   }
   [[nodiscard]] constexpr auto adjusted(int value) const noexcept -> im_rect {
     return this->adjusted(value, value, value, value);
   }
   [[nodiscard]] constexpr auto adjusted(int left, int top, int right, int bottom) const noexcept -> im_rect {
-    return im_rect(x - left, y - top, width + left + right, height + top + bottom);
+    return im_rect(min.x - left, min.y - top, max.x + right, max.y + bottom);
   }
   [[nodiscard]] constexpr auto adjusted_left(int value) const noexcept -> im_rect {
     return this->adjusted(value, 0, 0, 0);
@@ -100,6 +110,17 @@ struct im_rect {
   }
   [[nodiscard]] constexpr auto adjusted_bottom(int value) const noexcept -> im_rect {
     return this->adjusted(0, 0, 0, value);
+  }
+  [[nodiscard]] constexpr auto intersection(im_rect const& r) const noexcept -> im_rect {
+    auto min = this->top_left();
+    auto max = this->bottom_right();
+    auto r_min = r.top_left();
+    auto r_max = r.bottom_right();
+    return im_rect(im_vec2(std::clamp(min.x, r_min.x, r_max.x), std::clamp(min.y, r_min.y, r_max.y)),
+        im_vec2(std::clamp(max.x, r_min.x, r_max.x), std::clamp(max.y, r_min.y, r_max.y)));
+  }
+  [[nodiscard]] constexpr auto translated(im_vec2 const& t) const noexcept -> im_rect {
+    return im_rect(min + t, max + t);
   }
 };
 
@@ -199,6 +220,7 @@ void label(std::format_string<Ts...> fmt, Ts&&... args) {
 }
 
 void debug();
+void debug_xxx();
 void debug_rect();
 
 } // namespace v2

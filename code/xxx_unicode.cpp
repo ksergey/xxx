@@ -1,7 +1,7 @@
 // Copyright (c) Sergey Kovalevich <inndie@gmail.com>
 // SPDX-License-Identifier: AGPL-3.0
 
-#include "xxx_unicode.h"
+#include "xxx_internal.h"
 
 #include <vector>
 

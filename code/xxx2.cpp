@@ -8,12 +8,7 @@
 #include <stdexcept>
 #include <vector>
 
-#include "xxx_draw.h"
-#include "xxx_drawer.h"
-#include "xxx_input.h"
 #include "xxx_internal.h"
-#include "xxx_layout.h"
-#include "xxx_unicode.h"
 
 namespace xxx::v2 {
 namespace {
@@ -21,31 +16,31 @@ namespace {
 void handle_terminal_key_event(::tb_event const& event) {
   switch (event.key) {
   case TB_KEY_TAB:
-    return add_key_event(im_key_id::tab);
+    return input_add_key_event(im_key_id::tab);
   case TB_KEY_ENTER:
-    return add_key_event(im_key_id::enter);
+    return input_add_key_event(im_key_id::enter);
   case TB_KEY_ESC:
-    return add_key_event(im_key_id::esc);
+    return input_add_key_event(im_key_id::esc);
   case TB_KEY_CTRL_Q:
-    return add_key_event(im_key_id::quit);
+    return input_add_key_event(im_key_id::quit);
   case TB_KEY_CTRL_C:
-    return add_key_event(im_key_id::quit);
+    return input_add_key_event(im_key_id::quit);
   default:
     break;
   }
 }
 
 void handle_terminal_mouse_event(::tb_event const& event) {
-  add_mouse_pos_event(event.x, event.y);
+  input_add_mouse_pos_event(event.x, event.y);
 
   if (event.key > 0) {
     switch (event.key) {
     case TB_KEY_MOUSE_LEFT:
-      return add_mouse_button_event(im_mouse_button_id::left, event.x, event.y);
+      return input_add_mouse_button_event(im_mouse_button_id::left, event.x, event.y);
     case TB_KEY_MOUSE_RIGHT:
-      return add_mouse_button_event(im_mouse_button_id::right, event.x, event.y);
+      return input_add_mouse_button_event(im_mouse_button_id::right, event.x, event.y);
     case TB_KEY_MOUSE_MIDDLE:
-      return add_mouse_button_event(im_mouse_button_id::middle, event.x, event.y);
+      return input_add_mouse_button_event(im_mouse_button_id::middle, event.x, event.y);
     default:
       break;
     }
@@ -94,10 +89,10 @@ auto get_window_size() -> im_vec2 {
   auto const ctx = get_context();
   assert(ctx);
 
-  auto const& layouts_stack = ctx->layouts_stack;
-  assert(!layouts_stack.empty());
+  auto const& layout_stack = ctx->layout_stack;
+  assert(!layout_stack.empty());
 
-  return layouts_stack.front().bounds.get_size();
+  return layout_stack.front().bounds.get_size();
 }
 
 [[nodiscard]] auto layout_get_space_bounds() -> im_rect {
@@ -105,11 +100,12 @@ auto get_window_size() -> im_vec2 {
 }
 
 void init() {
-  // TODO: return std::expected?
-
   auto const ctx = get_context();
   assert(ctx);
-  ctx->layouts_stack = im_fixed_vector<im_layout>(64);
+
+  ctx->layout_stack = im_fixed_vector<im_layout>(64);
+  ctx->clip_rect_stack = im_fixed_vector<im_rect>(64);
+  ctx->translate_stack = im_fixed_vector<im_vec2>(64);
 
   // init termbox2 library
   if (auto const rc = ::tb_init(); rc != TB_OK) {
@@ -129,8 +125,8 @@ void poll_terminal_events(std::chrono::milliseconds timeout) {
   auto const start = clock::now();
   auto const expiration = start + timeout;
 
-  clear_input_keys();
-  clear_input_mouse();
+  input_clear_keys();
+  input_clear_mouse();
 
   ::tb_event event;
   while (true) {
@@ -139,7 +135,7 @@ void poll_terminal_events(std::chrono::milliseconds timeout) {
       switch (event.type) {
       case TB_EVENT_KEY: {
         if (event.ch > 0) {
-          add_input_character(event.ch);
+          input_add_character(event.ch);
         } else if (event.key > 0) {
           handle_terminal_key_event(event);
         }
@@ -151,7 +147,7 @@ void poll_terminal_events(std::chrono::milliseconds timeout) {
       } break;
       default:
         break;
-      };
+      }
     } else if (rc == TB_ERR_NO_EVENT) {
       // nothing to do
     } else if (rc == TB_ERR_POLL) {
@@ -170,39 +166,33 @@ void poll_terminal_events(std::chrono::milliseconds timeout) {
 }
 
 void new_frame() {
-  layout_reset();
+  auto const ctx = get_context();
+  assert(ctx);
+
+  auto& layout_stack = ctx->layout_stack;
+  layout_stack.resize(1);
+  auto& layout = layout_stack.back();
+  layout.type = im_layout_type::container;
+  layout.bounds = im_rect(0, 0, ::tb_width(), ::tb_height());
+  layout.min_height = 0;
+  layout.filled_height = 0;
+  layout.row.filled_width = 0;
+  layout.row.index = 0;
+  layout.row.columns = 0;
+
+  auto& clip_rect_stack = ctx->clip_rect_stack;
+  clip_rect_stack.resize(1);
+  clip_rect_stack.back() = im_rect(0, 0, ::tb_width(), ::tb_height());
+
+  auto& translate_stack = ctx->translate_stack;
+  translate_stack.resize(1);
+  translate_stack.back() = im_vec2(0, 0);
 
   ::tb_clear();
 }
 
 void render() {
   ::tb_present();
-}
-
-void label(std::string_view text) {
-  auto rect = layout_space_prepare();
-  if (rect.empty_area() || text.empty()) {
-    return;
-  }
-
-  auto const glyphs = utf8_to_unicode(text);
-  auto const glyphs_length = static_cast<int>(glyphs.size());
-
-  rect.width = std::min<int>(glyphs_length, rect.width);
-  rect.height = 1;
-
-  // TODO
-  auto const hovered = is_mouse_hovering_rect(rect);
-  auto const clicked = is_mouse_pressed(im_mouse_button_id::left);
-  auto const style = im_style(hovered ? (clicked ? 0x99ffee_c : 0xff9999_c) : 0xee6666_c);
-
-  if (glyphs_length > rect.width) {
-    basic_drawer().draw_text(rect.get_pos(), glyphs.subspan(0, rect.width), style);
-  } else {
-    basic_drawer().draw_text(rect.get_pos(), glyphs, style);
-  }
-
-  layout_space_commit(1);
 }
 
 void debug() {
@@ -234,16 +224,68 @@ void debug() {
   layout_row_end();
 }
 
+void debug_xxx() {
+  {
+    auto rect = layout_space_prepare();
+    if (rect.empty_area()) {
+      return;
+    }
+
+    auto rect1 = im_rect(0, 0, 10, 5);
+    auto rect2 = im_rect(10, 0, 20, 5);
+
+    auto const style1 = im_style(0xee99ff_c, 0x333333_c);
+    auto const style2 = im_style(0xee99ff_c, 0x111133_c);
+
+    auto clip_rect = rect;
+    clip_rect.min.x += 1;
+    clip_rect.min.y += 1;
+    clip_rect.max.x = clip_rect.min.x + 12;
+    clip_rect.max.y = clip_rect.min.y + 2;
+
+    translate_push(rect.top_left());
+    clip_rect_push(clip_rect);
+
+    draw_fill_rect(rect1, '.', style1);
+    draw_fill_rect(rect2, '.', style2);
+
+    clip_rect_pop();
+    translate_pop();
+
+    layout_space_commit(7);
+  }
+
+  {
+    auto rect = layout_space_prepare();
+    if (rect.empty_area()) {
+      return;
+    }
+
+    auto clip_rect = rect;
+    clip_rect.min.x += 5;
+    clip_rect.max.x = clip_rect.min.x + 3;
+
+    auto const glyphs = utf8_to_unicode("aabbccddeeff");
+    auto const style = im_style(0xcceeaa_c, 0x113344_c);
+
+    clip_rect_push(clip_rect);
+    draw_text(rect.get_pos(), glyphs, style);
+    clip_rect_pop();
+
+    layout_space_commit(1);
+  }
+}
+
 void debug_rect() {
   auto const bounds = layout_space_prepare().adjusted_bottom(-1);
   auto const style = im_style(get_default_color(), 0x222222_c);
 
-  basic_drawer().draw_hline(bounds.top_left(), bounds.width, '-', style);
-  basic_drawer().draw_hline(bounds.bottom_left(), bounds.width, '-', style);
-  basic_drawer().draw_vline(
-      bounds.adjusted_left(-bounds.width / 2).adjusted_top(-1).top_left(), bounds.height - 1, '|', style);
+  draw_hline(bounds.top_left(), bounds.get_width(), '-', style);
+  draw_hline(bounds.bottom_left(), bounds.get_width(), '-', style);
+  draw_vline(
+      bounds.adjusted_left(-bounds.get_width() / 2).adjusted_top(-1).top_left(), bounds.get_height() - 1, '|', style);
 
-  layout_space_commit(bounds.height);
+  layout_space_commit(bounds.get_height());
 }
 
 } // namespace xxx::v2

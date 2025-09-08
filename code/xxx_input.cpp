@@ -1,15 +1,13 @@
 // Copyright (c) Sergey Kovalevich <inndie@gmail.com>
 // SPDX-License-Identifier: AGPL-3.0
 
-#include "xxx_input.h"
+#include "xxx_internal.h"
 
 #include <cassert>
 
-#include "xxx_unicode.h"
-
 namespace xxx::v2 {
 
-void add_key_event(im_key_id id) {
+void input_add_key_event(im_key_id id) {
   assert(id < im_key_id::last);
 
   auto const ctx = get_context();
@@ -19,7 +17,7 @@ void add_key_event(im_key_id id) {
   keyboard.keys[static_cast<std::size_t>(id)].clicked++;
 }
 
-void add_mouse_pos_event(int x, int y) {
+void input_add_mouse_pos_event(int x, int y) {
   auto const ctx = get_context();
   assert(ctx);
 
@@ -28,7 +26,7 @@ void add_mouse_pos_event(int x, int y) {
   mouse.delta = mouse.pos - mouse.prev;
 }
 
-void add_mouse_button_event(im_mouse_button_id id, int x, int y) {
+void input_add_mouse_button_event(im_mouse_button_id id, int x, int y) {
   assert(id < im_mouse_button_id::last);
 
   auto const ctx = get_context();
@@ -41,7 +39,7 @@ void add_mouse_button_event(im_mouse_button_id id, int x, int y) {
   mouse.delta = im_vec2{0, 0};
 }
 
-void add_input_character(std::uint32_t ch) {
+void input_add_character(std::uint32_t ch) {
   auto const ctx = get_context();
   assert(ctx);
 
@@ -51,13 +49,13 @@ void add_input_character(std::uint32_t ch) {
   }
 }
 
-void add_input_characters_utf8(char const* str) {
+void input_add_characters_utf8(char const* str) {
   for (auto const ch : utf8_to_unicode(str)) {
-    add_input_character(ch);
+    input_add_character(ch);
   }
 }
 
-void clear_input_keys() {
+void input_clear_keys() {
   auto const ctx = get_context();
   assert(ctx);
 
@@ -66,7 +64,7 @@ void clear_input_keys() {
   keyboard.text_length = 0;
 }
 
-void clear_input_mouse() {
+void input_clear_mouse() {
   auto const ctx = get_context();
   assert(ctx);
 
