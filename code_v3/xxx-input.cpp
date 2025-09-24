@@ -65,11 +65,6 @@ void input_reset() {
   auto& keyboard = ctx->input.keyboard;
   keyboard.keys.fill(im_key_state{.clicked = 0});
   keyboard.text_length = 0;
-}
-
-void input_clear_mouse() {
-  auto const ctx = get_context();
-  assert(ctx);
 
   auto& mouse = ctx->input.mouse;
   mouse.buttons.fill(im_mouse_button_state{.clicked = 0, .clicked_pos = im_vec2(0, 0)});

@@ -11,6 +11,8 @@
 
 #include <termbox2.h>
 
+#include "hash.h"
+#include "xxx-renderer.h"
 #include "xxx-stack.h"
 #include "xxx.h"
 
@@ -53,31 +55,65 @@ struct im_input {
   im_mouse mouse;
 };
 
-struct im_style {
-  std::uint64_t fg = TB_DEFAULT;
-  std::uint64_t bg = TB_DEFAULT;
-
-  constexpr im_style() = default;
-  constexpr im_style(im_color fg0, im_color bg0 = im_color(TB_DEFAULT)) noexcept
-      : fg(static_cast<std::uint64_t>(fg0)), bg(static_cast<std::uint64_t>(bg0)) {}
+struct im_layout_row {
+  int columns; // columns count
+  int index;   // current column index
 };
+
+struct im_layout_none {};
 
 enum class im_layout_type { container, column, row };
 
 struct im_layout {
-  im_layout_type type = im_layout_type::container;
-  im_rect bounds;
-  im_vec2 at;
+  im_layout_type type; // layout type
+  im_rect bounds;      // layout bounds (global)
+
+  union {
+    im_layout_row row;
+    im_layout_none none;
+  };
+};
+
+struct im_color_state {
+  im_color_id id;
+  im_color color;
 };
 
 struct im_context {
+  static constexpr auto max_color_states = std::to_underlying(im_color_id::last);
+
   im_input input;
-  im_stack<im_layout> layouts;
+  im_vec2 cursor;
+  im_stack<im_layout> layout_stack;
+  im_stack<im_vec2> cursor_stack;
+  im_stack<im_color_state> color_state_stack;
+  im_stack<std::uint32_t> hash_stack;
+
+  std::array<im_color, max_color_states> colors;
+
+  std::uint32_t next_focused_widget_id;
+  std::uint32_t prev_focused_widget_id;
+  std::uint32_t focused_widget_id;
+
+  struct {
+    std::uint32_t widget_id;
+    im_rect bounds;
+    bool visible;
+    bool focused;
+    bool hovered;
+    bool pressed;
+  } widget;
+
+  im_renderer renderer;
 };
 
 [[nodiscard]] inline auto get_context() -> im_context* {
   static im_context instance;
   return &instance;
+}
+
+[[nodiscard]] inline auto get_id(std::string_view str) noexcept -> std::uint32_t {
+  return hash(str, get_context()->hash_stack.back());
 }
 
 } // namespace xxx

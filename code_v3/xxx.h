@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <format>
+#include <string_view>
 
 namespace xxx {
 
@@ -39,8 +41,8 @@ struct im_vec2 {
 
 // helper: aligned bounding-box
 struct im_rect {
-  im_vec2 min = im_vec2(0, 0); // top-left (included)
-  im_vec2 max = im_vec2(0, 0); // bottom-right (included)
+  im_vec2 min = im_vec2(0, 0);   // top-left (included)
+  im_vec2 max = im_vec2(-1, -1); // bottom-right (included)
 
   constexpr im_rect() = default;
 
@@ -48,11 +50,17 @@ struct im_rect {
 
   constexpr im_rect(int x0, int y0, int x1, int y1) noexcept : min{x0, y0}, max{x1, y1} {}
 
-  [[nodiscard]] constexpr auto valid() const noexcept -> bool {
-    return (min.x <= max.x) && (min.y <= max.y);
+  [[nodiscard]] constexpr operator bool() const noexcept {
+    return !this->empty();
+  }
+  [[nodiscard]] constexpr auto null() const noexcept -> bool {
+    return (min.x - 1 == max.x) && (min.y - 1 == max.y);
   }
   [[nodiscard]] constexpr auto empty() const noexcept -> bool {
     return (min.x > max.x) || (min.y > max.y);
+  }
+  [[nodiscard]] constexpr auto valid() const noexcept -> bool {
+    return (min.x <= max.x) && (min.y <= max.y);
   }
   [[nodiscard]] constexpr auto center() const noexcept -> im_vec2 {
     return im_vec2((min.x + max.x) / 2, (min.y + max.y) / 2);
@@ -60,11 +68,20 @@ struct im_rect {
   [[nodiscard]] constexpr auto size() const noexcept -> im_vec2 {
     return im_vec2(this->width(), this->height());
   }
+  constexpr void set_size(im_vec2 const& s) noexcept {
+    max = min + s - im_vec2(1, 1);
+  }
   [[nodiscard]] constexpr auto width() const noexcept -> int {
     return max.x - min.x + 1;
   }
+  constexpr void set_width(int v) noexcept {
+    max.x = min.x + v - 1;
+  }
   [[nodiscard]] constexpr auto height() const noexcept -> int {
     return max.y - min.y + 1;
+  }
+  constexpr void set_height(int v) noexcept {
+    max.y = min.y + v - 1;
   }
   [[nodiscard]] constexpr auto top_left() const noexcept -> im_vec2 {
     return min;
@@ -85,6 +102,9 @@ struct im_rect {
     return r.min.x >= min.x && r.min.y >= min.y && r.max.x <= max.x && r.max.y <= max.y;
   }
   [[nodiscard]] constexpr auto intersection(im_rect const& r) const noexcept -> im_rect {
+    if (this->null() || r.null()) {
+      return im_rect();
+    }
     auto const& r_min = r.min;
     auto const& r_max = r.max;
     return im_rect(im_vec2(std::clamp(min.x, r_min.x, r_max.x), std::clamp(min.y, r_min.y, r_max.y)),
@@ -92,6 +112,21 @@ struct im_rect {
   }
   [[nodiscard]] constexpr auto translate(im_vec2 const& t) const noexcept -> im_rect {
     return im_rect(min + t, max + t);
+  }
+  [[nodiscard]] constexpr auto crop(int left, int top, int right, int bottom) const noexcept -> im_rect {
+    return im_rect(min.x + left, min.y + top, max.x - right, max.y - bottom);
+  }
+  [[nodiscard]] constexpr auto crop_left(int value) const noexcept -> im_rect {
+    return this->crop(value, 0, 0, 0);
+  }
+  [[nodiscard]] constexpr auto crop_top(int value) const noexcept -> im_rect {
+    return this->crop(0, value, 0, 0);
+  }
+  [[nodiscard]] constexpr auto crop_right(int value) const noexcept -> im_rect {
+    return this->crop(0, 0, value, 0);
+  }
+  [[nodiscard]] constexpr auto crop_bottom(int value) const noexcept -> im_rect {
+    return this->crop(0, 0, 0, value);
   }
 
   constexpr auto operator<=>(im_rect const&) const noexcept = default;
@@ -121,18 +156,20 @@ inline namespace literals {
 }
 
 // keyboard key id
-enum class im_key_id { tab, enter, esc, quit, last };
+enum class im_key_id { tab, enter, esc, space, quit, last };
 
 // mouse button id
 enum class im_mouse_button_id { left, middle, right, last };
 
 } // namespace literals
 
-// default color as terminal configured
-[[nodiscard]] auto get_default_color() noexcept -> im_color;
+// helper: color id
+enum class im_color_id { fg, bg, btn_fg, btn_fg_act, btn_fg_hov, btn_bg, btn_bg_act, btn_bg_hov, last };
+
+constexpr auto init_flags_mouse = int(1 << 0);
 
 // init library
-void init();
+void init(int flags = 0);
 
 // shutdown library
 void shutdown();
@@ -161,6 +198,28 @@ void render();
 // get window bounds
 [[nodiscard]] auto get_window_bounds() -> im_rect;
 
-void debug();
+// set default color
+void set_default_color(im_color_id id, im_color color);
+
+// save current color and set new
+void push_color(im_color_id id, im_color color);
+
+// pop color state
+void pop_color(std::size_t cnt = 1);
+
+// push id state
+void push_id(std::string_view value);
+
+// overload
+void push_id(int value);
+
+// pop id state
+void pop_id();
+
+// widget: label
+void label(std::string_view text);
+
+// widget: button
+auto button(std::string_view text) -> bool;
 
 } // namespace xxx
