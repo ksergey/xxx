@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include <termbox2.h>
 
@@ -29,13 +30,36 @@ struct im_context {
   im_renderer renderer;
 
   struct {
-    std::string current_name; // TODO: should be there?
+    std::string current_title;
+    im_id current_id = im_id();
+    int current_flags = 0;
+    im_id active_id = im_id();
+    im_id force_next_id = im_id();
+    bool active;
+  } view;
+
+  struct {
     im_id current_id = im_id();
     im_id active_id = im_id();
     im_id first_id = im_id();
     im_id next_id = im_id();
     bool active;
-  } view;
+    bool pressed;
+  } widget;
+
+  struct {
+    im_id active_id = im_id();
+    std::vector<std::uint32_t> text;
+    int cursor_pos = 0;
+    int scroll_offset = 0;
+  } text_input;
+
+  struct {
+    int width = 0;
+    int height = 0;
+    im_rect rect;
+    // TODO: buffer
+  } canvas;
 };
 
 im_context* g_ctx = nullptr;

@@ -4,6 +4,7 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 
 #include "xxx.h"
 
@@ -11,19 +12,25 @@
 
 namespace xxx {
 
+// only key or ch
+struct im_input_event {
+  im_key_id key = im_key_id();
+  std::uint32_t ch = 0;
+};
+
 class im_input {
 private:
   struct keyboard_state {
     static constexpr std::size_t max_keys = static_cast<std::size_t>(im_key_id::last);
-    static constexpr std::size_t max_text_input = 16;
+    static constexpr std::size_t input_max_length = 16;
 
     struct key_state {
       std::size_t clicked = 0;
     };
 
     std::array<key_state, max_keys> keys;
-    std::array<std::uint32_t, max_text_input> text;
-    std::size_t text_length = 0;
+    std::array<im_input_event, input_max_length> input_events;
+    std::size_t input_events_length = 0;
   };
 
   struct mouse_state {
@@ -51,9 +58,16 @@ public:
     return keyboard_.keys[static_cast<std::size_t>(id)].clicked > 0;
   }
 
+  [[nodiscard]] auto get_input_events() const noexcept -> std::span<im_input_event const> {
+    return std::span<im_input_event const>(keyboard_.input_events.data(), keyboard_.input_events_length);
+  }
+
   void add_key_event(im_key_id id) noexcept {
     assert(id < im_key_id::last);
     keyboard_.keys[static_cast<std::size_t>(id)].clicked++;
+    if (keyboard_.input_events_length < keyboard_.input_events.size()) {
+      keyboard_.input_events[keyboard_.input_events_length++] = im_input_event{.key = id};
+    }
   }
 
   void add_mouse_pos_event(im_vec2 const& pos) noexcept {
@@ -71,8 +85,8 @@ public:
   }
 
   void add_character(std::uint32_t ch) noexcept {
-    if (keyboard_.text_length < keyboard_.text.size()) {
-      keyboard_.text[keyboard_.text_length++] = ch;
+    if (keyboard_.input_events_length < keyboard_.input_events.size()) {
+      keyboard_.input_events[keyboard_.input_events_length++] = im_input_event{.ch = ch};
     }
   }
 
@@ -84,7 +98,7 @@ public:
 
   void reset() noexcept {
     keyboard_.keys.fill(keyboard_state::key_state{.clicked = 0});
-    keyboard_.text_length = 0;
+    keyboard_.input_events_length = 0;
 
     mouse_.buttons.fill(mouse_state::button_state{.clicked = 0, .clicked_pos = im_vec2(0, 0)});
     mouse_.prev = mouse_.pos;

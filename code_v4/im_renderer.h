@@ -22,6 +22,13 @@ struct im_style {
 
   constexpr im_style() = default;
   constexpr im_style(im_color color_fg, im_color color_bg = im_color()) noexcept : fg(color_fg), bg(color_bg) {}
+
+  [[nodiscard]] constexpr auto with_underline() const noexcept -> im_style {
+    return im_style(im_color(fg | TB_UNDERLINE), im_color(bg));
+  }
+  [[nodiscard]] constexpr auto with_reverse() const noexcept -> im_style {
+    return im_style(im_color(fg | TB_REVERSE), im_color(bg));
+  }
 };
 
 enum class im_halign { left, center, right };
@@ -229,6 +236,7 @@ public:
     this->append_cmd_draw_text(c_rect.min, text, style);
   }
 
+#if 0
   void cmd_draw_text_in_rect(im_rect const& rect, std::span<std::uint32_t const> text, im_style const& style,
       im_halign halign = im_halign::left, im_valign valign = im_valign::top) {
     auto const a_rect = this->adjust(rect);
@@ -303,6 +311,67 @@ public:
     // bottom box
     if (text_max_y + 1 < c_rect.max.y) {
       this->append_cmd_fill_rect(im_rect(c_rect.min.x, text_max_y + 1, c_rect.max.x, c_rect.max.y), ' ', style);
+    }
+  }
+#endif
+
+  void cmd_draw_text_in_rect(im_rect const& rect, std::span<std::uint32_t const> text, im_style const& style,
+      im_halign halign = im_halign::left, im_valign valign = im_valign::top) {
+    auto const a_rect = this->adjust(rect);
+    auto const c_rect = clip_rect_.intersection(a_rect);
+    if (!c_rect) {
+      // nothing to draw
+      return;
+    }
+
+    auto const text_length = static_cast<int>(text.size());
+    auto const rect_width = static_cast<int>(a_rect.width());
+    auto const rect_height = static_cast<int>(a_rect.height());
+
+    int text_min_y;
+    switch (valign) {
+    case im_valign::top:
+      text_min_y = a_rect.min.y;
+      break;
+    case im_valign::center:
+      text_min_y = a_rect.min.y + (rect_height - 1) / 2;
+      break;
+    case im_valign::bottom:
+      text_min_y = a_rect.min.y + (rect_height - 1);
+      break;
+    }
+    auto text_max_y = text_min_y + 1 - 1;
+    auto const invisible = (text_min_y < clip_rect_.min.y) || (text_max_y > clip_rect_.max.y);
+    if (invisible) {
+      // no more actions requires
+      return;
+    }
+
+    int text_min_x;
+    switch (halign) {
+    case im_halign::left:
+      text_min_x = a_rect.min.x;
+      break;
+    case im_halign::center:
+      text_min_x = a_rect.min.x + (rect_width - text_length) / 2;
+      break;
+    case im_halign::right:
+      text_min_x = a_rect.min.x + (rect_width - text_length);
+      break;
+    }
+    auto text_max_x = text_min_x + text_length - 1;
+
+    if (text_min_x < clip_rect_.min.x) {
+      text = text.subspan(clip_rect_.min.x - text_min_x);
+      text_min_x = clip_rect_.min.x;
+    }
+    if (text_max_x > clip_rect_.max.x) {
+      text = text.subspan(0, text.size() - (text_max_x - clip_rect_.max.x));
+      text_max_x = clip_rect_.max.x;
+    }
+
+    if (text_min_x <= text_max_x) {
+      this->append_cmd_draw_text(im_vec2(text_min_x, text_min_y), text, style);
     }
   }
 

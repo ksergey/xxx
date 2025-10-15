@@ -28,7 +28,17 @@ public:
     this->set_default_color(im_color_id::text, {});
     this->set_default_color(im_color_id::background, {});
     this->set_default_color(im_color_id::border, {});
-    this->set_default_color(im_color_id::border_active, 0xeeffcc_c);
+    this->set_default_color(im_color_id::view_border, {});
+    this->set_default_color(im_color_id::view_title, {});
+    this->set_default_color(im_color_id::view_active_border, 0xee3366_c);
+    this->set_default_color(im_color_id::view_active_title, 0x33ee66_c);
+    this->set_default_color(im_color_id::button_label, {});
+    this->set_default_color(im_color_id::button_active_label, 0x3366ee_c);
+    this->set_default_color(im_color_id::input_text, 0x333333_c);
+    this->set_default_color(im_color_id::input_background, 0x333333_c);
+    this->set_default_color(im_color_id::input_active_text, 0x33ff33_c);
+    this->set_default_color(im_color_id::input_background, 0x666666_c);
+    this->set_default_color(im_color_id::input_placeholder, 0x777777_c);
   }
 
   [[nodiscard]] auto get_style(im_color_id fg_id, im_color_id bg_id) const noexcept -> im_style {
