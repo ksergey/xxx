@@ -667,23 +667,25 @@ auto text_input(std::string_view placeholder, std::string& input, [[maybe_unused
         } break;
         case im_key_id::ctrl_w: {
           if (!text_input.text.empty()) {
-            // keep symbol under cursor if non blank
-            if (text_input.cursor_pos > int(text_input.text.size()) ||
-                !std::isblank(text_input.text[text_input.cursor_pos])) {
+            if (auto const text_length = int(text_input.text.size()); text_input.cursor_pos >= text_length) {
+              // on end of input move cursor to last char
+              text_input.cursor_pos = text_length - 1;
+            } else if (!std::isblank(text_input.text[text_input.cursor_pos])) {
+              // keep symbol under cursor if non blank
               text_input.cursor_pos--;
             }
             // drop blanks before cursor
-            while (text_input.cursor_pos >= 0 && !text_input.text.empty() &&
-                   std::isblank(text_input.text[text_input.cursor_pos])) {
+            while (text_input.cursor_pos >= 0 && std::isblank(text_input.text[text_input.cursor_pos])) {
               text_input.text.erase(text_input.text.begin() + text_input.cursor_pos--);
             }
             // drop until blank
-            while (text_input.cursor_pos >= 0 && !text_input.text.empty() &&
-                   !std::isblank(text_input.text[text_input.cursor_pos])) {
+            while (text_input.cursor_pos >= 0 && !std::isblank(text_input.text[text_input.cursor_pos])) {
               text_input.text.erase(text_input.text.begin() + text_input.cursor_pos--);
             }
             if (text_input.cursor_pos < 0) {
               text_input.cursor_pos = 0;
+            } else {
+              text_input.cursor_pos += 1;
             }
             text_changed = true;
           }
@@ -738,7 +740,9 @@ auto text_input(std::string_view placeholder, std::string& input, [[maybe_unused
         constexpr auto space_ch = std::uint32_t(' ');
 
         if (a_cursor_pos < a_content_size) {
-          g_ctx->renderer.cmd_draw_text_at(widget_rect.min, a_content.subspan(0, a_cursor_pos), style);
+          if (a_cursor_pos > 0) {
+            g_ctx->renderer.cmd_draw_text_at(widget_rect.min, a_content.subspan(0, a_cursor_pos), style);
+          }
           g_ctx->renderer.cmd_draw_text_at(
               widget_rect.min + im_vec2(a_cursor_pos, 0), a_content.subspan(a_cursor_pos, 1), cursor_style);
           if (a_cursor_pos + 1 < a_content_size) {
