@@ -166,7 +166,7 @@ auto button(std::string_view label) -> bool;
 auto text_input(std::string_view placeholder, std::string& input, int flags = 0) -> bool;
 
 // widget: drawing canvas
-void canvas_begin(int width, int height);
+auto canvas_begin(int width, int height) -> bool;
 void canvas_end();
 void canvas_point(im_vec2 pos, im_color color = {});
 

@@ -58,7 +58,7 @@ struct im_context {
     int width = 0;
     int height = 0;
     im_rect rect;
-    // TODO: buffer
+    std::vector<im_cell> buffer;
   } canvas;
 };
 

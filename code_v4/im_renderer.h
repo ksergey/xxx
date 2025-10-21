@@ -31,6 +31,18 @@ struct im_style {
   }
 };
 
+struct im_cell {
+  uint32_t ch;
+  im_style style;
+};
+
+// TODO:
+// struct im_surface {
+//   im_vec2 pos;
+//   im_vec2 size;
+//   std::span<im_cell const> data;
+// };
+
 enum class im_halign { left, center, right };
 enum class im_valign { top, center, bottom };
 
@@ -39,7 +51,7 @@ private:
   static constexpr auto render_cmd_text_max_size = std::size_t(32);
   static constexpr auto border_style = std::to_array<std::uint32_t>({L'╭', L'╮', L'╰', L'╯', L'│', L'─'});
 
-  enum class render_cmd_type { none, fill_rect, draw_rect, draw_text };
+  enum class render_cmd_type { none, fill_rect, draw_rect, draw_text, draw_raw };
 
   struct render_cmd_none {};
 
@@ -58,6 +70,12 @@ private:
     std::size_t size;
   };
 
+  struct render_cmd_draw_raw_data {
+    im_vec2 pos;
+    std::array<im_cell, render_cmd_text_max_size> data;
+    std::size_t size;
+  };
+
   struct render_cmd {
     render_cmd_type type = render_cmd_type::none;
     im_style style;
@@ -66,6 +84,7 @@ private:
       render_cmd_fill_rect_data fill_rect_data;
       render_cmd_draw_rect_data draw_rect_data;
       render_cmd_draw_text_data draw_text_data;
+      render_cmd_draw_raw_data draw_raw_data;
     };
   };
   static_assert(std::is_trivially_copyable_v<render_cmd>);
@@ -137,6 +156,9 @@ public:
         break;
       case render_cmd_type::draw_text:
         this->do_draw_text(cmd);
+        break;
+      case render_cmd_type::draw_raw:
+        this->do_draw_raw(cmd);
         break;
       default:
         break;
@@ -236,7 +258,6 @@ public:
     this->append_cmd_draw_text(c_rect.min, text, style);
   }
 
-#if 0
   void cmd_draw_text_in_rect(im_rect const& rect, std::span<std::uint32_t const> text, im_style const& style,
       im_halign halign = im_halign::left, im_valign valign = im_valign::top) {
     auto const a_rect = this->adjust(rect);
@@ -266,7 +287,7 @@ public:
     auto const invisible = (text_min_y < clip_rect_.min.y) || (text_max_y > clip_rect_.max.y);
     if (invisible) {
       // no more actions requires
-      return this->append_cmd_fill_rect(c_rect, ' ', style);
+      return;
     }
 
     int text_min_x;
@@ -292,87 +313,19 @@ public:
       text_max_x = clip_rect_.max.x;
     }
 
-    if (c_rect.min.y < text_min_y) {
-      // top box
-      this->append_cmd_fill_rect(im_rect(c_rect.min.x, c_rect.min.y, c_rect.max.x, text_min_y - 1), ' ', style);
-    }
-
-    // text box
-    if (c_rect.min.x < text_min_x - 1) {
-      this->append_cmd_fill_rect(im_rect(c_rect.min.x, text_min_y, text_min_x - 1, text_max_y), ' ', style);
-    }
     if (text_min_x <= text_max_x) {
       this->append_cmd_draw_text(im_vec2(text_min_x, text_min_y), text, style);
-    }
-    if (text_max_x + 1 < c_rect.max.x) {
-      this->append_cmd_fill_rect(im_rect(text_max_x + 1, text_min_y, c_rect.max.x, text_max_y), ' ', style);
-    }
-
-    // bottom box
-    if (text_max_y + 1 < c_rect.max.y) {
-      this->append_cmd_fill_rect(im_rect(c_rect.min.x, text_max_y + 1, c_rect.max.x, c_rect.max.y), ' ', style);
     }
   }
-#endif
 
-  void cmd_draw_text_in_rect(im_rect const& rect, std::span<std::uint32_t const> text, im_style const& style,
-      im_halign halign = im_halign::left, im_valign valign = im_valign::top) {
-    auto const a_rect = this->adjust(rect);
+  void cmd_draw_raw(im_vec2 const& pos, std::span<im_cell const> raw) {
+    auto const a_rect = this->adjust(im_rect(pos, pos + im_vec2(raw.size() - 1, 0)));
     auto const c_rect = clip_rect_.intersection(a_rect);
-    if (!c_rect) {
-      // nothing to draw
+    if (!c_rect) [[unlikely]] {
       return;
     }
 
-    auto const text_length = static_cast<int>(text.size());
-    auto const rect_width = static_cast<int>(a_rect.width());
-    auto const rect_height = static_cast<int>(a_rect.height());
-
-    int text_min_y;
-    switch (valign) {
-    case im_valign::top:
-      text_min_y = a_rect.min.y;
-      break;
-    case im_valign::center:
-      text_min_y = a_rect.min.y + (rect_height - 1) / 2;
-      break;
-    case im_valign::bottom:
-      text_min_y = a_rect.min.y + (rect_height - 1);
-      break;
-    }
-    auto text_max_y = text_min_y + 1 - 1;
-    auto const invisible = (text_min_y < clip_rect_.min.y) || (text_max_y > clip_rect_.max.y);
-    if (invisible) {
-      // no more actions requires
-      return;
-    }
-
-    int text_min_x;
-    switch (halign) {
-    case im_halign::left:
-      text_min_x = a_rect.min.x;
-      break;
-    case im_halign::center:
-      text_min_x = a_rect.min.x + (rect_width - text_length) / 2;
-      break;
-    case im_halign::right:
-      text_min_x = a_rect.min.x + (rect_width - text_length);
-      break;
-    }
-    auto text_max_x = text_min_x + text_length - 1;
-
-    if (text_min_x < clip_rect_.min.x) {
-      text = text.subspan(clip_rect_.min.x - text_min_x);
-      text_min_x = clip_rect_.min.x;
-    }
-    if (text_max_x > clip_rect_.max.x) {
-      text = text.subspan(0, text.size() - (text_max_x - clip_rect_.max.x));
-      text_max_x = clip_rect_.max.x;
-    }
-
-    if (text_min_x <= text_max_x) {
-      this->append_cmd_draw_text(im_vec2(text_min_x, text_min_y), text, style);
-    }
+    this->append_cmd_draw_raw(a_rect.min, raw);
   }
 
 private:
@@ -407,6 +360,21 @@ private:
       cmd.draw_text_data.size = sub.size();
 
       text_pos.x += sub.size();
+    }
+  }
+
+  void append_cmd_draw_raw(im_vec2 const& pos, std::span<im_cell const> raw) {
+    im_vec2 raw_pos = pos;
+    for (std::span<im_cell const> sub : raw | std::views::chunk(render_cmd_text_max_size)) {
+      auto& cmd = commands_.emplace_back();
+      cmd.type = render_cmd_type::draw_raw;
+      cmd.style = {};
+      cmd.draw_raw_data = {};
+      cmd.draw_raw_data.pos = raw_pos;
+      std::copy_n(sub.data(), sub.size(), cmd.draw_raw_data.data.data());
+      cmd.draw_raw_data.size = sub.size();
+
+      raw_pos.x += sub.size();
     }
   }
 
@@ -459,6 +427,16 @@ private:
 
     for (auto const& [pos_x, pos_y, ch] : std::views::zip(std::views::iota(pos.x), std::views::repeat(pos.y), text)) {
       ::tb_set_cell(pos_x, pos_y, ch, style.fg, style.bg);
+    }
+  }
+
+  static void do_draw_raw(render_cmd const& cmd) {
+    auto const& pos = cmd.draw_raw_data.pos;
+    auto cells = std::span<im_cell const>(cmd.draw_raw_data.data.data(), cmd.draw_raw_data.size);
+
+    for (auto const& [pos_x, pos_y, cell] :
+        std::views::zip(std::views::iota(pos.x), std::views::repeat(pos.y), cells)) {
+      ::tb_set_cell(pos_x, pos_y, cell.ch, cell.style.fg, cell.style.bg);
     }
   }
 };

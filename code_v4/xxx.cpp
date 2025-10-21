@@ -3,6 +3,7 @@
 
 #include <cassert>
 #include <format>
+#include <ranges>
 #include <string_view>
 
 #include "im_context.h"
@@ -765,7 +766,20 @@ auto text_input(std::string_view placeholder, std::string& input, [[maybe_unused
   return widget.pressed;
 }
 
-void canvas_begin(int width, int height) {
+namespace {
+
+constexpr std::array braille_pixel_map = {
+    std::array{0x01, 0x08},
+    std::array{0x02, 0x10},
+    std::array{0x04, 0x20},
+    std::array{0x40, 0x80},
+};
+
+constexpr auto braille_offset = std::uint32_t(0x2800);
+
+} // namespace
+
+auto canvas_begin(int width, int height) -> bool {
   auto& canvas = g_ctx->canvas;
   canvas.width = width;
   canvas.height = height;
@@ -773,16 +787,25 @@ void canvas_begin(int width, int height) {
   if (canvas.rect.width() > width / 2) {
     canvas.rect.set_width(width / 2);
   }
+  canvas.buffer.resize((canvas.width / 2) * (canvas.height / 4));
+  auto const style = g_ctx->theme.get_style(im_color_id::text, im_color_id::background);
+  std::fill(canvas.buffer.begin(), canvas.buffer.end(), im_cell{.ch = braille_offset, .style = style});
+
   g_ctx->renderer.push_clip_rect(canvas.rect);
 
-  if (g_ctx->renderer.is_visible(canvas.rect)) {
-    auto const style = g_ctx->theme.get_style(im_color_id::text, im_color_id::background);
-    g_ctx->renderer.cmd_fill_rect(canvas.rect, ' ', style);
-  }
+  return g_ctx->renderer.is_visible(canvas.rect);
 }
 
 void canvas_end() {
   auto& canvas = g_ctx->canvas;
+
+  auto const cells = std::span<im_cell const>(canvas.buffer);
+
+  for (auto const& [pos_x, pos_y, sub] : std::views::zip(std::views::repeat(canvas.rect.min.x),
+           std::views::iota(canvas.rect.min.y), cells | std::views::chunk(canvas.width / 2))) {
+    g_ctx->renderer.cmd_draw_raw(im_vec2(pos_x, pos_y), sub);
+  }
+
   canvas.width = 0;
   canvas.height = 0;
   canvas.rect = im_rect();
@@ -791,37 +814,14 @@ void canvas_end() {
 }
 
 void canvas_point(im_vec2 pos, im_color color) {
-  constexpr std::array braille_pixel_map = {
-      std::array{0x01, 0x08},
-      std::array{0x02, 0x10},
-      std::array{0x04, 0x20},
-      std::array{0x40, 0x80},
-  };
-  constexpr auto braille_offset = std::uint32_t(0x2800);
-
   auto& canvas = g_ctx->canvas;
-  // if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) {
-  //   return;
-  // }
-  auto const screen_pos = canvas.rect.min + im_vec2(pos.x / 2, pos.y / 4);
-  if (!g_ctx->renderer.is_visible(screen_pos)) {
+  if (pos.x < 0 || pos.y < 0 || pos.x >= canvas.width || pos.y >= canvas.height) {
     return;
   }
 
-  // need renderer here
-
-  // ::tb_cell* cell = nullptr;
-  // ::tb_get_cell(screen_pos.x, screen_pos.y, 1, &cell);
-
-  // if (cell->ch < braille_offset) {
-  //   cell->ch = braille_offset;
-  // }
-  // cell->ch |= braille_pixel_map[pos.y % 4][pos.x % 2];
-  // cell->ch = 'x';
-  // cell->fg = color;
-
-  // ::tb_set_cell(screen_pos.x, screen_pos.y, cell->ch, cell->fg, cell->bg);
-  ::tb_set_cell(screen_pos.x, screen_pos.y, '*', color, 0);
+  auto const cell = canvas.buffer.data() + (pos.y / 4) * canvas.width / 2 + pos.x / 2;
+  cell->ch |= braille_pixel_map[pos.y % 4][pos.x % 2];
+  cell->style.fg = color;
 }
 
 } // namespace xxx

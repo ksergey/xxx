@@ -34,7 +34,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
   using namespace xxx::literals;
 
   try {
-    auto loop_limiter = loop_rate_limiter(std::chrono::milliseconds(1000) / 30);
+    auto loop_limiter = loop_rate_limiter(std::chrono::milliseconds(1000) / 60);
 
     bool show_label_1 = false;
     bool show_label_2 = false;
@@ -56,18 +56,15 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       // xxx::debug();
 
       xxx::push_color(xxx::im_color_id::background, 0x4444ee_c);
-      xxx::canvas_begin(32, 32);
-      xxx::canvas_point(xxx::im_vec2(16, 16), 0x00ff00_c);
-      xxx::canvas_point(xxx::im_vec2(16, 17), 0x00ff00_c);
-      xxx::canvas_point(xxx::im_vec2(16, 18), 0x00ff00_c);
-      xxx::canvas_point(xxx::im_vec2(1, 1), 0x00ff00_c);
-      // for (float angle = 0.0; angle < 360.0; angle += 0.1) {
-      //   auto const arg = angle * std::numbers::pi_v<float> / 180.0;
-      //   int const x = 15 * std::cos(arg);
-      //   int const y = 15 * std::sin(arg);
-      //   xxx::canvas_point(xxx::im_vec2(16 + x, 16 + y), 0x0000ff_c);
-      // }
-      xxx::canvas_end();
+      if (xxx::canvas_begin(32, 32)) {
+        for (float angle = 0.0; angle < 360.0; angle += 0.1) {
+          auto const arg = angle * std::numbers::pi_v<float> / 180.0;
+          int const x = 15 * std::cos(arg);
+          int const y = 15 * std::sin(arg);
+          xxx::canvas_point(xxx::im_vec2(15 + x, 15 + y), 0x00ffff_c);
+        }
+        xxx::canvas_end();
+      }
       xxx::pop_color();
 
       xxx::view_begin("view1");
