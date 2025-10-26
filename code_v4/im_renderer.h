@@ -66,8 +66,9 @@ private:
 
   struct render_cmd_draw_text_data {
     im_vec2 pos;
-    std::array<std::uint32_t, render_cmd_text_max_size> text;
-    std::size_t size;
+    // non-owning value
+    // should be alive until start_new_frame call
+    std::span<std::uint32_t const> text;
   };
 
   struct render_cmd_draw_raw_data {
@@ -349,18 +350,12 @@ private:
   }
 
   void append_cmd_draw_text(im_vec2 const& pos, std::span<std::uint32_t const> text, im_style const& style) {
-    im_vec2 text_pos = pos;
-    for (std::span<std::uint32_t const> sub : text | std::views::chunk(render_cmd_text_max_size)) {
-      auto& cmd = commands_.emplace_back();
-      cmd.type = render_cmd_type::draw_text;
-      cmd.style = style;
-      cmd.draw_text_data = {};
-      cmd.draw_text_data.pos = text_pos;
-      std::copy_n(sub.data(), sub.size(), cmd.draw_text_data.text.data());
-      cmd.draw_text_data.size = sub.size();
-
-      text_pos.x += sub.size();
-    }
+    auto& cmd = commands_.emplace_back();
+    cmd.type = render_cmd_type::draw_text;
+    cmd.style = style;
+    cmd.draw_text_data = {};
+    cmd.draw_text_data.pos = pos;
+    cmd.draw_text_data.text = text;
   }
 
   void append_cmd_draw_raw(im_vec2 const& pos, std::span<im_cell const> raw) {
@@ -423,7 +418,7 @@ private:
   static void do_draw_text(render_cmd const& cmd) {
     auto const& style = cmd.style;
     auto const& pos = cmd.draw_text_data.pos;
-    auto text = std::span<std::uint32_t const>(cmd.draw_text_data.text.data(), cmd.draw_text_data.size);
+    auto const& text = cmd.draw_text_data.text;
 
     for (auto const& [pos_x, pos_y, ch] : std::views::zip(std::views::iota(pos.x), std::views::repeat(pos.y), text)) {
       ::tb_set_cell(pos_x, pos_y, ch, style.fg, style.bg);

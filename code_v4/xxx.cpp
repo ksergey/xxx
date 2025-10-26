@@ -1,8 +1,11 @@
 // Copyright (c) Sergey Kovalevich <inndie@gmail.com>
 // SPDX-License-Identifier: MIT
 
+#include <algorithm>
 #include <cassert>
 #include <format>
+#include <functional>
+#include <iterator>
 #include <ranges>
 #include <string_view>
 
@@ -177,6 +180,102 @@ void handle_terminal_mouse_event(::tb_event const& event) {
   }
 }
 
+template <typename OutputIt>
+auto to_unicode(std::string_view input, OutputIt first) -> OutputIt {
+  char const* begin = input.data();
+  char const* end = begin + input.size();
+
+  while (begin < end) {
+    if (*begin == '\0') {
+      break;
+    }
+    auto const length = ::tb_utf8_char_length(*begin);
+    if (begin + length > end) [[unlikely]] {
+      break;
+    }
+    std::uint32_t ch;
+    ::tb_utf8_char_to_unicode(&ch, begin);
+    *first++ = ch;
+
+    begin += length;
+  }
+
+  return first;
+}
+
+[[nodiscard]] auto to_unicode(std::string_view input) noexcept -> std::span<std::uint32_t const> {
+  auto buffer = g_ctx->allocator.allocate<std::uint32_t>(input.size());
+  if (!buffer) [[unlikely]] {
+    return std::span<std::uint32_t const>();
+  }
+
+  char const* begin = input.data();
+  char const* end = begin + input.size();
+  std::size_t pos = 0;
+
+  while (begin < end) {
+    if (*begin == '\0') {
+      break;
+    }
+    auto const length = ::tb_utf8_char_length(*begin);
+    if (begin + length > end) [[unlikely]] {
+      break;
+    }
+    ::tb_utf8_char_to_unicode(&buffer[pos++], begin);
+    begin += length;
+  }
+
+  return std::span(buffer, pos);
+}
+
+[[nodiscard]] constexpr auto unicode_codepoint_length(std::uint32_t c) noexcept -> std::size_t {
+  if (c < 0x80) {
+    return 1;
+  } else if (c < 0x800) {
+    return 2;
+  } else if (c < 0x10000) {
+    return 3;
+  } else if (c < 0x200000) {
+    return 4;
+  } else if (c < 0x4000000) {
+    return 5;
+  } else {
+    return 6;
+  }
+}
+
+#if 0
+[[nodiscard]] auto to_utf8(std::span<std::uint32_t const> input) -> std::string_view {
+  auto const output_length =
+      std::ranges::fold_left(std::views::transform(input, unicode_codepoint_length), 0, std::plus{});
+
+  auto buffer = g_ctx->allocator.allocate<char>(output_length);
+  if (!buffer) [[unlikely]] {
+    return std::string_view();
+  }
+
+  auto offset = std::size_t(0);
+  for (auto ch : input) {
+    offset += ::tb_utf8_unicode_to_char(buffer + offset, ch);
+  }
+
+  return std::string_view(buffer, offset);
+}
+#endif
+
+template <typename OutputIt>
+auto to_utf8(std::span<std::uint32_t const> input, OutputIt first) -> OutputIt {
+  char codepoint[7];
+  for (auto ch : input) {
+    auto const length = ::tb_utf8_unicode_to_char(codepoint, ch);
+    for (auto c : std::string_view(codepoint, length)) {
+      *first++ = c;
+    }
+  }
+
+  return first;
+}
+
 } // namespace
 
 void init() {
@@ -184,6 +283,7 @@ void init() {
     delete g_ctx;
   }
   g_ctx = new im_context;
+  g_ctx->allocator.reserve(2 * 1024 * 1024);
 
   // init termbox2 library
   if (auto const rc = ::tb_init(); rc != TB_OK) {
@@ -216,6 +316,9 @@ void process_input_events() {
       case TB_EVENT_KEY: {
         if (event.ch > 0) {
           g_ctx->input.add_character(event.ch);
+          if (event.ch == ' ') {
+            g_ctx->input.add_key_event(im_key_id::space);
+          }
         } else if (event.key > 0) {
           handle_terminal_key_event(event);
         }
@@ -260,6 +363,8 @@ void process_input_events() {
 void new_frame() {
   assert(g_ctx);
 
+  g_ctx->allocator.reset();
+
   // TODO: frame delta
 
   auto const screen_rect = im_rect(0, 0, ::tb_width() - 1, ::tb_height() - 1);
@@ -293,7 +398,7 @@ void render() {
 void debug() {
   g_ctx->renderer.cmd_draw_rect(im_rect(2, 2, 6, 6), im_style(0x3366ff_c));
   g_ctx->renderer.cmd_draw_rect(im_rect(8, 8, 9, 9), im_style(0x33ff66_c));
-  auto text = utf8_to_unicode("hello world 1234");
+  auto text = to_unicode("hello world 1234");
   auto rect = g_ctx->renderer.clip_rect().crop(10);
   // g_ctx->renderer.push_clip_rect(im_rect(39, 24, 100, 100));
   g_ctx->renderer.cmd_draw_text_in_rect(
@@ -449,7 +554,7 @@ void view_begin(std::string_view name, int flags, im_key_id shortcut) {
                                      : g_ctx->theme.get_style(im_color_id::view_title, im_color_id::background);
       g_ctx->renderer.cmd_fill_rect(title_rect, ' ', style);
       g_ctx->renderer.cmd_draw_text_in_rect(
-          title_rect, utf8_to_unicode(view.current_title), style, im_halign::center, im_valign::top);
+          title_rect, to_unicode(view.current_title), style, im_halign::center, im_valign::top);
     }
   }
 }
@@ -486,7 +591,7 @@ void view_end() {
         auto const style = view.active ? g_ctx->theme.get_style(im_color_id::view_active_title, im_color_id::background)
                                        : g_ctx->theme.get_style(im_color_id::view_title, im_color_id::background);
         g_ctx->renderer.cmd_draw_text_in_rect(
-            panel_rect, utf8_to_unicode(view.current_title), style, im_halign::center, im_valign::top);
+            panel_rect, to_unicode(view.current_title), style, im_halign::center, im_valign::top);
       }
     }
 
@@ -543,7 +648,7 @@ void label(std::string_view text) {
   }
   auto const style = g_ctx->theme.get_style(im_color_id::text, im_color_id::background);
   g_ctx->renderer.cmd_fill_rect(widget_rect, ' ', style);
-  g_ctx->renderer.cmd_draw_text_in_rect(widget_rect, utf8_to_unicode(text), style, im_halign::left, im_valign::top);
+  g_ctx->renderer.cmd_draw_text_in_rect(widget_rect, to_unicode(text), style, im_halign::left, im_valign::top);
 }
 
 namespace internal {
@@ -596,8 +701,7 @@ auto button(std::string_view label) -> bool {
         widget.active ? im_color_id::button_active_label : im_color_id::button_label, im_color_id::background);
     auto const label = std::format("< {} >", str);
     g_ctx->renderer.cmd_fill_rect(widget_rect, ' ', style);
-    g_ctx->renderer.cmd_draw_text_in_rect(
-        widget_rect, utf8_to_unicode(label), style, im_halign::center, im_valign::center);
+    g_ctx->renderer.cmd_draw_text_in_rect(widget_rect, to_unicode(label), style, im_halign::center, im_valign::center);
   }
 
   return widget.pressed;
@@ -613,7 +717,9 @@ auto text_input(std::string_view placeholder, std::string& input, [[maybe_unused
   internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key));
 
   if (widget.active) {
-    utf8_to_unicode(input, text_input.text);
+    // utf8_to_unicode(input, text_input.text);
+    text_input.text.clear();
+    to_unicode(input, std::back_inserter(text_input.text));
 
     if (text_input.active_id != widget.active_id) {
       text_input.active_id = widget.active_id;
@@ -700,7 +806,8 @@ auto text_input(std::string_view placeholder, std::string& input, [[maybe_unused
     assert(text_input.cursor_pos <= (int)text_input.text.size());
 
     if (text_changed) {
-      unicode_to_utf8(text_input.text, input);
+      input.clear();
+      to_utf8(text_input.text, std::back_inserter(input));
     }
   }
 
@@ -709,7 +816,7 @@ auto text_input(std::string_view placeholder, std::string& input, [[maybe_unused
       auto const style = g_ctx->theme.get_style(im_color_id::input_placeholder,
           widget.active ? im_color_id::input_active_background : im_color_id::input_background);
       g_ctx->renderer.cmd_fill_rect(widget_rect, ' ', style);
-      g_ctx->renderer.cmd_draw_text_at(widget_rect.min, utf8_to_unicode(str), style);
+      g_ctx->renderer.cmd_draw_text_at(widget_rect.min, to_unicode(str), style);
     } else {
       if (widget.active) {
         auto const style = g_ctx->theme.get_style(im_color_id::input_active_text, im_color_id::input_active_background);
@@ -738,7 +845,8 @@ auto text_input(std::string_view placeholder, std::string& input, [[maybe_unused
           a_cursor_pos = a_cursor_pos - text_input.scroll_offset;
         }
 
-        constexpr auto space_ch = std::uint32_t(' ');
+        // "static" keywoard is required here
+        static constexpr auto space_ch = std::uint32_t(' ');
 
         if (a_cursor_pos < a_content_size) {
           if (a_cursor_pos > 0) {
@@ -758,7 +866,7 @@ auto text_input(std::string_view placeholder, std::string& input, [[maybe_unused
       } else {
         auto const style = g_ctx->theme.get_style(im_color_id::input_text, im_color_id::input_background);
         g_ctx->renderer.cmd_fill_rect(widget_rect, ' ', style);
-        g_ctx->renderer.cmd_draw_text_at(widget_rect.min, utf8_to_unicode(input), style);
+        g_ctx->renderer.cmd_draw_text_at(widget_rect.min, to_unicode(input), style);
       }
     }
   }
