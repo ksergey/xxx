@@ -58,10 +58,9 @@ struct im_context {
   } text_input;
 
   struct {
-    int width = 0;
-    int height = 0;
     im_rect rect;
-    std::vector<im_cell> buffer;
+    im_vec2 size;
+    std::span<im_cell> data;
   } canvas;
 };
 

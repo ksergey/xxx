@@ -400,7 +400,6 @@ void debug() {
   g_ctx->renderer.cmd_draw_rect(im_rect(8, 8, 9, 9), im_style(0x33ff66_c));
   auto text = to_unicode("hello world 1234");
   auto rect = g_ctx->renderer.clip_rect().crop(10);
-  // g_ctx->renderer.push_clip_rect(im_rect(39, 24, 100, 100));
   g_ctx->renderer.cmd_draw_text_in_rect(
       rect, text, im_style(0xffee33_c, 0x332211), im_halign::center, im_valign::center);
 }
@@ -884,22 +883,33 @@ constexpr std::array braille_pixel_map = {
 };
 
 constexpr auto braille_offset = std::uint32_t(0x2800);
+constexpr auto braille_pixels_per_width = 2;
+constexpr auto braille_pixels_per_height = 4;
 
 } // namespace
 
-auto canvas_begin(int width, int height) -> bool {
+auto canvas_begin(im_vec2 p_size) -> bool {
   auto& canvas = g_ctx->canvas;
-  canvas.width = width;
-  canvas.height = height;
-  canvas.rect = g_ctx->layout.add_widget_item(height / 4);
-  if (canvas.rect.width() > width / 2) {
-    canvas.rect.set_width(width / 2);
-  }
-  canvas.buffer.resize((canvas.width / 2) * (canvas.height / 4));
-  auto const style = g_ctx->theme.get_style(im_color_id::text, im_color_id::background);
-  std::fill(canvas.buffer.begin(), canvas.buffer.end(), im_cell{.ch = braille_offset, .style = style});
 
+  auto const width = static_cast<int>(std::ceil(p_size.x / braille_pixels_per_width));
+  auto const height = static_cast<int>(std::ceil(p_size.y / braille_pixels_per_height));
+
+  canvas.size = im_vec2(width, height);
+  auto const data_size = width * height;
+  if (auto const data = g_ctx->allocator.allocate<im_cell>(data_size); data) {
+    canvas.data = std::span<im_cell>(data, data_size);
+  } else {
+    canvas.data = {};
+  }
+
+  canvas.rect = g_ctx->layout.add_widget_item(height);
   g_ctx->renderer.push_clip_rect(canvas.rect);
+
+  if (!canvas.data.empty()) {
+    auto const style = g_ctx->theme.get_style(im_color_id::text, im_color_id::background);
+    std::fill(canvas.data.begin(), canvas.data.end(), im_cell{.ch = braille_offset, .style = style});
+    g_ctx->renderer.cmd_fill_rect(canvas.rect, ' ', style);
+  }
 
   return g_ctx->renderer.is_visible(canvas.rect);
 }
@@ -907,28 +917,28 @@ auto canvas_begin(int width, int height) -> bool {
 void canvas_end() {
   auto& canvas = g_ctx->canvas;
 
-  auto const cells = std::span<im_cell const>(canvas.buffer);
-
-  for (auto const& [pos_x, pos_y, sub] : std::views::zip(std::views::repeat(canvas.rect.min.x),
-           std::views::iota(canvas.rect.min.y), cells | std::views::chunk(canvas.width / 2))) {
-    g_ctx->renderer.cmd_draw_raw(im_vec2(pos_x, pos_y), sub);
+  if (!canvas.data.empty()) {
+    g_ctx->renderer.cmd_draw_surface(canvas.rect.min, canvas.size, canvas.data);
   }
 
-  canvas.width = 0;
-  canvas.height = 0;
-  canvas.rect = im_rect();
+  canvas.rect = {};
+  canvas.size = {};
+  canvas.data = {};
 
   g_ctx->renderer.pop_clip_rect();
 }
 
-void canvas_point(im_vec2 pos, im_color color) {
+void canvas_point(im_vec2 p_pos, im_color color) {
   auto& canvas = g_ctx->canvas;
-  if (pos.x < 0 || pos.y < 0 || pos.x >= canvas.width || pos.y >= canvas.height) {
+
+  // adjust pos to cells
+  auto const pos = im_vec2(p_pos.x / braille_pixels_per_width, p_pos.y / braille_pixels_per_height);
+  if (pos.x < 0 || pos.y < 0 || pos.x >= canvas.size.x || pos.y >= canvas.size.y) {
     return;
   }
 
-  auto const cell = canvas.buffer.data() + (pos.y / 4) * canvas.width / 2 + pos.x / 2;
-  cell->ch |= braille_pixel_map[pos.y % 4][pos.x % 2];
+  auto const cell = canvas.data.data() + pos.y * canvas.size.x + pos.x;
+  cell->ch |= braille_pixel_map[p_pos.y % braille_pixels_per_height][p_pos.x % braille_pixels_per_width];
   cell->style.fg = color;
 }
 

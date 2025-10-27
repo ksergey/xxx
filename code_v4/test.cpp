@@ -56,12 +56,12 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       // xxx::debug();
 
       xxx::push_color(xxx::im_color_id::background, 0x4444ee_c);
-      if (xxx::canvas_begin(32, 32)) {
+      if (xxx::canvas_begin(xxx::im_vec2{32, 32})) {
         for (float angle = 0.0; angle < 360.0; angle += 0.1) {
           auto const arg = angle * std::numbers::pi_v<float> / 180.0;
           int const x = 15 * std::cos(arg);
           int const y = 15 * std::sin(arg);
-          xxx::canvas_point(xxx::im_vec2(15 + x, 15 + y), 0x00ffff_c);
+          xxx::canvas_point(xxx::im_vec2(15 + x, 15 + y), 0x33ff99_c);
         }
         xxx::canvas_end();
       }

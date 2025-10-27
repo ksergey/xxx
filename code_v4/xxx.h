@@ -11,7 +11,7 @@
 
 namespace xxx {
 
-// keyboard key id
+/// Keyboard key ids
 enum class im_key_id {
   backspace = 1, // ctrl-h
   backspace2,
@@ -54,10 +54,10 @@ enum class im_key_id {
   last
 };
 
-// mouse button id
+/// Mouse button id
 enum class im_mouse_button_id { left, middle, right, last };
 
-// helper: color id
+/// Color id
 enum class im_color_id {
   text,
   background,
@@ -76,42 +76,48 @@ enum class im_color_id {
   last
 };
 
-// init library
+/// Init library
 void init();
 
-// shutdown library
+/// Shutdown library
 void shutdown();
 
-// update internal state
+/// Update internal state
 void process_input_events();
 
-// start drawing new frame
+/// Start drawing new frame
 void new_frame();
 
-// render frame
+/// Render frame
 void render();
 
+// XXX: remove
 void debug();
 
-// get terminal screen rect
+/// Get terminal screen rect
 [[nodiscard]] auto get_screen_rect() -> im_rect;
 
-// check key pressed
+/// Check key pressed
 [[nodiscard]] auto is_key_pressed(im_key_id id) -> bool;
 
-// set default color
+/// Set default color
 void set_default_color(im_color_id id, im_color color);
 
-// save current color and set new
+/// Save current color and set new
 void push_color(im_color_id id, im_color color);
 
-// pop color state
+/// Pop color state
 void pop_color(std::size_t cnt = 1);
 
+/// Begin row layout
+/// @param columns is number of columns in row
 void layout_row_begin(std::size_t columns);
 
+/// Push column
+/// @param ratio_or_width is ratio of parent layout width (in case of value < 1.0) or width in chars
 void layout_row_push(float ratio_or_width);
 
+/// End row layout
 void layout_row_end();
 
 // -----------------------------------------
@@ -121,53 +127,72 @@ void layout_row_end();
 constexpr auto im_view_flag_border = int(1 << 0);
 constexpr auto im_view_flag_title = int(1 << 1);
 
-// begin view
-// flags:
-//   im_view_flag_border - draw border around view
-//   im_view_flag_title - show view name with shortcut (if set)
-// theme:
-//   view_border - border color when im_view_flag_border is set
-//   view_active_border - border color when im_view_flag_border is set and view is active
-//   view_title - title color when im_view_flag_title is set
-//   view_active_title - title color when im_view_flag_title is set and view is active
+/// Begin view
+/// flags:
+///   im_view_flag_border - draw border around view
+///   im_view_flag_title - show view name with shortcut (if set)
+/// theme:
+///   view_border - border color when im_view_flag_border is set
+///   view_active_border - border color when im_view_flag_border is set and view is active
+///   view_title - title color when im_view_flag_title is set
+///   view_active_title - title color when im_view_flag_title is set and view is active
 void view_begin(std::string_view name, int flags, im_key_id shortcut = im_key_id());
 
-// overload
+/// @overload
 inline void view_begin(std::string_view name, im_key_id shortcut = im_key_id()) {
   return view_begin(name, im_view_flag_border | im_view_flag_title, shortcut);
 }
 
-// end view
+/// End view
 void view_end();
 
 // -----------------------------------------
 // Widgets
 // -----------------------------------------
 
-// begin panel
+/// Begin panel drawing
 void panel_begin();
-// end panel
+
+/// End panel
 void panel_end();
 
-// widget: label
-// theme
-//   text - label color
+/// Widget: label
+/// @param text is label text
+///
+/// theme:
+///   text - label color
 void label(std::string_view text);
 
-// widget: button
-// return true on pressed
-// theme:
-//   button_label - button label color
-//   button_active_label - button label color when widget active
+/// Widget: button
+/// @param label is widget label
+/// @return true on button pressed ("enter" or "space" pressed)
+///
+/// theme:
+///   button_label - button label color
+///   button_active_label - button label color when widget active
 auto button(std::string_view label) -> bool;
 
-// widget: text_input
-// return true on text entered
+/// Widget: text input
+/// @param placeholder is placeholder when input is empty
+/// @param input is reference to string storagage for input
+/// @return true on "enter" pressed
 auto text_input(std::string_view placeholder, std::string& input, int flags = 0) -> bool;
 
-// widget: drawing canvas
-auto canvas_begin(int width, int height) -> bool;
+// TODO:
+void spinner();
+void progress(float& value);
+
+/// Begin canvas drawing
+/// @param p_size is canvas size in "pixels"
+/// @return true on drawing started (widget is visible)
+auto canvas_begin(im_vec2 p_size) -> bool;
+
+/// End canvas drawing
 void canvas_end();
-void canvas_point(im_vec2 pos, im_color color = {});
+
+/// Draw point on canvas
+/// @param p_pos is pos in "pixels"
+/// @param color is "pixel" color
+void canvas_point(im_vec2 p_pos, im_color color = {});
 
 } // namespace xxx

@@ -36,13 +36,6 @@ struct im_cell {
   im_style style;
 };
 
-// TODO:
-// struct im_surface {
-//   im_vec2 pos;
-//   im_vec2 size;
-//   std::span<im_cell const> data;
-// };
-
 enum class im_halign { left, center, right };
 enum class im_valign { top, center, bottom };
 
@@ -51,7 +44,7 @@ private:
   static constexpr auto render_cmd_text_max_size = std::size_t(32);
   static constexpr auto border_style = std::to_array<std::uint32_t>({L'╭', L'╮', L'╰', L'╯', L'│', L'─'});
 
-  enum class render_cmd_type { none, fill_rect, draw_rect, draw_text, draw_raw };
+  enum class render_cmd_type { none, fill_rect, draw_rect, draw_text, draw_surface };
 
   struct render_cmd_none {};
 
@@ -71,10 +64,10 @@ private:
     std::span<std::uint32_t const> text;
   };
 
-  struct render_cmd_draw_raw_data {
-    im_vec2 pos;
-    std::array<im_cell, render_cmd_text_max_size> data;
-    std::size_t size;
+  struct render_cmd_draw_surface_data {
+    im_rect src_rect;
+    im_rect rect;
+    std::span<im_cell const> data;
   };
 
   struct render_cmd {
@@ -85,7 +78,7 @@ private:
       render_cmd_fill_rect_data fill_rect_data;
       render_cmd_draw_rect_data draw_rect_data;
       render_cmd_draw_text_data draw_text_data;
-      render_cmd_draw_raw_data draw_raw_data;
+      render_cmd_draw_surface_data draw_surface_data;
     };
   };
   static_assert(std::is_trivially_copyable_v<render_cmd>);
@@ -137,15 +130,13 @@ public:
     ::tb_set_clear_attrs(style.fg, style.bg);
   }
 
-  void start_new_frame(im_rect const& clip_rect) {
-    clip_rect_stack_.clear();
-    clip_rect_ = clip_rect;
-    viewport_offset_ = im_vec2(0, 0);
-    commands_.clear();
-  }
+  /// Start drawing new frame
+  void start_new_frame(im_rect const& clip_rect);
 
+  /// Render frame
   void render();
 
+  /// Append command to fill rect
   void cmd_fill_rect(im_rect const& rect, std::uint32_t ch, im_style const& style) {
     auto const a_rect = this->adjust(rect);
     auto const c_rect = clip_rect_.intersection(a_rect);
@@ -156,6 +147,7 @@ public:
     this->append_cmd_fill_rect(c_rect, ch, style);
   }
 
+  /// Append command to draw rect
   void cmd_draw_rect(im_rect const& rect, im_style const& style) {
     auto const a_rect = this->adjust(rect);
     auto const c_rect = clip_rect_.intersection(a_rect);
@@ -216,6 +208,8 @@ public:
     }
   }
 
+  /// Append command to draw text at position
+  /// \warning \c text must exists until next im_renderer::start_new_frame(...) call
   void cmd_draw_text_at(im_vec2 const& pos, std::span<std::uint32_t const> text, im_style const& style) {
     auto const a_rect = this->adjust(im_rect(pos, pos + im_vec2(text.size() - 1, 0)));
     auto const c_rect = clip_rect_.intersection(a_rect);
@@ -236,6 +230,8 @@ public:
     this->append_cmd_draw_text(c_rect.min, text, style);
   }
 
+  /// Append command to draw text inside rect
+  /// \warning \c text must exists until next im_renderer::start_new_frame(...) call
   void cmd_draw_text_in_rect(im_rect const& rect, std::span<std::uint32_t const> text, im_style const& style,
       im_halign halign = im_halign::left, im_valign valign = im_valign::top) {
     auto const a_rect = this->adjust(rect);
@@ -296,14 +292,14 @@ public:
     }
   }
 
-  void cmd_draw_raw(im_vec2 const& pos, std::span<im_cell const> raw) {
-    auto const a_rect = this->adjust(im_rect(pos, pos + im_vec2(raw.size() - 1, 0)));
+  void cmd_draw_surface(im_vec2 const& pos, im_vec2 const& size, std::span<im_cell const> data) {
+    auto const a_rect = this->adjust(im_rect(pos, pos + size - im_vec2(1, 1)));
     auto const c_rect = clip_rect_.intersection(a_rect);
     if (!c_rect) [[unlikely]] {
       return;
     }
 
-    this->append_cmd_draw_raw(a_rect.min, raw);
+    this->append_cmd_draw_surface(a_rect, c_rect, data);
   }
 
 private:
@@ -335,25 +331,17 @@ private:
     cmd.draw_text_data.text = text;
   }
 
-  void append_cmd_draw_raw(im_vec2 const& pos, std::span<im_cell const> raw) {
-    im_vec2 raw_pos = pos;
-    for (std::span<im_cell const> sub : raw | std::views::chunk(render_cmd_text_max_size)) {
-      auto& cmd = commands_.emplace_back();
-      cmd.type = render_cmd_type::draw_raw;
-      cmd.style = {};
-      cmd.draw_raw_data = {};
-      cmd.draw_raw_data.pos = raw_pos;
-      std::copy_n(sub.data(), sub.size(), cmd.draw_raw_data.data.data());
-      cmd.draw_raw_data.size = sub.size();
-
-      raw_pos.x += sub.size();
-    }
+  void append_cmd_draw_surface(im_rect const& src_rect, im_rect const& rect, std::span<im_cell const> data) {
+    auto& cmd = commands_.emplace_back();
+    cmd.type = render_cmd_type::draw_surface;
+    cmd.style = {};
+    cmd.draw_surface_data = {.src_rect = src_rect, .rect = rect, .data = data};
   }
 
   static void do_fill_rect(render_cmd const& cmd);
   static void do_draw_rect(render_cmd const& cmd);
   static void do_draw_text(render_cmd const& cmd);
-  static void do_draw_raw(render_cmd const& cmd);
+  static void do_draw_surface(render_cmd const& cmd);
 };
 
 } // namespace xxx

@@ -3,7 +3,32 @@
 
 #include "im_renderer.h"
 
+#if 0
+#include <print>
 namespace xxx {
+
+template <typename... Ts>
+void debug(std::format_string<Ts...> fmt, Ts&&... args) {
+  FILE* file = ::fopen("debug.txt", "a");
+  if (!file) {
+    return;
+  }
+  std::print(file, fmt, std::forward<Ts>(args)...);
+  std::print(file, "\n");
+  ::fclose(file);
+}
+
+} // namespace xxx
+#endif
+
+namespace xxx {
+
+void im_renderer::start_new_frame(im_rect const& clip_rect) {
+  clip_rect_stack_.clear();
+  clip_rect_ = clip_rect;
+  viewport_offset_ = im_vec2(0, 0);
+  commands_.clear();
+}
 
 void im_renderer::render() {
   ::tb_clear();
@@ -19,8 +44,8 @@ void im_renderer::render() {
     case render_cmd_type::draw_text:
       this->do_draw_text(cmd);
       break;
-    case render_cmd_type::draw_raw:
-      this->do_draw_raw(cmd);
+    case render_cmd_type::draw_surface:
+      this->do_draw_surface(cmd);
       break;
     default:
       break;
@@ -82,12 +107,34 @@ void im_renderer::do_draw_text(render_cmd const& cmd) {
   }
 }
 
-void im_renderer::do_draw_raw(render_cmd const& cmd) {
-  auto const& pos = cmd.draw_raw_data.pos;
-  auto cells = std::span<im_cell const>(cmd.draw_raw_data.data.data(), cmd.draw_raw_data.size);
+void im_renderer::do_draw_surface(render_cmd const& cmd) {
+  auto const& src_rect = cmd.draw_surface_data.src_rect;
+  auto const& rect = cmd.draw_surface_data.rect;
+  auto const& data = cmd.draw_surface_data.data;
 
-  for (auto const& [pos_x, pos_y, cell] : std::views::zip(std::views::iota(pos.x), std::views::repeat(pos.y), cells)) {
-    ::tb_set_cell(pos_x, pos_y, cell.ch, cell.style.fg, cell.style.bg);
+  // TODO: optimize?
+  // if (src_rect == rect) {
+  //   for (auto const& [pos_y, line] :
+  //       std::views::zip(std::views::iota(src_rect.min.y), data | std::views::chunk(src_rect.width()))) {
+  //     for (auto const& [pos_x, cell] : std::views::zip(std::views::iota(src_rect.min.x), line)) {
+  //       ::tb_set_cell(pos_x, pos_y, cell.ch, cell.style.fg, cell.style.bg);
+  //     }
+  //   }
+  //   return;
+  // }
+
+  auto const drop_x = rect.min.x - src_rect.min.x;
+  auto const take_x = rect.width();
+  auto const drop_y = rect.min.y - src_rect.min.y;
+  auto const take_y = rect.height();
+
+  for (auto const& [pos_y, line] :
+      std::views::zip(std::views::iota(rect.min.y), data | std::views::chunk(src_rect.width())) |
+          std::views::drop(drop_y) | std::views::take(take_y)) {
+    for (auto const& [pos_x, cell] :
+        std::views::zip(std::views::iota(rect.min.x), line | std::views::drop(drop_x) | std::views::take(take_x))) {
+      ::tb_set_cell(pos_x, pos_y, cell.ch, cell.style.fg, cell.style.bg);
+    }
   }
 }
 
