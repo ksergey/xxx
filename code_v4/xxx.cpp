@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <format>
 #include <functional>
@@ -293,6 +294,8 @@ void init() {
   ::tb_set_input_mode(TB_INPUT_ESC | TB_INPUT_MOUSE);
   ::tb_set_output_mode(TB_OUTPUT_TRUECOLOR);
   ::tb_sendf("\x1b[?%d;%dh", 1003, 1006);
+
+  g_ctx->last_frame_time = im_clock::now();
 }
 
 void shutdown() {
@@ -384,6 +387,10 @@ void new_frame() {
   g_ctx->widget.next_id = im_id();
   g_ctx->widget.active = false;
   g_ctx->widget.pressed = false;
+
+  auto const now = im_clock::now();
+  g_ctx->elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - g_ctx->last_frame_time).count() * 0.001f;
+  g_ctx->last_frame_time = now;
 
   g_ctx->renderer.set_clear_color(g_ctx->theme.get_style(im_color_id::text, im_color_id::background));
   g_ctx->renderer.start_new_frame(screen_rect);
@@ -871,6 +878,54 @@ auto text_input(std::string_view placeholder, std::string& input, [[maybe_unused
   }
 
   return widget.pressed;
+}
+
+namespace {
+
+constexpr auto spinner_update_interval = 0.1f; // 100ms
+constexpr auto spinner_glyphs = std::to_array<std::uint32_t>({L'⣽', L'⣻', L'⢿', L'⡿', L'⣟', L'⣯', L'⣷'});
+
+// TODO:
+constexpr auto progress_glyph = std::to_array<std::uint32_t>({L'⣿', L'⡇'});
+
+} // namespace
+
+void spinner(std::string_view text, float& step) {
+  auto const widget_rect = g_ctx->layout.add_widget_item(1);
+
+  // update step
+  step += g_ctx->elapsed;
+  auto const index = std::size_t(std::round(step / spinner_update_interval)) % spinner_glyphs.size();
+
+  if (!g_ctx->renderer.is_visible(widget_rect)) {
+    return;
+  }
+
+  auto const style = g_ctx->theme.get_style(im_color_id::text, im_color_id::background);
+  g_ctx->renderer.cmd_fill_rect(widget_rect, ' ', style);
+  g_ctx->renderer.cmd_draw_text_at(widget_rect.min, std::span<std::uint32_t const>(&spinner_glyphs[index], 1), style);
+  g_ctx->renderer.cmd_draw_text_at(widget_rect.min + im_vec2(1, 0), to_unicode(text), style);
+}
+
+void progress(float const& value) {
+  auto const widget_rect = g_ctx->layout.add_widget_item(1);
+
+  if (!g_ctx->renderer.is_visible(widget_rect)) {
+    return;
+  }
+
+  auto const adjusted_value = std::clamp(value, 0.0f, 100.0f);
+  auto const progress_total_length = widget_rect.width();
+  auto const progress_length = static_cast<int>(std::round((progress_total_length * adjusted_value) / 100.0f));
+  auto const buffer = g_ctx->allocator.allocate<std::uint32_t>(progress_total_length);
+  if (!buffer) [[unlikely]] {
+    return;
+  }
+  auto const text = std::span<std::uint32_t>(buffer, static_cast<std::size_t>(progress_total_length));
+  std::fill(std::fill_n(text.begin(), progress_length, progress_glyph[0]), text.end(), L' ');
+
+  auto const style = g_ctx->theme.get_style(im_color_id::text, im_color_id::background);
+  g_ctx->renderer.cmd_draw_text_at(widget_rect.min, text, style);
 }
 
 namespace {

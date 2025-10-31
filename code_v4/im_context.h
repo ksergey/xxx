@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -22,6 +23,8 @@
 namespace xxx {
 
 static_assert(std::is_same_v<uintattr_t, std::uint64_t>, "termbox2 invalid configuration");
+
+using im_clock = std::chrono::steady_clock;
 
 struct im_context {
   im_allocator allocator;
@@ -62,6 +65,11 @@ struct im_context {
     im_vec2 size;
     std::span<im_cell> data;
   } canvas;
+
+  // elapsed seconds since last new_frame(...)
+
+  im_clock::time_point last_frame_time;
+  float elapsed = 0.0;
 };
 
 im_context* g_ctx = nullptr;

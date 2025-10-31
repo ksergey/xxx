@@ -55,6 +55,8 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       xxx::new_frame();
       // xxx::debug();
 
+      xxx::spinner("first spinner");
+
       xxx::push_color(xxx::im_color_id::background, 0x4444ee_c);
       if (xxx::canvas_begin(xxx::im_vec2{32, 32})) {
         for (float angle = 0.0; angle < 360.0; angle += 0.1) {
@@ -113,6 +115,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       xxx::layout_row_push(0.5);
       if (show_label_1) {
         xxx::label("this is first label");
+        xxx::spinner<struct L1>("label1 spinner");
       }
       xxx::layout_row_end();
       xxx::layout_row_begin(2);
@@ -123,6 +126,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       xxx::layout_row_push(0.5);
       if (show_label_2) {
         xxx::label("this is second label");
+        xxx::spinner<struct L2>("label2 spinner");
       }
       xxx::layout_row_end();
 
@@ -176,6 +180,17 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       xxx::label("final layout");
       xxx::view_end();
       xxx::pop_color();
+      xxx::layout_row_end();
+
+      xxx::layout_row_begin(2);
+      xxx::layout_row_push(20);
+      xxx::progress(5.0);
+      xxx::progress(20.0);
+      xxx::progress(40.0);
+      xxx::progress(60.0);
+      xxx::progress(80.0);
+      xxx::progress(100.0);
+      xxx::progress(110.0);
       xxx::layout_row_end();
 
       xxx::render();

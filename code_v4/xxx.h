@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <source_location>
 #include <string_view>
 
 #include "im_color.h"
@@ -10,6 +11,15 @@
 #include "im_vec2.h"
 
 namespace xxx {
+namespace detail {
+
+template <typename T, typename Tag = void>
+[[nodiscard]] auto storage_for() noexcept -> T& {
+  static T value = T();
+  return value;
+}
+
+} // namespace detail
 
 /// Keyboard key ids
 enum class im_key_id {
@@ -178,9 +188,21 @@ auto button(std::string_view label) -> bool;
 /// @return true on "enter" pressed
 auto text_input(std::string_view placeholder, std::string& input, int flags = 0) -> bool;
 
-// TODO:
-void spinner();
-void progress(float& value);
+/// Widget: spinner
+/// @param text is optional spinner text
+/// @param step is storage for step counter
+void spinner(std::string_view text, float& step);
+
+/// @overload
+/// @tparam Tag is tag for step storage
+template <typename Tag = struct SpinnerDefaultTag>
+void spinner(std::string_view text = {}) {
+  spinner(text, detail::storage_for<float, Tag>());
+}
+
+/// Widget: progress
+/// @param value is progress value ([0..100])
+void progress(float const& value);
 
 /// Begin canvas drawing
 /// @param p_size is canvas size in "pixels"
