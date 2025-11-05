@@ -1,3 +1,4 @@
+
 // Copyright (c) Sergey Kovalevich <inndie@gmail.com>
 // SPDX-License-Identifier: MIT
 
@@ -275,6 +276,14 @@ auto to_utf8(std::span<std::uint32_t const> input, OutputIt first) -> OutputIt {
   }
 
   return first;
+}
+
+[[nodiscard]] auto get_style_bg(im_color_id bg_id) noexcept -> im_style {
+  return im_style(im_color(), g_ctx->theme.get_color(bg_id));
+}
+
+[[nodiscard]] auto get_style(im_color_id fg_id, im_color_id bg_id) noexcept -> im_style {
+  return g_ctx->theme.get_style(fg_id, bg_id);
 }
 
 } // namespace
@@ -702,12 +711,35 @@ auto button(std::string_view label) -> bool {
     }
   }
 
+  static constexpr auto fx_left_ch = std::uint32_t(L'[');
+  static constexpr auto fx_right_ch = std::uint32_t(L']');
+
   if (g_ctx->renderer.is_visible(widget_rect)) {
-    auto const style = g_ctx->theme.get_style(
-        widget.active ? im_color_id::button_active_label : im_color_id::button_label, im_color_id::background);
-    auto const label = std::format("< {} >", str);
-    g_ctx->renderer.cmd_fill_rect(widget_rect, ' ', style);
-    g_ctx->renderer.cmd_draw_text_in_rect(widget_rect, to_unicode(label), style, im_halign::center, im_valign::center);
+    // fill background
+    g_ctx->renderer.cmd_fill_rect(widget_rect, ' ',
+        widget.active ? get_style_bg(im_color_id::button_active_background)
+                      : get_style_bg(im_color_id::button_inactive_background));
+
+    auto unicode_str = to_unicode(str);
+
+    // label start pos
+    auto const unicode_str_pos = widget_rect.min + im_vec2((widget_rect.width() - unicode_str.size()) / 2, 0);
+
+    // draw label
+    g_ctx->renderer.cmd_draw_text_at(unicode_str_pos, unicode_str,
+        widget.active ? get_style(im_color_id::button_active_text, im_color_id::button_active_background)
+                      : get_style(im_color_id::button_inactive_text, im_color_id::button_inactive_background));
+
+    // draw left fx
+    g_ctx->renderer.cmd_draw_text_at(unicode_str_pos - im_vec2(2, 0), std::span<std::uint32_t const>(&fx_left_ch, 1),
+        widget.active ? get_style(im_color_id::button_active_fx, im_color_id::button_active_background)
+                      : get_style(im_color_id::button_inactive_fx, im_color_id::button_inactive_background));
+
+    // draw right fx
+    g_ctx->renderer.cmd_draw_text_at(unicode_str_pos + im_vec2(2 + unicode_str.size() - 1, 0),
+        std::span<std::uint32_t const>(&fx_right_ch, 1),
+        widget.active ? get_style(im_color_id::button_active_fx, im_color_id::button_active_background)
+                      : get_style(im_color_id::button_inactive_fx, im_color_id::button_inactive_background));
   }
 
   return widget.pressed;
@@ -818,18 +850,60 @@ auto text_input(std::string_view placeholder, std::string& input, [[maybe_unused
   }
 
   if (g_ctx->renderer.is_visible(widget_rect)) {
+    auto const prompt = to_unicode("> ");
+    auto rect = widget_rect;
+
+    if (widget.active) {
+      // fill background
+      g_ctx->renderer.cmd_fill_rect(rect, ' ', get_style_bg(im_color_id::input_active_background));
+      // draw prompt
+      g_ctx->renderer.cmd_draw_text_at(
+          rect.min, prompt, get_style(im_color_id::input_active_prompt, im_color_id::input_active_background));
+    } else {
+      // fill background
+      g_ctx->renderer.cmd_fill_rect(rect, ' ', get_style_bg(im_color_id::input_inactive_background));
+      // draw prompt
+      g_ctx->renderer.cmd_draw_text_at(
+          rect.min, prompt, get_style(im_color_id::input_inactive_prompt, im_color_id::input_inactive_background));
+    }
+
+    rect.min += im_vec2(prompt.size(), 0);
+
+    // "static" keywoard is required here
+    static constexpr auto space_ch = std::uint32_t(' ');
+
     if (input.empty()) {
-      auto const style = g_ctx->theme.get_style(im_color_id::input_placeholder,
-          widget.active ? im_color_id::input_active_background : im_color_id::input_background);
-      g_ctx->renderer.cmd_fill_rect(widget_rect, ' ', style);
-      g_ctx->renderer.cmd_draw_text_at(widget_rect.min, to_unicode(str), style);
+      auto const unicode_str = to_unicode(str);
+      if (widget.active) {
+        if (!unicode_str.empty()) {
+          {
+            auto const style =
+                get_style(im_color_id::input_active_text, im_color_id::input_active_background).with_reverse();
+            g_ctx->renderer.cmd_draw_text_at(rect.min, unicode_str.subspan(0, 1), style);
+          }
+          rect.min += im_vec2(1, 0);
+          {
+            auto const style = get_style(im_color_id::input_placeholder, im_color_id::input_active_background);
+            g_ctx->renderer.cmd_draw_text_at(rect.min, unicode_str.subspan(1), style);
+          }
+        } else {
+          auto const style =
+              get_style(im_color_id::input_active_text, im_color_id::input_active_background).with_reverse();
+          g_ctx->renderer.cmd_draw_text_at(rect.min, std::span<std::uint32_t const>(&space_ch, 1), style);
+        }
+      } else {
+        if (!unicode_str.empty()) {
+          auto const style = get_style(im_color_id::input_placeholder, im_color_id::input_inactive_background);
+          g_ctx->renderer.cmd_draw_text_at(rect.min, unicode_str, style);
+        }
+      }
     } else {
       if (widget.active) {
         auto const style = g_ctx->theme.get_style(im_color_id::input_active_text, im_color_id::input_active_background);
-        auto const cursor_style = style.with_underline();
-        g_ctx->renderer.cmd_fill_rect(widget_rect, ' ', style);
+        auto const cursor_style = style.with_reverse();
+        g_ctx->renderer.cmd_fill_rect(rect, ' ', style);
 
-        auto const display_width = widget_rect.width();
+        auto const display_width = rect.width();
         auto a_content = std::span<std::uint32_t const>(text_input.text);
         auto a_content_size = int(a_content.size());
         auto a_cursor_pos = text_input.cursor_pos;
@@ -851,28 +925,26 @@ auto text_input(std::string_view placeholder, std::string& input, [[maybe_unused
           a_cursor_pos = a_cursor_pos - text_input.scroll_offset;
         }
 
-        // "static" keywoard is required here
-        static constexpr auto space_ch = std::uint32_t(' ');
-
         if (a_cursor_pos < a_content_size) {
           if (a_cursor_pos > 0) {
-            g_ctx->renderer.cmd_draw_text_at(widget_rect.min, a_content.subspan(0, a_cursor_pos), style);
+            g_ctx->renderer.cmd_draw_text_at(rect.min, a_content.subspan(0, a_cursor_pos), style);
           }
           g_ctx->renderer.cmd_draw_text_at(
-              widget_rect.min + im_vec2(a_cursor_pos, 0), a_content.subspan(a_cursor_pos, 1), cursor_style);
+              rect.min + im_vec2(a_cursor_pos, 0), a_content.subspan(a_cursor_pos, 1), cursor_style);
           if (a_cursor_pos + 1 < a_content_size) {
             g_ctx->renderer.cmd_draw_text_at(
-                widget_rect.min + im_vec2(a_cursor_pos + 1, 0), a_content.subspan(a_cursor_pos + 1), style);
+                rect.min + im_vec2(a_cursor_pos + 1, 0), a_content.subspan(a_cursor_pos + 1), style);
           }
         } else {
-          g_ctx->renderer.cmd_draw_text_at(widget_rect.min, a_content, style);
+          g_ctx->renderer.cmd_draw_text_at(rect.min, a_content, style);
           g_ctx->renderer.cmd_draw_text_at(
-              widget_rect.min + im_vec2(a_content_size, 0), std::span<std::uint32_t const>(&space_ch, 1), cursor_style);
+              rect.min + im_vec2(a_content_size, 0), std::span<std::uint32_t const>(&space_ch, 1), cursor_style);
         }
       } else {
-        auto const style = g_ctx->theme.get_style(im_color_id::input_text, im_color_id::input_background);
-        g_ctx->renderer.cmd_fill_rect(widget_rect, ' ', style);
-        g_ctx->renderer.cmd_draw_text_at(widget_rect.min, to_unicode(input), style);
+        auto const style =
+            g_ctx->theme.get_style(im_color_id::input_inactive_text, im_color_id::input_inactive_background);
+        g_ctx->renderer.cmd_fill_rect(rect, ' ', style);
+        g_ctx->renderer.cmd_draw_text_at(rect.min, to_unicode(input), style);
       }
     }
   }

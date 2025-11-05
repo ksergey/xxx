@@ -29,6 +29,9 @@ struct im_style {
   [[nodiscard]] constexpr auto with_reverse() const noexcept -> im_style {
     return im_style(im_color(fg | TB_REVERSE), im_color(bg));
   }
+  [[nodiscard]] constexpr auto with_blink() const noexcept -> im_style {
+    return im_style(im_color(fg | TB_BLINK), im_color(bg));
+  }
 };
 
 struct im_cell {

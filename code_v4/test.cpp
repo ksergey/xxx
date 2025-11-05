@@ -40,6 +40,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     bool show_label_2 = false;
     std::string string_value_1 = "str";
     std::string string_value_2 = "x1";
+    std::string string_value_3 = "";
 
     xxx::init();
     xxx::set_default_color(xxx::im_color_id::text, {});
@@ -129,7 +130,12 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
         xxx::spinner<struct L2>("label2 spinner");
       }
       xxx::layout_row_end();
+      xxx::view_end();
 
+      xxx::view_begin("view4", xxx::im_key_id::ctrl_t);
+      if (xxx::button("Button 1##1")) {}
+      if (xxx::button("Button 2##2")) {}
+      if (xxx::button("Button 3##3")) {}
       xxx::view_end();
 
       xxx::view_begin("view3", xxx::im_key_id::ctrl_g);
@@ -156,6 +162,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       if (xxx::text_input("enter value##2", string_value_2)) {
         string_value_2.clear();
       }
+      if (xxx::text_input("##4", string_value_3)) {}
       xxx::layout_row_end();
       xxx::view_end();
 

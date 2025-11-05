@@ -76,13 +76,20 @@ enum class im_color_id {
   view_title,
   view_active_border,
   view_active_title,
-  button_label,
-  button_active_label,
-  input_text,
-  input_background,
-  input_active_text,
+  button_inactive_background,
+  button_inactive_text,
+  button_inactive_fx,
+  button_active_background,
+  button_active_text,
+  button_active_fx,
+  input_inactive_background,
+  input_inactive_text,
+  input_inactive_prompt,
   input_active_background,
+  input_active_text,
+  input_active_prompt,
   input_placeholder,
+
   last
 };
 
@@ -178,14 +185,27 @@ void label(std::string_view text);
 /// @return true on button pressed ("enter" or "space" pressed)
 ///
 /// theme:
-///   button_label - button label color
-///   button_active_label - button label color when widget active
+///   button_inactive_background
+///   button_inactive_text
+///   button_inactive_fx
+///   button_active_background
+///   button_active_text
+///   button_active_fx
 auto button(std::string_view label) -> bool;
 
 /// Widget: text input
 /// @param placeholder is placeholder when input is empty
 /// @param input is reference to string storagage for input
 /// @return true on "enter" pressed
+///
+/// theme:
+///   input_inactive_background
+///   input_inactive_text
+///   input_inactive_prompt
+///   input_active_background
+///   input_active_text
+///   input_active_prompt
+///   input_placeholder
 auto text_input(std::string_view placeholder, std::string& input, int flags = 0) -> bool;
 
 /// Widget: spinner
