@@ -3,9 +3,11 @@
 
 #pragma once
 
+#include <format>
+
 namespace xxx {
 
-// helper: 2d vector
+/// helper: 2d vector
 struct im_vec2 {
   int x = 0;
   int y = 0;
@@ -37,3 +39,13 @@ struct im_vec2 {
 };
 
 } // namespace xxx
+
+template <>
+struct std::formatter<xxx::im_vec2> {
+  constexpr auto parse(std::format_parse_context& ctx) {
+    return ctx.begin();
+  }
+  auto format(xxx::im_vec2 const& v, std::format_context& ctx) const {
+    return std::format_to(ctx.out(), "({}, {})", v.x, v.y);
+  }
+};

@@ -25,31 +25,31 @@ private:
 
 public:
   im_theme() {
-    constexpr auto accent_color = 0xff006e_c;
-    constexpr auto dimmed_color = 0x666666_c;
+    // https://coolors.co/palette/848c8e-435058-dcf763-bfb7b6-f1f2ee
 
     this->set_default_color(im_color_id::text, {});
     this->set_default_color(im_color_id::background, {});
     this->set_default_color(im_color_id::border, {});
     this->set_default_color(im_color_id::view_border, {});
     this->set_default_color(im_color_id::view_title, {});
-    this->set_default_color(im_color_id::view_active_border, 0xee3366_c);
-    this->set_default_color(im_color_id::view_active_title, 0x33ee66_c);
+
+    this->set_default_color(im_color_id::view_active_border, 0xdcf763_c);
+    this->set_default_color(im_color_id::view_active_title, 0xdcf763_c);
 
     this->set_default_color(im_color_id::button_inactive_background, im_color());
-    this->set_default_color(im_color_id::button_inactive_text, dimmed_color);
-    this->set_default_color(im_color_id::button_inactive_fx, 0xffffff_c);
+    this->set_default_color(im_color_id::button_inactive_text, 0x848c8e_c);
+    this->set_default_color(im_color_id::button_inactive_fx, 0xbfb7b6_c);
     this->set_default_color(im_color_id::button_active_background, im_color());
-    this->set_default_color(im_color_id::button_active_text, accent_color);
-    this->set_default_color(im_color_id::button_active_fx, accent_color);
+    this->set_default_color(im_color_id::button_active_text, 0xdcf763_c);
+    this->set_default_color(im_color_id::button_active_fx, 0xdcf763_c);
 
     this->set_default_color(im_color_id::input_inactive_background, im_color());
-    this->set_default_color(im_color_id::input_inactive_text, 0xffffff_c);
-    this->set_default_color(im_color_id::input_inactive_prompt, 0xffffff_c);
+    this->set_default_color(im_color_id::input_inactive_text, 0x848c8e_c);
+    this->set_default_color(im_color_id::input_inactive_prompt, 0xf1f2ee_c);
     this->set_default_color(im_color_id::input_active_background, im_color());
-    this->set_default_color(im_color_id::input_active_text, accent_color);
-    this->set_default_color(im_color_id::input_active_prompt, accent_color);
-    this->set_default_color(im_color_id::input_placeholder, dimmed_color);
+    this->set_default_color(im_color_id::input_active_text, 0xdcf763_c);
+    this->set_default_color(im_color_id::input_active_prompt, 0xdcf763_c);
+    this->set_default_color(im_color_id::input_placeholder, 0x848c8e_c);
   }
 
   [[nodiscard]] auto get_style(im_color_id fg_id, im_color_id bg_id) const noexcept -> im_style {

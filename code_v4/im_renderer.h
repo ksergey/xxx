@@ -14,6 +14,24 @@
 #include "im_stack.h"
 #include "xxx.h"
 
+#if 0
+#include <print>
+namespace xxx {
+
+template <typename... Ts>
+void debug(std::format_string<Ts...> fmt, Ts&&... args) {
+  FILE* file = ::fopen("debug.txt", "a");
+  if (!file) {
+    return;
+  }
+  std::print(file, fmt, std::forward<Ts>(args)...);
+  std::print(file, "\n");
+  ::fclose(file);
+}
+
+} // namespace xxx
+#endif
+
 namespace xxx {
 
 struct im_style {

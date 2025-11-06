@@ -499,6 +499,7 @@ void layout_row_push(float ratio_or_width) {
   row_layout.row.index++;
 
   g_ctx->layout.cursor = column_layout.rect.min;
+  g_ctx->layout.last_cursor_y = g_ctx->layout.cursor.y;
 }
 
 void layout_row_end() {
@@ -516,7 +517,12 @@ void layout_row_end() {
   g_ctx->layout.layout_state_stack.pop_back();
 
   g_ctx->layout.cursor = im_vec2(g_ctx->layout.cursor_state_stack.back().x, cursor_max_y);
+  g_ctx->layout.last_cursor_y = g_ctx->layout.cursor.y;
   g_ctx->layout.cursor_state_stack.pop_back();
+}
+
+void same_line() {
+  g_ctx->layout.same_line = true;
 }
 
 void view_begin(std::string_view name, int flags, im_key_id shortcut) {
@@ -551,26 +557,37 @@ void view_begin(std::string_view name, int flags, im_key_id shortcut) {
     auto& container_layout = g_ctx->layout.layout_state_stack.back();
     auto& layout = g_ctx->layout.layout_state_stack.emplace_back();
 
+    // TODO: reset cursor?
+
     auto const do_render_border = (im_view_flag_border == (flags & im_view_flag_border));
     auto const do_render_title = (im_view_flag_title == (flags & im_view_flag_title));
     auto const border = do_render_border ? 1 : 0;
 
     layout.type = im_layout_type::container;
     layout.rect.min = g_ctx->layout.cursor + im_vec2(border, border);
+    // TODO
+    // layout.rect.min = im_vec2(container_layout.rect.min.x + border, g_ctx->layout.cursor.y + border);
     layout.rect.max = im_vec2(container_layout.rect.max.x - border, g_ctx->layout.cursor.y);
     layout.container = im_layout_data_container{.border = border};
 
     g_ctx->layout.cursor_state_stack.push_back(g_ctx->layout.cursor);
     g_ctx->layout.cursor = layout.rect.min;
+    g_ctx->layout.last_cursor_y = g_ctx->layout.cursor.y;
 
     if (!do_render_border && do_render_title) {
-      auto const title_rect = g_ctx->layout.add_widget_item(1);
+      auto const title_rect = g_ctx->layout.reserve_layout_lines(1);
       auto const style = view.active ? g_ctx->theme.get_style(im_color_id::view_active_title, im_color_id::background)
                                      : g_ctx->theme.get_style(im_color_id::view_title, im_color_id::background);
       g_ctx->renderer.cmd_fill_rect(title_rect, ' ', style);
       g_ctx->renderer.cmd_draw_text_in_rect(
           title_rect, to_unicode(view.current_title), style, im_halign::center, im_valign::top);
     }
+
+    // shrink available clip rect by layout width
+    auto clip_rect = g_ctx->renderer.clip_rect();
+    clip_rect.min.x = layout.rect.min.x;
+    clip_rect.max.x = layout.rect.max.x;
+    g_ctx->renderer.push_clip_rect(clip_rect);
   }
 }
 
@@ -581,6 +598,8 @@ void view_end() {
 
   // layout and visuals
   {
+    g_ctx->renderer.pop_clip_rect();
+
     auto const do_render_border = (im_view_flag_border == (view.current_flags & im_view_flag_border));
     auto const do_render_title = (im_view_flag_title == (view.current_flags & im_view_flag_title));
 
@@ -657,13 +676,14 @@ void panel_end() {
 }
 
 void label(std::string_view text) {
-  auto const widget_rect = g_ctx->layout.add_widget_item(1);
+  auto const unicode_text = to_unicode(text);
+  auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(unicode_text.size(), 1));
   if (!g_ctx->renderer.is_visible(widget_rect)) {
     return;
   }
   auto const style = g_ctx->theme.get_style(im_color_id::text, im_color_id::background);
   g_ctx->renderer.cmd_fill_rect(widget_rect, ' ', style);
-  g_ctx->renderer.cmd_draw_text_in_rect(widget_rect, to_unicode(text), style, im_halign::left, im_valign::top);
+  g_ctx->renderer.cmd_draw_text_in_rect(widget_rect, unicode_text, style, im_halign::left, im_valign::top);
 }
 
 namespace internal {
@@ -698,10 +718,16 @@ void common_focusable_behaviour(im_id widget_id) noexcept {
 } // namespace internal
 
 auto button(std::string_view label) -> bool {
+  static constexpr int button_min_width = 10;
+  static constexpr auto fx_left_ch = std::uint32_t(L'[');
+  static constexpr auto fx_right_ch = std::uint32_t(L']');
+
   auto& widget = g_ctx->widget;
 
-  auto const widget_rect = g_ctx->layout.add_widget_item(1);
   auto const [str, widget_key] = g_ctx->hash_id.split_str_key(label);
+  auto const unicode_str = to_unicode(str);
+  auto const button_width = std::max<int>(button_min_width, unicode_str.size() + 4);
+  auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(button_width, 1));
 
   internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key));
 
@@ -711,16 +737,11 @@ auto button(std::string_view label) -> bool {
     }
   }
 
-  static constexpr auto fx_left_ch = std::uint32_t(L'[');
-  static constexpr auto fx_right_ch = std::uint32_t(L']');
-
   if (g_ctx->renderer.is_visible(widget_rect)) {
     // fill background
     g_ctx->renderer.cmd_fill_rect(widget_rect, ' ',
         widget.active ? get_style_bg(im_color_id::button_active_background)
                       : get_style_bg(im_color_id::button_inactive_background));
-
-    auto unicode_str = to_unicode(str);
 
     // label start pos
     auto const unicode_str_pos = widget_rect.min + im_vec2((widget_rect.width() - unicode_str.size()) / 2, 0);
@@ -746,16 +767,17 @@ auto button(std::string_view label) -> bool {
 }
 
 auto text_input(std::string_view placeholder, std::string& input, [[maybe_unused]] int flags) -> bool {
+  static constexpr int input_width = 16;
+
   auto& widget = g_ctx->widget;
   auto& text_input = g_ctx->text_input;
 
-  auto const widget_rect = g_ctx->layout.add_widget_item(1);
+  auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(input_width, 1));
   auto const [str, widget_key] = g_ctx->hash_id.split_str_key(placeholder);
 
   internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key));
 
   if (widget.active) {
-    // utf8_to_unicode(input, text_input.text);
     text_input.text.clear();
     to_unicode(input, std::back_inserter(text_input.text));
 
@@ -963,24 +985,31 @@ constexpr auto progress_glyph = std::to_array<std::uint32_t>({L'⣿', L'⡇'});
 } // namespace
 
 void spinner(std::string_view text, float& step) {
-  auto const widget_rect = g_ctx->layout.add_widget_item(1);
+  static constexpr int spinner_min_width = 10;
+
+  auto const unicode_text = to_unicode(text);
+  auto const spinner_width = std::max<int>(spinner_min_width, unicode_text.size() + 2);
+  auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(spinner_width, 1));
 
   // update step
   step += g_ctx->elapsed;
-  auto const index = std::size_t(std::round(step / spinner_update_interval)) % spinner_glyphs.size();
 
   if (!g_ctx->renderer.is_visible(widget_rect)) {
     return;
   }
 
+  auto const index = std::size_t(std::round(step / spinner_update_interval)) % spinner_glyphs.size();
+
   auto const style = g_ctx->theme.get_style(im_color_id::text, im_color_id::background);
   g_ctx->renderer.cmd_fill_rect(widget_rect, ' ', style);
   g_ctx->renderer.cmd_draw_text_at(widget_rect.min, std::span<std::uint32_t const>(&spinner_glyphs[index], 1), style);
-  g_ctx->renderer.cmd_draw_text_at(widget_rect.min + im_vec2(1, 0), to_unicode(text), style);
+  g_ctx->renderer.cmd_draw_text_at(widget_rect.min + im_vec2(1, 0), unicode_text, style);
 }
 
 void progress(float const& value) {
-  auto const widget_rect = g_ctx->layout.add_widget_item(1);
+  static constexpr int progress_width = 10;
+
+  auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(progress_width, 1));
 
   if (!g_ctx->renderer.is_visible(widget_rect)) {
     return;
@@ -1029,7 +1058,7 @@ auto canvas_begin(im_vec2 p_size) -> bool {
     canvas.data = {};
   }
 
-  canvas.rect = g_ctx->layout.add_widget_item(height);
+  canvas.rect = g_ctx->layout.add_widget_item(canvas.size);
   g_ctx->renderer.push_clip_rect(canvas.rect);
 
   if (!canvas.data.empty()) {

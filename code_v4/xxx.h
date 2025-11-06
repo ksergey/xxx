@@ -137,6 +137,9 @@ void layout_row_push(float ratio_or_width);
 /// End row layout
 void layout_row_end();
 
+/// Place next widget at the same line
+void same_line();
+
 // -----------------------------------------
 // View
 // -----------------------------------------

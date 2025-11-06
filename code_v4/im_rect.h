@@ -4,12 +4,13 @@
 #pragma once
 
 #include <algorithm>
+#include <format>
 
 #include "im_vec2.h"
 
 namespace xxx {
 
-// helper: aligned bounding-box
+/// helper: aligned bounding-box
 struct im_rect {
   im_vec2 min = im_vec2(0, 0);   // top-left (included)
   im_vec2 max = im_vec2(-1, -1); // bottom-right (included)
@@ -78,6 +79,10 @@ struct im_rect {
     }
     auto const& r_min = r.min;
     auto const& r_max = r.max;
+    // TODO
+    if (r_max.x < min.x || r_min.x > max.x || r_max.y < min.y || r_min.y > max.y) {
+      return im_rect();
+    }
     return im_rect(im_vec2(std::clamp(min.x, r_min.x, r_max.x), std::clamp(min.y, r_min.y, r_max.y)),
         im_vec2(std::clamp(max.x, r_min.x, r_max.x), std::clamp(max.y, r_min.y, r_max.y)));
   }
@@ -107,3 +112,13 @@ struct im_rect {
 };
 
 } // namespace xxx
+
+template <>
+struct std::formatter<xxx::im_rect> {
+  constexpr auto parse(std::format_parse_context& ctx) {
+    return ctx.begin();
+  }
+  auto format(xxx::im_rect const& r, std::format_context& ctx) const {
+    return std::format_to(ctx.out(), "({}, {})", r.min, r.max);
+  }
+};
