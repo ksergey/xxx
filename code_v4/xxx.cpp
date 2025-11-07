@@ -942,6 +942,7 @@ auto text_input(std::string_view placeholder, std::string& input, [[maybe_unused
           }
           text_input.scroll_offset = std::max<int>(text_input.scroll_offset, 0);
 
+          // TODO: subspan is not the same as substr
           a_content = a_content.subspan(text_input.scroll_offset);
           a_content_size = int(a_content.size());
           a_cursor_pos = a_cursor_pos - text_input.scroll_offset;
