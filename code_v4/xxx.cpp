@@ -901,12 +901,12 @@ auto text_input(std::string_view placeholder, std::string& input, [[maybe_unused
           {
             auto const style =
                 get_style(im_color_id::input_active_text, im_color_id::input_active_background).with_reverse();
-            g_ctx->renderer.cmd_draw_text_at(rect.min, unicode_str.subspan(0, 1), style);
+            g_ctx->renderer.cmd_draw_text_at(rect.min, substr(unicode_str, 0, 1), style);
           }
           rect.min += im_vec2(1, 0);
           {
             auto const style = get_style(im_color_id::input_placeholder, im_color_id::input_active_background);
-            g_ctx->renderer.cmd_draw_text_at(rect.min, unicode_str.subspan(1), style);
+            g_ctx->renderer.cmd_draw_text_at(rect.min, substr(unicode_str, 1), style);
           }
         } else {
           auto const style =
@@ -942,21 +942,20 @@ auto text_input(std::string_view placeholder, std::string& input, [[maybe_unused
           }
           text_input.scroll_offset = std::max<int>(text_input.scroll_offset, 0);
 
-          // TODO: subspan is not the same as substr
-          a_content = a_content.subspan(text_input.scroll_offset);
+          a_content = substr(a_content, text_input.scroll_offset);
           a_content_size = int(a_content.size());
           a_cursor_pos = a_cursor_pos - text_input.scroll_offset;
         }
 
         if (a_cursor_pos < a_content_size) {
           if (a_cursor_pos > 0) {
-            g_ctx->renderer.cmd_draw_text_at(rect.min, a_content.subspan(0, a_cursor_pos), style);
+            g_ctx->renderer.cmd_draw_text_at(rect.min, substr(a_content, 0, a_cursor_pos), style);
           }
           g_ctx->renderer.cmd_draw_text_at(
-              rect.min + im_vec2(a_cursor_pos, 0), a_content.subspan(a_cursor_pos, 1), cursor_style);
+              rect.min + im_vec2(a_cursor_pos, 0), substr(a_content, a_cursor_pos, 1), cursor_style);
           if (a_cursor_pos + 1 < a_content_size) {
             g_ctx->renderer.cmd_draw_text_at(
-                rect.min + im_vec2(a_cursor_pos + 1, 0), a_content.subspan(a_cursor_pos + 1), style);
+                rect.min + im_vec2(a_cursor_pos + 1, 0), substr(a_content, a_cursor_pos + 1), style);
           }
         } else {
           g_ctx->renderer.cmd_draw_text_at(rect.min, a_content, style);

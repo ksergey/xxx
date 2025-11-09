@@ -12,6 +12,7 @@
 #include <termbox2.h>
 
 #include "im_stack.h"
+#include "string_utils.h"
 #include "xxx.h"
 
 #if 0
@@ -239,10 +240,10 @@ public:
     }
 
     if (c_rect.min.x > a_rect.min.x) {
-      text = text.subspan(c_rect.min.x - a_rect.min.x);
+      text = substr(text, c_rect.min.x - a_rect.min.x);
     }
     if (c_rect.max.x < a_rect.max.x) {
-      text = text.subspan(0, text.size() - (a_rect.max.x - c_rect.max.x));
+      text = substr(text, 0, text.size() - (a_rect.max.x - c_rect.max.x));
     }
     if (text.empty()) {
       return;
@@ -300,11 +301,11 @@ public:
     auto text_max_x = text_min_x + text_length - 1;
 
     if (text_min_x < clip_rect_.min.x) {
-      text = text.subspan(clip_rect_.min.x - text_min_x);
+      text = substr(text, clip_rect_.min.x - text_min_x);
       text_min_x = clip_rect_.min.x;
     }
     if (text_max_x > clip_rect_.max.x) {
-      text = text.subspan(0, text.size() - (text_max_x - clip_rect_.max.x));
+      text = substr(text, 0, text.size() - (text_max_x - clip_rect_.max.x));
       text_max_x = clip_rect_.max.x;
     }
 

@@ -1,6 +1,6 @@
 set(TargetName xxx_v4)
 
-add_library(${TargetName} xxx.cpp unicode.cpp im_renderer.cpp)
+add_library(${TargetName} xxx.cpp unicode.cpp im_rect.cpp im_renderer.cpp)
 target_compile_features(${TargetName} PRIVATE cxx_std_23)
 target_compile_options(${TargetName} PRIVATE -Wall -Wextra -g)
 target_link_libraries(${TargetName} PUBLIC 3rdparty::termbox2)
