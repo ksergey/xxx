@@ -4,6 +4,7 @@
 #pragma once
 
 #include <algorithm>
+#include <climits>
 #include <format>
 
 #include "im_vec2.h"
@@ -12,8 +13,8 @@ namespace xxx {
 
 /// helper: aligned bounding-box
 struct im_rect {
-  im_vec2 min = im_vec2(0, 0);   // top-left (included)
-  im_vec2 max = im_vec2(-1, -1); // bottom-right (included)
+  im_vec2 min = im_vec2(INT_MAX, INT_MAX); // top-left (included)
+  im_vec2 max = im_vec2(INT_MIN, INT_MIN); // bottom-right (included)
 
   constexpr im_rect() = default;
 
@@ -24,17 +25,11 @@ struct im_rect {
   [[nodiscard]] constexpr operator bool() const noexcept {
     return !this->empty();
   }
-  [[nodiscard]] constexpr auto null() const noexcept -> bool {
-    return (min.x - 1 == max.x) && (min.y - 1 == max.y);
-  }
   [[nodiscard]] constexpr auto empty() const noexcept -> bool {
     return (min.x > max.x) || (min.y > max.y);
   }
   [[nodiscard]] constexpr auto valid() const noexcept -> bool {
     return (min.x <= max.x) && (min.y <= max.y);
-  }
-  [[nodiscard]] constexpr auto center() const noexcept -> im_vec2 {
-    return im_vec2((min.x + max.x) / 2, (min.y + max.y) / 2);
   }
   [[nodiscard]] constexpr auto width() const noexcept -> int {
     return max.x - min.x + 1;
@@ -74,17 +69,16 @@ struct im_rect {
     return r.min.x >= min.x && r.min.y >= min.y && r.max.x <= max.x && r.max.y <= max.y;
   }
   [[nodiscard]] constexpr auto intersection(im_rect const& r) const noexcept -> im_rect {
-    if (this->null() || r.null()) {
+    if (!this->valid() || !r.valid()) {
       return im_rect();
     }
     auto const& r_min = r.min;
     auto const& r_max = r.max;
-    // TODO
     if (r_max.x < min.x || r_min.x > max.x || r_max.y < min.y || r_min.y > max.y) {
       return im_rect();
     }
-    return im_rect(im_vec2(std::clamp(min.x, r_min.x, r_max.x), std::clamp(min.y, r_min.y, r_max.y)),
-        im_vec2(std::clamp(max.x, r_min.x, r_max.x), std::clamp(max.y, r_min.y, r_max.y)));
+    return im_rect(std::clamp(r_min.x, min.x, max.x), std::clamp(r_min.y, min.y, max.y),
+        std::clamp(r_max.x, min.x, max.x), std::clamp(r_max.y, min.y, max.y));
   }
   [[nodiscard]] constexpr auto translate(im_vec2 const& t) const noexcept -> im_rect {
     return im_rect(min + t, max + t);
@@ -119,6 +113,12 @@ struct std::formatter<xxx::im_rect> {
     return ctx.begin();
   }
   auto format(xxx::im_rect const& r, std::format_context& ctx) const {
-    return std::format_to(ctx.out(), "({}, {})", r.min, r.max);
+    if (!r.valid()) {
+      std::format_to(ctx.out(), "<!>");
+    }
+    if (r == xxx::im_rect()) {
+      return std::format_to(ctx.out(), "im_rect()");
+    }
+    return std::format_to(ctx.out(), "im_rect({}, {}, {}, {})", r.min.x, r.min.y, r.max.x, r.max.y);
   }
 };

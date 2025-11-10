@@ -233,6 +233,10 @@ public:
   /// Append command to draw text at position
   /// \warning \c text must exists until next im_renderer::start_new_frame(...) call
   void cmd_draw_text_at(im_vec2 const& pos, std::span<std::uint32_t const> text, im_style const& style) {
+    if (text.empty()) {
+      return;
+    }
+
     auto const a_rect = this->adjust(im_rect(pos, pos + im_vec2(text.size() - 1, 0)));
     auto const c_rect = clip_rect_.intersection(a_rect);
     if (!c_rect) {

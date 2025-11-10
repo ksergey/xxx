@@ -67,8 +67,6 @@ struct im_layout {
   static constexpr auto spacing = im_vec2(1, 0);
 
   im_stack<im_layout_state> layout_state_stack = im_stack<im_layout_state>(32);
-  im_stack<im_vec2> cursor_state_stack = im_stack<im_vec2>(32);
-  // im_vec2 cursor_prev_line = im_vec2(0, 0);
   im_vec2 cursor = im_vec2(0, 0);
   int last_cursor_y = 0;
   bool same_line = false;
@@ -138,7 +136,6 @@ struct im_layout {
 
   void reset(im_rect const& rect) {
     layout_state_stack.clear();
-    cursor_state_stack.clear();
 
     auto& layout = layout_state_stack.emplace_back();
     layout.type = im_layout_type::container;

@@ -5,9 +5,11 @@
 
 namespace xxx {
 
-static_assert(im_rect().null());
 static_assert(im_rect().empty());
 static_assert(!im_rect().valid());
+static_assert(im_rect(0, 0, 0, 0).valid());
+static_assert(im_rect(2, 3, 0, 1).valid() == false);
+static_assert(im_rect(2, 3, 0, 1).empty() == true);
 
 static_assert(im_rect(0, 0, 4, 2).width() == 5);
 static_assert(im_rect(0, 0, 4, 2).height() == 3);
@@ -35,7 +37,9 @@ static_assert(im_rect(0, 0, 4, 2).intersection(im_rect(1, 1, 4, 2)) == im_rect(1
 static_assert(im_rect(0, 0, 4, 2).intersection(im_rect(-1, -1, 5, 3)) == im_rect(0, 0, 4, 2));
 static_assert(im_rect(0, 0, 4, 2).intersection(im_rect(-1, -1, 3, 1)) == im_rect(0, 0, 3, 1));
 
+static_assert(im_rect(0, 0, 4, 2).intersection(im_rect(-1, -1, 0, 0)).valid() == true);
 static_assert(im_rect(0, 0, 4, 2).intersection(im_rect(-1, -1, 0, 0)) == im_rect(0, 0, 0, 0));
-// static_assert(im_rect(0, 0, 4, 2).intersection(im_rect(-1, -1, 0, 0)).empty());
+
+static_assert(im_rect(0, 0, 4, 2).intersection(im_rect(5, 1, 6, 6)) == im_rect());
 
 } // namespace xxx

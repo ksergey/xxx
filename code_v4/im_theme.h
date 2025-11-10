@@ -30,9 +30,9 @@ public:
     this->set_default_color(im_color_id::text, {});
     this->set_default_color(im_color_id::background, {});
     this->set_default_color(im_color_id::border, {});
-    this->set_default_color(im_color_id::view_border, {});
-    this->set_default_color(im_color_id::view_title, {});
 
+    this->set_default_color(im_color_id::view_inactive_border, {});
+    this->set_default_color(im_color_id::view_inactive_title, {});
     this->set_default_color(im_color_id::view_active_border, 0xdcf763_c);
     this->set_default_color(im_color_id::view_active_title, 0xdcf763_c);
 

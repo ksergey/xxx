@@ -446,14 +446,15 @@ void layout_row_begin(std::size_t columns) {
     return;
   }
 
-  g_ctx->layout.cursor_state_stack.push_back(g_ctx->layout.cursor);
-
-  auto& container_layout = g_ctx->layout.layout_state_stack.back();
+  auto const& parent_layout = g_ctx->layout.layout_state_stack.back();
   auto& row_layout = g_ctx->layout.layout_state_stack.emplace_back();
+
+  // reset cursor to start of container layout
+  g_ctx->layout.cursor.x = parent_layout.rect.min.x;
 
   row_layout.type = im_layout_type::row;
   row_layout.rect.min = g_ctx->layout.cursor;
-  row_layout.rect.max = im_vec2(container_layout.rect.max.x, g_ctx->layout.cursor.y);
+  row_layout.rect.max = im_vec2(parent_layout.rect.max.x, g_ctx->layout.cursor.y);
   row_layout.row = im_layout_data_row{.columns = int(columns), .index = 0, .cursor_max_y = g_ctx->layout.cursor.y};
 
   // at this point
@@ -516,9 +517,10 @@ void layout_row_end() {
   auto const cursor_max_y = std::max(row_layout.row.cursor_max_y, g_ctx->layout.cursor.y);
   g_ctx->layout.layout_state_stack.pop_back();
 
-  g_ctx->layout.cursor = im_vec2(g_ctx->layout.cursor_state_stack.back().x, cursor_max_y);
+  auto const& parent_layout = g_ctx->layout.layout_state_stack.back();
+
+  g_ctx->layout.cursor = im_vec2(parent_layout.rect.min.x, cursor_max_y);
   g_ctx->layout.last_cursor_y = g_ctx->layout.cursor.y;
-  g_ctx->layout.cursor_state_stack.pop_back();
 }
 
 void same_line() {
@@ -554,30 +556,29 @@ void view_begin(std::string_view name, int flags, im_key_id shortcut) {
 
   // layout and visuals
   {
-    auto& container_layout = g_ctx->layout.layout_state_stack.back();
+    auto const& parent_layout = g_ctx->layout.layout_state_stack.back();
     auto& layout = g_ctx->layout.layout_state_stack.emplace_back();
-
-    // TODO: reset cursor?
 
     auto const do_render_border = (im_view_flag_border == (flags & im_view_flag_border));
     auto const do_render_title = (im_view_flag_title == (flags & im_view_flag_title));
     auto const border = do_render_border ? 1 : 0;
 
+    // reset cursor to start of container layout
+    g_ctx->layout.cursor.x = parent_layout.rect.min.x;
+
     layout.type = im_layout_type::container;
     layout.rect.min = g_ctx->layout.cursor + im_vec2(border, border);
-    // TODO
-    // layout.rect.min = im_vec2(container_layout.rect.min.x + border, g_ctx->layout.cursor.y + border);
-    layout.rect.max = im_vec2(container_layout.rect.max.x - border, g_ctx->layout.cursor.y);
+    layout.rect.max = im_vec2(parent_layout.rect.max.x - border, g_ctx->layout.cursor.y);
     layout.container = im_layout_data_container{.border = border};
 
-    g_ctx->layout.cursor_state_stack.push_back(g_ctx->layout.cursor);
     g_ctx->layout.cursor = layout.rect.min;
     g_ctx->layout.last_cursor_y = g_ctx->layout.cursor.y;
 
     if (!do_render_border && do_render_title) {
       auto const title_rect = g_ctx->layout.reserve_layout_lines(1);
-      auto const style = view.active ? g_ctx->theme.get_style(im_color_id::view_active_title, im_color_id::background)
-                                     : g_ctx->theme.get_style(im_color_id::view_title, im_color_id::background);
+      auto const style = view.active
+                             ? g_ctx->theme.get_style(im_color_id::view_active_title, im_color_id::background)
+                             : g_ctx->theme.get_style(im_color_id::view_inactive_title, im_color_id::background);
       g_ctx->renderer.cmd_fill_rect(title_rect, ' ', style);
       g_ctx->renderer.cmd_draw_text_in_rect(
           title_rect, to_unicode(view.current_title), style, im_halign::center, im_valign::top);
@@ -617,20 +618,22 @@ void view_end() {
     g_ctx->layout.layout_state_stack.pop_back();
 
     if (do_render_border) {
-      auto const style = view.active ? g_ctx->theme.get_style(im_color_id::view_active_border, im_color_id::background)
-                                     : g_ctx->theme.get_style(im_color_id::view_border, im_color_id::background);
+      auto const style = view.active
+                             ? g_ctx->theme.get_style(im_color_id::view_active_border, im_color_id::background)
+                             : g_ctx->theme.get_style(im_color_id::view_inactive_border, im_color_id::background);
       g_ctx->renderer.cmd_draw_rect(panel_rect, style);
 
       if (do_render_title) {
-        auto const style = view.active ? g_ctx->theme.get_style(im_color_id::view_active_title, im_color_id::background)
-                                       : g_ctx->theme.get_style(im_color_id::view_title, im_color_id::background);
+        auto const style = view.active
+                               ? g_ctx->theme.get_style(im_color_id::view_active_title, im_color_id::background)
+                               : g_ctx->theme.get_style(im_color_id::view_inactive_title, im_color_id::background);
         g_ctx->renderer.cmd_draw_text_in_rect(
             panel_rect, to_unicode(view.current_title), style, im_halign::center, im_valign::top);
       }
     }
 
-    g_ctx->layout.cursor = im_vec2(g_ctx->layout.cursor_state_stack.back().x, g_ctx->layout.cursor.y + border);
-    g_ctx->layout.cursor_state_stack.pop_back();
+    auto const& parent_layout = g_ctx->layout.layout_state_stack.back();
+    g_ctx->layout.cursor = im_vec2(parent_layout.rect.min.x, g_ctx->layout.cursor.y + border);
   }
 
   view.current_title = "N/A";
@@ -642,15 +645,17 @@ void view_end() {
 void panel_begin() {
   constexpr auto border = int(1);
 
-  auto& container_layout = g_ctx->layout.layout_state_stack.back();
+  auto const& parent_layout = g_ctx->layout.layout_state_stack.back();
   auto& layout = g_ctx->layout.layout_state_stack.emplace_back();
+
+  // reset cursor to start of container layout
+  g_ctx->layout.cursor.x = parent_layout.rect.min.x;
 
   layout.type = im_layout_type::container;
   layout.rect.min = g_ctx->layout.cursor + im_vec2(border, border);
-  layout.rect.max = im_vec2(container_layout.rect.max.x - border, g_ctx->layout.cursor.y);
+  layout.rect.max = im_vec2(parent_layout.rect.max.x - border, g_ctx->layout.cursor.y);
   layout.container = im_layout_data_container{.border = border};
 
-  g_ctx->layout.cursor_state_stack.push_back(g_ctx->layout.cursor);
   g_ctx->layout.cursor = layout.rect.min;
 }
 
@@ -671,8 +676,9 @@ void panel_end() {
   auto const style = g_ctx->theme.get_style(im_color_id::border, im_color_id::background);
   g_ctx->renderer.cmd_draw_rect(panel_rect, style);
 
-  g_ctx->layout.cursor = im_vec2(g_ctx->layout.cursor_state_stack.back().x, g_ctx->layout.cursor.y + border);
-  g_ctx->layout.cursor_state_stack.pop_back();
+  // restore cursor position at x
+  auto const& parent_layout = g_ctx->layout.layout_state_stack.back();
+  g_ctx->layout.cursor = im_vec2(parent_layout.rect.min.x, g_ctx->layout.cursor.y + border);
 }
 
 void label(std::string_view text) {
@@ -955,7 +961,7 @@ auto text_input(std::string_view placeholder, std::string& input, [[maybe_unused
               rect.min + im_vec2(a_cursor_pos, 0), substr(a_content, a_cursor_pos, 1), cursor_style);
           if (a_cursor_pos + 1 < a_content_size) {
             g_ctx->renderer.cmd_draw_text_at(
-                rect.min + im_vec2(a_cursor_pos + 1, 0), substr(a_content, a_cursor_pos + 1), style);
+                rect.min + im_vec2(a_cursor_pos + 1, 0), substr(a_content, a_cursor_pos + 1, display_width), style);
           }
         } else {
           g_ctx->renderer.cmd_draw_text_at(rect.min, a_content, style);

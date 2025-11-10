@@ -46,6 +46,6 @@ struct std::formatter<xxx::im_vec2> {
     return ctx.begin();
   }
   auto format(xxx::im_vec2 const& v, std::format_context& ctx) const {
-    return std::format_to(ctx.out(), "({}, {})", v.x, v.y);
+    return std::format_to(ctx.out(), "im_vec2({}, {})", v.x, v.y);
   }
 };
