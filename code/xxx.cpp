@@ -703,6 +703,9 @@ void common_focusable_behaviour(im_id widget_id) noexcept {
   widget.pressed = false;
   widget.active = false;
 
+  // TODO:
+  // https://github.com/ksergey/xxx/blob/20b7cfdab337acda6e69290a8f4a9ee408ad8c37/code_v3/xxx.cpp#L306-L316
+
   // focus staff
   if (view.active) {
     if (widget.active_id == im_id()) {
