@@ -901,7 +901,8 @@ auto text_input(std::string_view placeholder, std::string& input, [[maybe_unused
     static constexpr auto space_ch = std::uint32_t(' ');
 
     if (input.empty()) {
-      auto const unicode_str = to_unicode(str);
+      auto const unicode_str = substr(to_unicode(str), 0, rect.width());
+
       if (widget.active) {
         if (!unicode_str.empty()) {
           {
@@ -972,7 +973,7 @@ auto text_input(std::string_view placeholder, std::string& input, [[maybe_unused
         auto const style =
             g_ctx->theme.get_style(im_color_id::input_inactive_text, im_color_id::input_inactive_background);
         g_ctx->renderer.cmd_fill_rect(rect, ' ', style);
-        g_ctx->renderer.cmd_draw_text_at(rect.min, to_unicode(input), style);
+        g_ctx->renderer.cmd_draw_text_at(rect.min, substr(to_unicode(input), 0, rect.width()), style);
       }
     }
   }
