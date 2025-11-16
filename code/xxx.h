@@ -3,141 +3,241 @@
 
 #pragma once
 
-#include <cstdint>
-#include <stdexcept>
+#include <source_location>
 #include <string_view>
 
-#include <termbox2.h>
+#include "im_color.h"
+#include "im_rect.h"
+#include "im_vec2.h"
 
 namespace xxx {
-namespace impl {
+namespace detail {
 
-template <typename T, typename Tag>
-[[nodiscard]] T& getStorageFor() noexcept {
+template <typename T, typename Tag = void>
+[[nodiscard]] auto storage_for() noexcept -> T& {
   static T value = T();
   return value;
 }
 
-} // namespace impl
+} // namespace detail
 
-/// Color
-enum class Color : uintattr_t {};
-
-/// Construct \c Color from RGB components
-constexpr Color rgb(std::uint8_t r, std::uint8_t g, std::uint8_t b) noexcept {
-  return Color((std::uint32_t(r) << 16) | std::uint32_t(g) << 8 | std::uint32_t(b));
-}
-
-/// Text attributes
-enum class Attribute : uintattr_t {
-  None = 0,
-  Bold = TB_BOLD,
-  Underline = TB_UNDERLINE,
-  Reverse = TB_REVERSE,
-  Italic = TB_ITALIC,
-  Bright = TB_BRIGHT,
-  Dim = TB_DIM
+/// Keyboard key ids
+enum class im_key_id {
+  backspace = 1, // ctrl-h
+  backspace2,
+  del,
+  tab,   // ctrl-i
+  enter, // ctrl-m
+  space,
+  esc,
+  home,
+  end,
+  arrow_up,
+  arrow_down,
+  arrow_left,
+  arrow_right,
+  ctrl_a,
+  ctrl_b,
+  ctrl_c,
+  ctrl_d,
+  ctrl_e,
+  ctrl_f,
+  ctrl_g,
+  // ctrl_h,
+  // ctrl_i,
+  ctrl_j,
+  ctrl_k,
+  // ctrl_m,
+  ctrl_n,
+  ctrl_o,
+  ctrl_p,
+  ctrl_q,
+  ctrl_r,
+  ctrl_s,
+  ctrl_t,
+  ctrl_u,
+  ctrl_v,
+  ctrl_w,
+  ctrl_x,
+  ctrl_y,
+  ctrl_z,
+  last
 };
 
-/// Text alignment
-enum class Alignment { Left, Right, Center };
+/// Mouse button id
+enum class im_mouse_button_id { left, middle, right, last };
 
-/// Keyboard input event
-struct InputEvent {
-  std::uint8_t mod;  // bitwise `TB_MOD_*` constants
-  std::uint16_t key; // one of `TB_KEY_*` constants
-  std::uint32_t ch;  // a Unicode codepoint
+/// Color id
+enum class im_color_id {
+  text,
+  background,
+  border,
+  view_inactive_border,
+  view_inactive_title,
+  view_active_border,
+  view_active_title,
+  button_inactive_background,
+  button_inactive_text,
+  button_inactive_fx,
+  button_active_background,
+  button_active_text,
+  button_active_fx,
+  input_inactive_background,
+  input_inactive_text,
+  input_inactive_prompt,
+  input_active_background,
+  input_active_text,
+  input_active_prompt,
+  input_placeholder,
+
+  last
 };
 
-#if 0
-std::string inputEventToKey(InputEvent const& ev);
-#endif
-
-/// Init internals
+/// Init library
 void init();
 
-/// Shutdown internals
+/// Shutdown library
 void shutdown();
 
-/// Read mouse/keyboard/etc events
-/// \param[in] timeoutMs is number of milliseconds to wait event
-/// \return true on an event read
-bool update(unsigned timeoutMs = 100);
+/// Update internal state
+void process_input_events();
 
-/// Return last input event
-[[nodiscard]] InputEvent const* lastInputEvent();
+/// Start drawing new frame
+void new_frame();
 
-/// Push draw style
-void stylePush(Color fg, Color bg = Color(), Attribute attr = Attribute::None);
+/// Render frame
+void render();
 
-/// Pop draw style
-void stylePop();
+// XXX: remove
+void debug();
 
-/// Start draw frame
-void begin();
+/// Get terminal screen rect
+[[nodiscard]] auto get_screen_rect() -> im_rect;
 
-/// Finish draw frame
-void end();
+/// Check key pressed
+[[nodiscard]] auto is_key_pressed(im_key_id id) -> bool;
 
-void rowBegin(unsigned columnsCount);
-void rowEnd();
-void rowPush(float widthOrRatio);
+/// Set default color
+void set_default_color(im_color_id id, im_color color);
 
-void panelBegin();
-void panelEnd();
-void panelTitle(std::string_view text, Alignment align = Alignment::Center);
+/// Save current color and set new
+void push_color(im_color_id id, im_color color);
 
-/// Draw single line label
-void label(std::string_view text, Alignment align = Alignment::Left);
+/// Pop color state
+void pop_color(std::size_t cnt = 1);
 
-/// Draw spacer
-/// \param[in] heightOrRatio - spacer size if heightOrRatio > 1 or spacer ratio if heightOrRatio <= 1.0
-void spacer(float heightOrRatio);
+/// Begin row layout
+/// @param columns is number of columns in row
+void layout_row_begin(std::size_t columns);
 
-namespace impl {
+/// Push column
+/// @param ratio_or_width is ratio of parent layout width (in case of value < 1.0) or width in chars
+void layout_row_push(float ratio_or_width);
 
-void spinner(std::string_view text, Alignment align, float& step);
+/// End row layout
+void layout_row_end();
 
-} // namespace impl
+/// Place next widget at the same line
+void same_line();
 
-/// Draw spinner
-template <typename Tag = struct Tag_DefaultSpinner>
-void spinner(std::string_view text = {}, Alignment align = Alignment::Center) {
-  impl::spinner(text, align, impl::getStorageFor<float, Tag>());
+// -----------------------------------------
+// View
+// -----------------------------------------
+
+constexpr auto im_view_flag_border = int(1 << 0);
+constexpr auto im_view_flag_title = int(1 << 1);
+
+/// Begin view
+/// flags:
+///   im_view_flag_border - draw border around view
+///   im_view_flag_title - show view name with shortcut (if set)
+/// theme:
+///   view_border - border color when im_view_flag_border is set
+///   view_active_border - border color when im_view_flag_border is set and view is active
+///   view_title - title color when im_view_flag_title is set
+///   view_active_title - title color when im_view_flag_title is set and view is active
+void view_begin(std::string_view name, int flags, im_key_id shortcut = im_key_id());
+
+/// @overload
+inline void view_begin(std::string_view name, im_key_id shortcut = im_key_id()) {
+  return view_begin(name, im_view_flag_border | im_view_flag_title, shortcut);
 }
 
-/// Draw progress bar
-void progress(float& value);
+/// End view
+void view_end();
 
-/// Text input
-bool textInput(std::string& input, bool active, Alignment align = Alignment::Left);
+// -----------------------------------------
+// Widgets
+// -----------------------------------------
 
-/// Canvas for drawing
-class Canvas {
-private:
-  int startX_ = -1;
-  int startY_ = -1;
-  int width_ = -1;
-  int height_ = -1;
+/// Begin panel drawing
+void panel_begin();
 
-public:
-  Canvas(int startX, int startY, int width, int height) noexcept;
+/// End panel
+void panel_end();
 
-  /// Canvas width
-  [[nodiscard]] int width() const noexcept {
-    return width_;
-  }
+/// Widget: label
+/// @param text is label text
+///
+/// theme:
+///   text - label color
+void label(std::string_view text);
 
-  /// Canvas height
-  [[nodiscard]] int height() const noexcept {
-    return height_;
-  }
+/// Widget: button
+/// @param label is widget label
+/// @return true on button pressed ("enter" or "space" pressed)
+///
+/// theme:
+///   button_inactive_background
+///   button_inactive_text
+///   button_inactive_fx
+///   button_active_background
+///   button_active_text
+///   button_active_fx
+auto button(std::string_view label) -> bool;
 
-  /// Draw point
-  void point(int x, int y, Color color = {});
-};
+/// Widget: text input
+/// @param placeholder is placeholder when input is empty
+/// @param input is reference to string storagage for input
+/// @return true on "enter" pressed
+///
+/// theme:
+///   input_inactive_background
+///   input_inactive_text
+///   input_inactive_prompt
+///   input_active_background
+///   input_active_text
+///   input_active_prompt
+///   input_placeholder
+auto text_input(std::string_view placeholder, std::string& input, int flags = 0) -> bool;
 
-/// Create cavas for drawing
-[[nodiscard]] Canvas canvas(float heightOrRatio);
+/// Widget: spinner
+/// @param text is optional spinner text
+/// @param step is storage for step counter
+void spinner(std::string_view text, float& step);
+
+/// @overload
+/// @tparam Tag is tag for step storage
+template <typename Tag = struct SpinnerDefaultTag>
+void spinner(std::string_view text = {}) {
+  spinner(text, detail::storage_for<float, Tag>());
+}
+
+/// Widget: progress
+/// @param value is progress value ([0..100])
+void progress(float const& value);
+
+/// Begin canvas drawing
+/// @param p_size is canvas size in "pixels"
+/// @return true on drawing started (widget is visible)
+auto canvas_begin(im_vec2 p_size) -> bool;
+
+/// End canvas drawing
+void canvas_end();
+
+/// Draw point on canvas
+/// @param p_pos is pos in "pixels"
+/// @param color is "pixel" color
+void canvas_point(im_vec2 p_pos, im_color color = {});
 
 } // namespace xxx
