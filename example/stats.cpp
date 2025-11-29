@@ -1,6 +1,5 @@
-// ------------------------------------------------------------
-// Copyright 2019-present Sergey Kovalevich <inndie@gmail.com>
-// ------------------------------------------------------------
+// Copyright (c) Sergey Kovalevich <inndie@gmail.com>
+// SPDX-License-Identifier: MIT
 
 #include <chrono>
 #include <cstdint>
@@ -12,7 +11,7 @@
 
 #include <xxx.h>
 
-template<class Range1, class Range2, class Fn2>
+template <class Range1, class Range2, class Fn2>
 inline void forEach(Range1&& range1, Range2&& range2, Fn2&& fn2) {
   using std::begin;
   using std::end;
@@ -146,12 +145,17 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       xxx::update(100);
       monitor.update();
 
-      running = !xxx::isKeyPressed(xxx::key::Esc);
+      if (auto const lastInput = xxx::lastInputEvent(); lastInput) {
+        if (lastInput->key == TB_KEY_ESC) {
+          running = false;
+        }
+      }
 
       xxx::begin();
       xxx::rowBegin(1);
       xxx::rowPush(30);
-      xxx::panelBegin("CPU");
+      xxx::panelBegin();
+      xxx::panelTitle("CPU");
       if (monitor.usage().empty()) {
         xxx::spinner("Loading");
       } else {

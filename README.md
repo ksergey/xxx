@@ -1,16 +1,15 @@
 # xxx
 
-Immediate mode text ui library. Build on top of [nsf/termbox](http://github.co://github.com/nsf/termbox).
+Immediate mode text ui library.
+Build on top of [termbox/termbox2](https://github.com/termbox/termbox2) (previously [nsf/termbox](http://github.co://github.com/nsf/termbox))
 
 ## Features
 
-- Layouts (panel, grid)
-- Spinner widget
-- Text widget
-- Text input widget
-- Progress widget
-- Canvas widget
-- Widget colors customization
+- Automatic layout (via rate)
+- Simple widgets
+- Color theming
+- Braille canvas
 
-![bad sample](assets/screenshot.png)
-[source](example/elements.cpp)
+## Screenshots
+
+TODO
