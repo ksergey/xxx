@@ -5,7 +5,10 @@ Build on top of [termbox/termbox2](https://github.com/termbox/termbox2) (previou
 
 ## Features
 
-TODO
+- Automatic layout (via rate)
+- Simple widgets
+- Color theming
+- Braille canvas
 
 ## Screenshots
 
