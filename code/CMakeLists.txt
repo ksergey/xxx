@@ -1,4 +1,4 @@
-set(TargetName xxx_v4)
+set(TargetName xxx)
 
 add_library(${TargetName} xxx.cpp unicode.cpp im_rect.cpp im_renderer.cpp)
 target_compile_features(${TargetName} PUBLIC cxx_std_23)

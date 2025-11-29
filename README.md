@@ -10,6 +10,10 @@ Build on top of [termbox/termbox2](https://github.com/termbox/termbox2) (previou
 - Color theming
 - Braille canvas
 
+## Examples
+
+TODO
+
 ## Screenshots
 
 TODO
