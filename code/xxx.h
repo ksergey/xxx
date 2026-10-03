@@ -163,6 +163,11 @@ void set_focus_next();
 /// True if the last built widget has keyboard focus
 [[nodiscard]] auto is_item_focused() -> bool;
 
+/// Put utf8 text into system clipboard via OSC 52 terminal escape sequence.
+/// Works over ssh; inside tmux needs "set -g set-clipboard on" (or allow-passthrough). Terminal may ignore it.
+/// Widgets copy with ctrl-c: text_input (whole text, never for passwords), list / table (selected row).
+void set_clipboard(std::string_view text);
+
 /// Number of ids used by more than one widget or view in the last rendered frame.
 /// Colliding widgets share focus and state (e.g. two buttons "ok" in one view);
 /// fix with push_id(...) or "label##key".

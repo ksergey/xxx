@@ -105,6 +105,7 @@ struct im_context {
     std::vector<std::uint32_t> text;
     int cursor_pos = 0;
     int scroll_offset = 0; // in terminal columns
+    std::vector<std::uint32_t> kill_buffer; // last killed text (ctrl-w/u/k), yanked by ctrl-y
   } text_input;
 
   struct {

@@ -64,6 +64,10 @@ void im_backend_headless::present() {
   ++frames_;
 }
 
+void im_backend_headless::set_clipboard(std::string_view text) {
+  clipboard_ = text;
+}
+
 void im_backend_headless::push_key(im_key_id key) {
   events_.push_back({.type = pending_event::type::key, .key = key});
 }

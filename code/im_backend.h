@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
+#include <string_view>
 
 #include "im_input.h"
 #include "im_renderer.h"
@@ -40,6 +41,9 @@ public:
 
   /// Show back buffer
   virtual void present() = 0;
+
+  /// Put utf8 text into system clipboard (best effort, may be unsupported)
+  virtual void set_clipboard([[maybe_unused]] std::string_view text) {}
 };
 
 /// Backend on top of termbox2 (real terminal)

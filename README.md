@@ -12,6 +12,7 @@ Built on top of [termbox/termbox2](https://github.com/termbox/termbox2) (previou
 - Views with border, title and shortcut; fixed, fit-content or `fill()` height
 - Scrolling: PgUp / PgDn, mouse wheel, auto-scroll to focused widget
 - Widgets: label, button, checkbox, list, table, tabs, text input (password, readline keys), spinner, progress
+- Clipboard via OSC 52 (works over ssh and in tmux): ctrl-c in inputs, lists and tables; readline kill / yank
 - Modal popups drawn on top of everything, with input capture and focus restore
 - Keyboard focus (Tab / Shift-Tab, `set_focus`) and mouse (click to focus, press, place cursor)
 - Id scopes (`push_id` / `pop_id`) for widgets built in loops

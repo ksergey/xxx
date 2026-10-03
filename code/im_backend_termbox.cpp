@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: MIT
 
 #include <cerrno>
+#include <cstdlib>
 #include <stdexcept>
 
 #include <termbox2.h>
 
+#include "base64.h"
 #include "im_backend.h"
 #include "unicode.h"
 
@@ -196,6 +198,13 @@ public:
 
   void present() override {
     ::tb_present();
+  }
+
+  void set_clipboard(std::string_view text) override {
+    // OSC 52: terminal puts text into system clipboard; works over ssh too.
+    // Queued into output buffer, flushed with the next present().
+    auto const sequence = osc52_sequence(text, std::getenv("TMUX") != nullptr);
+    ::tb_send(sequence.data(), sequence.size());
   }
 };
 

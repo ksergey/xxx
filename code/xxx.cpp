@@ -385,6 +385,10 @@ void render() {
   g_ctx->renderer.render(*g_ctx->backend);
 }
 
+void set_clipboard(std::string_view text) {
+  g_ctx->backend->set_clipboard(text);
+}
+
 auto id_collision_count() -> int {
   return g_ctx->id_collisions;
 }
@@ -1081,6 +1085,16 @@ auto text_input(std::string_view placeholder, std::string& input, int flags) -> 
   auto const password = (flags & im_input_flag_password) != 0;
   // cells taken by char as displayed
   auto const display_width = [password](std::uint32_t ch) { return password ? 1 : char_width(ch); };
+  // readline kill: erase [first, last), keep it for ctrl-y and system clipboard.
+  // Password text goes nowhere: neither clipboard nor kill buffer (could be yanked into a plain field).
+  auto const kill = [&](int first, int last) {
+    auto& t = g_ctx->text_input;
+    if (!password) {
+      t.kill_buffer.assign(t.text.begin() + first, t.text.begin() + last);
+      set_clipboard(unicode_to_utf8(t.kill_buffer));
+    }
+    t.text.erase(t.text.begin() + first, t.text.begin() + last);
+  };
   static constexpr int input_prompt_width = 2; // "> "
 
   auto& widget = g_ctx->widget;
@@ -1163,7 +1177,7 @@ auto text_input(std::string_view placeholder, std::string& input, int flags) -> 
         case im_key_id::ctrl_u: {
           // readline: kill to start of line
           if (text_input.cursor_pos > 0) {
-            text_input.text.erase(text_input.text.begin(), text_input.text.begin() + text_input.cursor_pos);
+            kill(0, text_input.cursor_pos);
             text_input.cursor_pos = 0;
             text_changed = true;
           }
@@ -1171,12 +1185,28 @@ auto text_input(std::string_view placeholder, std::string& input, int flags) -> 
         case im_key_id::ctrl_k: {
           // readline: kill to end of line
           if (text_input.cursor_pos < int(text_input.text.size())) {
-            text_input.text.erase(text_input.text.begin() + text_input.cursor_pos, text_input.text.end());
+            kill(text_input.cursor_pos, int(text_input.text.size()));
             text_changed = true;
+          }
+        } break;
+        case im_key_id::ctrl_y: {
+          // readline: yank last killed text
+          if (!text_input.kill_buffer.empty()) {
+            text_input.text.insert(text_input.text.begin() + text_input.cursor_pos, text_input.kill_buffer.begin(),
+                text_input.kill_buffer.end());
+            text_input.cursor_pos += int(text_input.kill_buffer.size());
+            text_changed = true;
+          }
+        } break;
+        case im_key_id::ctrl_c: {
+          if (!password && !text_input.text.empty()) {
+            set_clipboard(unicode_to_utf8(text_input.text));
           }
         } break;
         case im_key_id::ctrl_w: {
           if (!text_input.text.empty()) {
+            // deleted range is contiguous: remember old text to put it into kill buffer
+            auto const before = text_input.text;
             if (auto const text_length = int(text_input.text.size()); text_input.cursor_pos >= text_length) {
               // on end of input move cursor to last char
               text_input.cursor_pos = text_length - 1;
@@ -1196,6 +1226,11 @@ auto text_input(std::string_view placeholder, std::string& input, int flags) -> 
               text_input.cursor_pos = 0;
             } else {
               text_input.cursor_pos += 1;
+            }
+            if (auto const removed = before.size() - text_input.text.size(); removed > 0 && !password) {
+              auto const first = before.begin() + text_input.cursor_pos;
+              text_input.kill_buffer.assign(first, first + std::ptrdiff_t(removed));
+              set_clipboard(unicode_to_utf8(text_input.kill_buffer));
             }
             text_changed = true;
           }
@@ -1412,6 +1447,9 @@ auto list_impl(std::string_view label, int count, ItemAt&& item_at, int& selecte
 
   auto& offset = g_ctx->list_scroll[widget.current_id];
   auto const activated = selection_behaviour(widget_rect, rows, count, selected, offset);
+  if (widget.active && selected >= 0 && is_key_pressed(im_key_id::ctrl_c)) {
+    set_clipboard(item_at(selected));
+  }
 
   if (g_ctx->renderer.is_visible(widget_rect)) {
     auto const style = get_style(im_color_id::text, im_color_id::background);
@@ -1451,6 +1489,17 @@ auto table_impl(std::string_view label, std::span<im_table_column const> columns
 
   auto& offset = g_ctx->list_scroll[widget.current_id];
   auto const activated = selection_behaviour(rows_rect, rows, count, selected, offset);
+  if (widget.active && selected >= 0 && ncols > 0 && is_key_pressed(im_key_id::ctrl_c)) {
+    // tab separated: pastes into spreadsheet columns
+    auto row = std::string();
+    for (int c = 0; c < ncols; ++c) {
+      if (c > 0) {
+        row += '\t';
+      }
+      row += cell_at(selected, c);
+    }
+    set_clipboard(row);
+  }
 
   if (ncols == 0 || !g_ctx->renderer.is_visible(widget_rect)) {
     return activated;

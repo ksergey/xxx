@@ -37,6 +37,13 @@ public:
   /// Wheel steps: > 0 down, < 0 up
   void push_mouse_wheel(int delta, im_vec2 pos);
 
+  void set_clipboard(std::string_view text) override;
+
+  /// Last text put into clipboard
+  [[nodiscard]] auto clipboard() const -> std::string const& {
+    return clipboard_;
+  }
+
   /// Advance clock returned by now()
   void advance_time(std::chrono::milliseconds delta) noexcept;
 
@@ -73,6 +80,7 @@ private:
   std::vector<pending_event> events_;
   im_clock::time_point now_ = im_clock::time_point();
   int frames_ = 0;
+  std::string clipboard_;
 };
 
 } // namespace xxx
