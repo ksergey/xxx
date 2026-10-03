@@ -333,6 +333,10 @@ auto is_key_pressed(im_key_id id) -> bool {
   return g_ctx->input.is_key_pressed(id);
 }
 
+auto key_press_count(im_key_id id) -> int {
+  return g_ctx->input.key_press_count(id);
+}
+
 void set_default_color(im_color_id id, im_color color) {
   g_ctx->theme.set_default_color(id, color);
 }
@@ -515,12 +519,8 @@ void view_begin(std::string_view name, int flags, im_key_id shortcut, int height
 
       auto const viewport_height = std::max(0, view.current_viewport.height());
       if (view.active) {
-        if (is_key_pressed(im_key_id::page_down)) {
-          scroll.offset += std::max(1, viewport_height - 1);
-        }
-        if (is_key_pressed(im_key_id::page_up)) {
-          scroll.offset -= std::max(1, viewport_height - 1);
-        }
+        auto const page = std::max(1, viewport_height - 1);
+        scroll.offset += page * (key_press_count(im_key_id::page_down) - key_press_count(im_key_id::page_up));
       }
       if (auto const wheel = g_ctx->input.mouse_wheel(); wheel != 0) {
         auto const mouse = g_ctx->input.mouse_pos();
@@ -981,6 +981,131 @@ auto text_input(std::string_view placeholder, std::string& input, [[maybe_unused
   return widget.pressed;
 }
 
+auto checkbox(std::string_view label, bool& value) -> bool {
+  auto& widget = g_ctx->widget;
+
+  auto const [str, widget_key] = g_ctx->hash_id.split_str_key(label);
+  auto const unicode_str = to_unicode(str);
+  auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(4 + text_width(unicode_str), 1));
+
+  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect);
+
+  auto toggled = false;
+  if (widget.active && (is_key_pressed(im_key_id::space) || is_key_pressed(im_key_id::enter) ||
+                           widget.clicked_id == widget.current_id)) {
+    value = !value;
+    toggled = true;
+  }
+
+  if (g_ctx->renderer.is_visible(widget_rect)) {
+    auto const bg = widget.active ? im_color_id::button_active_background : im_color_id::button_inactive_background;
+    auto const fx_style = get_style(widget.active ? im_color_id::button_active_fx : im_color_id::button_inactive_fx, bg);
+    auto const text_style =
+        get_style(widget.active ? im_color_id::button_active_text : im_color_id::button_inactive_text, bg);
+
+    static constexpr auto box = std::to_array<std::uint32_t>({'[', ' ', ']'});
+    static constexpr auto mark = std::uint32_t('x');
+
+    g_ctx->renderer.cmd_fill_rect(widget_rect, ' ', get_style_bg(bg));
+    g_ctx->renderer.cmd_draw_text_at(widget_rect.min, box, fx_style);
+    if (value) {
+      g_ctx->renderer.cmd_draw_text_at(
+          widget_rect.min + im_vec2(1, 0), std::span<std::uint32_t const>(&mark, 1), text_style);
+    }
+    g_ctx->renderer.cmd_draw_text_at(widget_rect.min + im_vec2(4, 0), unicode_str, text_style);
+  }
+
+  return toggled;
+}
+
+namespace {
+
+template <typename ItemAt>
+auto list_impl(std::string_view label, int count, ItemAt&& item_at, int& selected, int height) -> bool {
+  auto& widget = g_ctx->widget;
+
+  auto const rows = std::max(1, height > 0 ? height : count);
+  auto const& layout = g_ctx->layout.layout_state_stack.back();
+  auto const width = layout.rect.max.x - layout.rect.min.x + 1;
+  auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(width, rows));
+
+  auto const [str, widget_key] = g_ctx->hash_id.split_str_key(label);
+  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect);
+
+  auto& offset = g_ctx->list_scroll[widget.current_id];
+  selected = count > 0 ? std::clamp(selected, -1, count - 1) : -1;
+
+  auto activated = false;
+  if (widget.active && count > 0) {
+    // click is mapped with offset user saw (previous frame)
+    if (widget.clicked_id == widget.current_id) {
+      if (auto const index = offset + (widget.clicked_pos.y - widget_rect.min.y); index >= 0 && index < count) {
+        selected = index;
+        activated = true;
+      }
+    }
+    if (auto const delta = key_press_count(im_key_id::arrow_down) - key_press_count(im_key_id::arrow_up);
+        delta != 0) {
+      selected = std::clamp(selected < 0 ? (delta > 0 ? delta - 1 : 0) : selected + delta, 0, count - 1);
+    }
+    if (is_key_pressed(im_key_id::home)) {
+      selected = 0;
+    }
+    if (is_key_pressed(im_key_id::end)) {
+      selected = count - 1;
+    }
+    if (is_key_pressed(im_key_id::enter) && selected >= 0) {
+      activated = true;
+    }
+  }
+
+  // keep selection visible
+  if (selected >= 0) {
+    if (selected < offset) {
+      offset = selected;
+    } else if (selected >= offset + rows) {
+      offset = selected - rows + 1;
+    }
+  }
+  offset = std::clamp(offset, 0, std::max(0, count - rows));
+
+  if (g_ctx->renderer.is_visible(widget_rect)) {
+    auto const style = get_style(im_color_id::text, im_color_id::background);
+    auto const selected_style =
+        get_style(widget.active ? im_color_id::button_active_text : im_color_id::button_inactive_text,
+            im_color_id::background)
+            .with_reverse();
+
+    g_ctx->renderer.cmd_fill_rect(widget_rect, ' ', style);
+    for (int row = 0; row < rows && offset + row < count; ++row) {
+      auto const index = offset + row;
+      auto const row_rect = im_rect(widget_rect.min.x, widget_rect.min.y + row, widget_rect.max.x, widget_rect.min.y + row);
+      if (!g_ctx->renderer.is_visible(row_rect)) {
+        continue;
+      }
+      auto const& row_style = index == selected ? selected_style : style;
+      if (index == selected) {
+        g_ctx->renderer.cmd_fill_rect(row_rect, ' ', row_style);
+      }
+      g_ctx->renderer.cmd_draw_text_at(row_rect.min, to_unicode(item_at(index)), row_style);
+    }
+  }
+
+  return activated;
+}
+
+} // namespace
+
+auto list(std::string_view label, std::span<std::string_view const> items, int& selected, int height) -> bool {
+  return list_impl(
+      label, int(items.size()), [&](int i) { return items[std::size_t(i)]; }, selected, height);
+}
+
+auto list(std::string_view label, std::span<std::string const> items, int& selected, int height) -> bool {
+  return list_impl(
+      label, int(items.size()), [&](int i) { return std::string_view(items[std::size_t(i)]); }, selected, height);
+}
+
 namespace {
 
 constexpr auto spinner_update_interval = 0.1f; // 100ms
@@ -1010,7 +1135,8 @@ void spinner(std::string_view text, float& step) {
   auto const style = g_ctx->theme.get_style(im_color_id::text, im_color_id::background);
   g_ctx->renderer.cmd_fill_rect(widget_rect, ' ', style);
   g_ctx->renderer.cmd_draw_text_at(widget_rect.min, std::span<std::uint32_t const>(&spinner_glyphs[index], 1), style);
-  g_ctx->renderer.cmd_draw_text_at(widget_rect.min + im_vec2(1, 0), unicode_text, style);
+  // glyph, space, text: matches spinner_width
+  g_ctx->renderer.cmd_draw_text_at(widget_rect.min + im_vec2(2, 0), unicode_text, style);
 }
 
 void progress(float const& value) {
@@ -1054,10 +1180,21 @@ constexpr auto braille_pixels_per_height = 4;
 auto canvas_begin(im_vec2 p_size) -> bool {
   auto& canvas = g_ctx->canvas;
 
-  auto const width = static_cast<int>(std::ceil(p_size.x / braille_pixels_per_width));
-  auto const height = static_cast<int>(std::ceil(p_size.y / braille_pixels_per_height));
+  // integer ceil: partially used cell still holds pixels
+  auto const width = (p_size.x + braille_pixels_per_width - 1) / braille_pixels_per_width;
+  auto const height = (p_size.y + braille_pixels_per_height - 1) / braille_pixels_per_height;
 
   canvas.size = im_vec2(width, height);
+  canvas.rect = g_ctx->layout.add_widget_item(canvas.size);
+
+  // canvas_end() is called only when this returns true: push nothing when invisible
+  if (!g_ctx->renderer.is_visible(canvas.rect)) {
+    canvas.rect = {};
+    canvas.size = {};
+    canvas.data = {};
+    return false;
+  }
+
   auto const data_size = width * height;
   if (auto const data = g_ctx->allocator.allocate<im_cell>(data_size); data) {
     canvas.data = std::span<im_cell>(data, data_size);
@@ -1065,7 +1202,6 @@ auto canvas_begin(im_vec2 p_size) -> bool {
     canvas.data = {};
   }
 
-  canvas.rect = g_ctx->layout.add_widget_item(canvas.size);
   g_ctx->renderer.push_clip_rect(canvas.rect);
 
   if (!canvas.data.empty()) {
@@ -1074,7 +1210,7 @@ auto canvas_begin(im_vec2 p_size) -> bool {
     g_ctx->renderer.cmd_fill_rect(canvas.rect, ' ', style);
   }
 
-  return g_ctx->renderer.is_visible(canvas.rect);
+  return true;
 }
 
 void canvas_end() {

@@ -500,9 +500,7 @@ TEST_SUITE("text_input") {
 
   TEST_CASE("long text scrolls to keep cursor visible") {
     input_app app;
-    // input queue holds 16 events per frame, so type in two frames
-    app.type("0123456789");
-    app.type("abcdefghij");
+    app.type("0123456789abcdefghij");
     REQUIRE(app.text == "0123456789abcdefghij");
     // field has 14 columns for text, last one is taken by cursor
     CHECK(app.cursor() == 13);
@@ -521,6 +519,13 @@ TEST_SUITE("text_input") {
     app.key(im_key_id::arrow_left);
     CHECK(app.cursor() == 0);
     CHECK(app.line(0) == "> 日本");
+  }
+
+  TEST_CASE("long paste in one frame is not truncated") {
+    input_app app;
+    auto const text = std::string(200, 'z') + "!";
+    app.type(text);
+    CHECK(app.text == text);
   }
 
   TEST_CASE("unfocused input shows text without cursor") {
@@ -545,13 +550,13 @@ TEST_SUITE("spinner / progress / canvas") {
     float step = 0.0f;
     auto const ui = [&] { spinner("load", step); };
     app.frame(ui);
-    CHECK(app.line(0) == "⣽load");
+    CHECK(app.line(0) == "⣽ load");
     app.backend().advance_time(std::chrono::milliseconds(100));
     app.frame(ui);
-    CHECK(app.line(0) == "⣻load");
+    CHECK(app.line(0) == "⣻ load");
     app.backend().advance_time(std::chrono::milliseconds(600));
     app.frame(ui);
-    CHECK(app.line(0) == "⣽load"); // 7 glyphs: wrapped around
+    CHECK(app.line(0) == "⣽ load"); // 7 glyphs: wrapped around
   }
 
   TEST_CASE("progress") {
@@ -566,6 +571,36 @@ TEST_SUITE("spinner / progress / canvas") {
       ⣿⣿⣿⣿⣿
       ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
     )"));
+  }
+
+  TEST_CASE("invisible canvas does not leak clip rect") {
+    headless_app app(im_vec2(10, 6));
+    auto const ui = [] {
+      view_begin("v", 0, {}, 2);
+      label("top");
+      // canvas below viewport: begin returns false, end must not be called
+      label("pad");
+      if (canvas_begin(im_vec2(4, 4))) {
+        canvas_point(im_vec2(0, 0));
+        canvas_end();
+      }
+      view_end();
+      label("after");
+    };
+    app.frame(ui);
+    CHECK(app.screen() == "top\npad\nafter");
+  }
+
+  TEST_CASE("canvas size rounds up to whole cells") {
+    headless_app app(im_vec2(10, 3));
+    app.frame([] {
+      if (canvas_begin(im_vec2(5, 5))) { // 3 x 2 cells
+        canvas_point(im_vec2(4, 4));     // last pixel: cell (2, 1)
+        canvas_end();
+      }
+      label("after");
+    });
+    CHECK(app.screen() == "⠀⠀⠀\n⠀⠀⠁\nafter");
   }
 
   TEST_CASE("canvas points map to braille dots") {

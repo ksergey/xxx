@@ -1,19 +1,79 @@
 # xxx
 
-Immediate mode text ui library.
-Build on top of [termbox/termbox2](https://github.com/termbox/termbox2) (previously [nsf/termbox](http://github.co://github.com/nsf/termbox))
+Immediate mode text ui library for C++23.
+Built on top of [termbox/termbox2](https://github.com/termbox/termbox2) (previously [nsf/termbox](https://github.com/nsf/termbox)).
+
+![Game of Life example](docs/life.svg)
 
 ## Features
 
-- Automatic layout (via rate)
-- Simple widgets
+- Immediate mode API: describe UI every frame, no widget objects to manage
+- Automatic layout: rows with ratio or fixed width columns, `same_line`
+- Views with border, title and shortcut; fixed, fit-content or `fill()` height
+- Scrolling: PgUp / PgDn, mouse wheel, auto-scroll to focused widget
+- Widgets: label, button, checkbox, list, text input, spinner, progress
+- Keyboard focus (Tab) and mouse (click to focus, press, place cursor)
+- Unicode aware: wide chars (CJK, emoji) take two cells
+- Braille canvas: 2x4 "pixels" per cell
 - Color theming
-- Braille canvas
+- Headless backend for testing UI without a terminal
 
-## Examples
+## Example
 
-TODO
+```cpp
+#include <xxx.h>
 
-## Screenshots
+int main() {
+  xxx::init();
+  auto name = std::string();
+  auto agree = false;
+  while (true) {
+    xxx::process_input_events();
+    if (xxx::is_key_pressed(xxx::im_key_id::ctrl_q)) {
+      break;
+    }
+    xxx::new_frame();
+    xxx::view_begin("hello");
+    xxx::text_input("your name", name);
+    xxx::checkbox("I like terminals", agree);
+    if (xxx::button("greet")) {
+      // ...
+    }
+    xxx::view_end();
+    xxx::render();
+  }
+  xxx::shutdown();
+}
+```
 
-TODO
+[`example/life.cpp`](example/life.cpp) is Conway's Game of Life (screenshot above):
+play / pause, speed, patterns list, population chart and event log.
+
+```sh
+cmake -B build && cmake --build build
+./build/example/life
+```
+
+## Testing
+
+UI is tested with the headless backend: build a frame, compare the screen.
+
+```cpp
+TEST_CASE("button") {
+  headless_app app(im_vec2(20, 3));
+  app.frame([] {
+    view_begin("main");
+    button("ok");
+    view_end();
+  });
+  CHECK(app.screen() == dedent(R"(
+    ╭────── main ──────╮
+    │  [ ok ]          │
+    ╰──────────────────╯
+  )"));
+}
+```
+
+```sh
+cmake -B build && cmake --build build && ctest --test-dir build
+```

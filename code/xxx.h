@@ -4,6 +4,8 @@
 #pragma once
 
 #include <source_location>
+#include <span>
+#include <string>
 #include <string_view>
 
 #include "im_color.h"
@@ -119,6 +121,9 @@ void debug();
 /// Check key pressed
 [[nodiscard]] auto is_key_pressed(im_key_id id) -> bool;
 
+/// How many times key was pressed since last frame (auto-repeat, slow frame)
+[[nodiscard]] auto key_press_count(im_key_id id) -> int;
+
 /// Set default color
 void set_default_color(im_color_id id, im_color color);
 
@@ -227,6 +232,24 @@ auto button(std::string_view label) -> bool;
 ///   input_placeholder
 auto text_input(std::string_view placeholder, std::string& input, int flags = 0) -> bool;
 
+/// Widget: checkbox "[x] label"
+/// Toggled by space / enter when focused or by mouse click.
+/// @return true when value was toggled this frame
+/// theme: button_* colors
+auto checkbox(std::string_view label, bool& value) -> bool;
+
+/// Widget: list of selectable items, spans layout width
+/// Up / Down / Home / End move selection when focused, click selects.
+/// @param label is used only as widget id
+/// @param selected is index of selected item, -1 for none
+/// @param height is number of visible rows, 0 - all items; list scrolls to keep selection visible
+/// @return true when item is activated: enter or click
+/// theme: text, background; selected row: button_active_text (focused) / button_inactive_text, reversed
+auto list(std::string_view label, std::span<std::string_view const> items, int& selected, int height = 0) -> bool;
+
+/// @overload
+auto list(std::string_view label, std::span<std::string const> items, int& selected, int height = 0) -> bool;
+
 /// Widget: spinner
 /// @param text is optional spinner text
 /// @param step is storage for step counter
@@ -244,8 +267,9 @@ void spinner(std::string_view text = {}) {
 void progress(float const& value);
 
 /// Begin canvas drawing
+/// One cell holds 2x4 "pixels" (braille dots), so canvas takes ceil(w / 2) x ceil(h / 4) cells.
 /// @param p_size is canvas size in "pixels"
-/// @return true on drawing started (widget is visible)
+/// @return true on drawing started (widget is visible); call canvas_end() only in that case
 auto canvas_begin(im_vec2 p_size) -> bool;
 
 /// End canvas drawing

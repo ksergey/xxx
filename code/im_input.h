@@ -6,6 +6,8 @@
 #include <cassert>
 #include <array>
 #include <cstdint>
+#include <span>
+#include <vector>
 
 #include "xxx.h"
 
@@ -23,15 +25,15 @@ class im_input {
 private:
   struct keyboard_state {
     static constexpr std::size_t max_keys = static_cast<std::size_t>(im_key_id::last);
-    static constexpr std::size_t input_max_length = 16;
+    // initial capacity only: queue grows, so pasted text or a slow frame loses nothing
+    static constexpr std::size_t input_reserve = 64;
 
     struct key_state {
       std::size_t clicked = 0;
     };
 
     std::array<key_state, max_keys> keys;
-    std::array<im_input_event, input_max_length> input_events;
-    std::size_t input_events_length = 0;
+    std::vector<im_input_event> input_events;
   };
 
   struct mouse_state {
@@ -53,23 +55,29 @@ private:
   mouse_state mouse_;
 
 public:
-  im_input() = default;
+  im_input() {
+    keyboard_.input_events.reserve(keyboard_state::input_reserve);
+  }
 
   [[nodiscard]] auto is_key_pressed(im_key_id id) const noexcept -> bool {
     assert(id < im_key_id::last);
     return keyboard_.keys[static_cast<std::size_t>(id)].clicked > 0;
   }
 
+  /// How many times key was pressed this frame (key repeat, slow frame)
+  [[nodiscard]] auto key_press_count(im_key_id id) const noexcept -> int {
+    assert(id < im_key_id::last);
+    return static_cast<int>(keyboard_.keys[static_cast<std::size_t>(id)].clicked);
+  }
+
   [[nodiscard]] auto get_input_events() const noexcept -> std::span<im_input_event const> {
-    return std::span<im_input_event const>(keyboard_.input_events.data(), keyboard_.input_events_length);
+    return keyboard_.input_events;
   }
 
   void add_key_event(im_key_id id) noexcept {
     assert(id < im_key_id::last);
     keyboard_.keys[static_cast<std::size_t>(id)].clicked++;
-    if (keyboard_.input_events_length < keyboard_.input_events.size()) {
-      keyboard_.input_events[keyboard_.input_events_length++] = im_input_event{.key = id};
-    }
+    keyboard_.input_events.push_back(im_input_event{.key = id});
   }
 
   void add_mouse_pos_event(im_vec2 const& pos) noexcept {
@@ -114,9 +122,7 @@ public:
   }
 
   void add_character(std::uint32_t ch) noexcept {
-    if (keyboard_.input_events_length < keyboard_.input_events.size()) {
-      keyboard_.input_events[keyboard_.input_events_length++] = im_input_event{.ch = ch};
-    }
+    keyboard_.input_events.push_back(im_input_event{.ch = ch});
   }
 
   void add_characters_utf8(char const* str) noexcept {
@@ -127,7 +133,7 @@ public:
 
   void reset() noexcept {
     keyboard_.keys.fill(keyboard_state::key_state{.clicked = 0});
-    keyboard_.input_events_length = 0;
+    keyboard_.input_events.clear(); // keeps capacity
 
     mouse_.buttons.fill(mouse_state::button_state{.clicked = 0, .clicked_pos = im_vec2(0, 0)});
     mouse_.prev = mouse_.pos;

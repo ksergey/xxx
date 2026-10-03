@@ -100,6 +100,9 @@ struct im_context {
     std::span<im_cell> data;
   } canvas;
 
+  // persistent first visible row per list widget
+  std::unordered_map<im_id, int> list_scroll;
+
   // elapsed seconds since last new_frame(...)
 
   im_clock::time_point last_frame_time;

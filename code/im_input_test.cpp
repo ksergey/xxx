@@ -58,16 +58,26 @@ TEST_SUITE("im_input") {
     CHECK(events[2].ch == std::uint32_t(U'й'));
   }
 
-  TEST_CASE("event queue is capped, keys still register") {
+  TEST_CASE("event queue is not capped") {
     im_input in;
-    for (int i = 0; i < 20; ++i) {
+    for (int i = 0; i < 1000; ++i) {
       in.add_character('x');
     }
-    CHECK(in.get_input_events().size() == 16);
-
     in.add_key_event(im_key_id::enter);
-    CHECK(in.get_input_events().size() == 16);
-    CHECK(in.is_key_pressed(im_key_id::enter));
+    CHECK(in.get_input_events().size() == 1001);
+    CHECK(in.get_input_events().back().key == im_key_id::enter);
+  }
+
+  TEST_CASE("key press count") {
+    im_input in;
+    CHECK(in.key_press_count(im_key_id::arrow_down) == 0);
+    in.add_key_event(im_key_id::arrow_down);
+    in.add_key_event(im_key_id::arrow_down);
+    in.add_key_event(im_key_id::arrow_down);
+    CHECK(in.key_press_count(im_key_id::arrow_down) == 3);
+    CHECK(in.is_key_pressed(im_key_id::arrow_down));
+    in.reset();
+    CHECK(in.key_press_count(im_key_id::arrow_down) == 0);
   }
 
   TEST_CASE("reset clears state") {

@@ -27,3 +27,9 @@
 # target_compile_features(${TargetName} PRIVATE cxx_std_23)
 # target_compile_options(${TargetName} PRIVATE -Wall -Wextra -g)
 # target_link_libraries(${TargetName} PRIVATE xxx::xxx_v3)
+
+set(TargetName life)
+add_executable(${TargetName} life.cpp)
+target_compile_features(${TargetName} PRIVATE cxx_std_23)
+target_compile_options(${TargetName} PRIVATE -Wall -Wextra -g)
+target_link_libraries(${TargetName} PRIVATE xxx::xxx)

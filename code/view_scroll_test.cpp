@@ -87,6 +87,18 @@ TEST_SUITE("view scroll") {
     CHECK(app.line(1) == "│line 0        ┃");
   }
 
+  TEST_CASE("repeated page keys within one frame all count") {
+    headless_app app(im_vec2(16, 8));
+    auto const ui = log_view(20);
+    app.frame(ui);
+    app.backend().push_key(im_key_id::page_down);
+    app.backend().push_key(im_key_id::page_down);
+    app.backend().push_key(im_key_id::page_down);
+    app.backend().push_key(im_key_id::page_up);
+    app.frame(ui);
+    CHECK(app.line(1) == "│line 6        │");
+  }
+
   TEST_CASE("no scrolling when content fits") {
     headless_app app(im_vec2(16, 8));
     auto const ui = log_view(4);
