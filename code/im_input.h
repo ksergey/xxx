@@ -46,6 +46,7 @@ private:
     im_vec2 pos = im_vec2(-1, -1);
     im_vec2 prev = im_vec2(-1, -1);
     im_vec2 delta;
+    int wheel = 0; // > 0 scroll down, < 0 scroll up
   };
 
   keyboard_state keyboard_;
@@ -85,6 +86,21 @@ public:
     mouse_.delta = im_vec2(0, 0);
   }
 
+  void add_mouse_wheel_event(int delta, im_vec2 const& pos) noexcept {
+    mouse_.pos = pos;
+    mouse_.wheel += delta;
+  }
+
+  /// Last known mouse position, (-1, -1) if unknown
+  [[nodiscard]] auto mouse_pos() const noexcept -> im_vec2 {
+    return mouse_.pos;
+  }
+
+  /// Accumulated wheel steps this frame: > 0 down, < 0 up
+  [[nodiscard]] auto mouse_wheel() const noexcept -> int {
+    return mouse_.wheel;
+  }
+
   void add_character(std::uint32_t ch) noexcept {
     if (keyboard_.input_events_length < keyboard_.input_events.size()) {
       keyboard_.input_events[keyboard_.input_events_length++] = im_input_event{.ch = ch};
@@ -104,6 +120,7 @@ public:
     mouse_.buttons.fill(mouse_state::button_state{.clicked = 0, .clicked_pos = im_vec2(0, 0)});
     mouse_.prev = mouse_.pos;
     mouse_.delta = im_vec2(0, 0);
+    mouse_.wheel = 0;
   }
 };
 

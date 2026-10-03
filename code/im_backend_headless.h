@@ -34,6 +34,8 @@ public:
   void push_text(std::string_view text);
   void push_mouse_pos(im_vec2 pos);
   void push_mouse_button(im_mouse_button_id button, im_vec2 pos);
+  /// Wheel steps: > 0 down, < 0 up
+  void push_mouse_wheel(int delta, im_vec2 pos);
 
   /// Advance clock returned by now()
   void advance_time(std::chrono::milliseconds delta) noexcept;
@@ -57,11 +59,12 @@ public:
 
 private:
   struct pending_event {
-    enum class type { key, character, mouse_pos, mouse_button } type;
+    enum class type { key, character, mouse_pos, mouse_button, mouse_wheel } type;
     im_key_id key = im_key_id();
     std::uint32_t ch = 0;
     im_mouse_button_id button = im_mouse_button_id::left;
     im_vec2 pos = im_vec2();
+    int wheel = 0;
   };
 
   im_vec2 size_;

@@ -40,6 +40,8 @@ struct im_layout_data_none {};
 
 struct im_layout_data_container {
   int border;
+  // rect.max.y is the real bottom (fixed or fill height), not content-driven
+  bool fixed_height = false;
 };
 
 struct im_layout_data_row {
@@ -134,13 +136,24 @@ struct im_layout {
     return widget_item.rect;
   }
 
+  /// Bottom row available for content: nearest container with known height
+  [[nodiscard]] auto available_bottom() const noexcept -> int {
+    for (auto it = layout_state_stack.end(); it != layout_state_stack.begin();) {
+      --it;
+      if (it->type == im_layout_type::container && it->container.fixed_height) {
+        return it->rect.max.y;
+      }
+    }
+    return cursor.y;
+  }
+
   void reset(im_rect const& rect) {
     layout_state_stack.clear();
 
     auto& layout = layout_state_stack.emplace_back();
     layout.type = im_layout_type::container;
     layout.rect = rect;
-    layout.container = im_layout_data_container{.border = 0};
+    layout.container = im_layout_data_container{.border = 0, .fixed_height = true};
 
     cursor = layout.rect.min;
     last_cursor_y = cursor.y;

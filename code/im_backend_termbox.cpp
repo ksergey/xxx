@@ -41,6 +41,10 @@ void handle_terminal_key_event(::tb_event const& event, im_input& input) {
     return input.add_key_event(im_key_id::arrow_left);
   case TB_KEY_ARROW_RIGHT:
     return input.add_key_event(im_key_id::arrow_right);
+  case TB_KEY_PGUP:
+    return input.add_key_event(im_key_id::page_up);
+  case TB_KEY_PGDN:
+    return input.add_key_event(im_key_id::page_down);
   case TB_KEY_CTRL_A:
     return input.add_key_event(im_key_id::ctrl_a);
   case TB_KEY_CTRL_B:
@@ -101,6 +105,10 @@ void handle_terminal_mouse_event(::tb_event const& event, im_input& input) {
       return input.add_mouse_button_event(im_mouse_button_id::right, im_vec2(event.x, event.y));
     case TB_KEY_MOUSE_MIDDLE:
       return input.add_mouse_button_event(im_mouse_button_id::middle, im_vec2(event.x, event.y));
+    case TB_KEY_MOUSE_WHEEL_UP:
+      return input.add_mouse_wheel_event(-1, im_vec2(event.x, event.y));
+    case TB_KEY_MOUSE_WHEEL_DOWN:
+      return input.add_mouse_wheel_event(+1, im_vec2(event.x, event.y));
     default:
       break;
     }

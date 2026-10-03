@@ -61,6 +61,8 @@ enum class im_key_id {
   ctrl_x,
   ctrl_y,
   ctrl_z,
+  page_up,
+  page_down,
   last
 };
 
@@ -146,6 +148,13 @@ void same_line();
 
 constexpr auto im_view_flag_border = int(1 << 0);
 constexpr auto im_view_flag_title = int(1 << 1);
+constexpr auto im_view_flags_default = im_view_flag_border | im_view_flag_title;
+
+/// Height for view_begin(...): stretch view to the bottom of available area,
+/// leaving \c rows_below rows (e.g. for a footer)
+[[nodiscard]] constexpr auto fill(int rows_below = 0) noexcept -> int {
+  return -1 - (rows_below > 0 ? rows_below : 0);
+}
 
 /// Begin view
 /// flags:
@@ -156,7 +165,14 @@ constexpr auto im_view_flag_title = int(1 << 1);
 ///   view_active_border - border color when im_view_flag_border is set and view is active
 ///   view_title - title color when im_view_flag_title is set
 ///   view_active_title - title color when im_view_flag_title is set and view is active
-void view_begin(std::string_view name, int flags, im_key_id shortcut = im_key_id());
+/// height (including border and title):
+///   0 - fit content (default), never scrolls
+///   > 0 - fixed number of rows
+///   fill(n) - up to the bottom of available area minus n rows
+/// View with fixed or fill height scrolls when content doesn't fit:
+///   page_up / page_down when view is active, mouse wheel when hovered,
+///   and automatically to a widget receiving focus.
+void view_begin(std::string_view name, int flags, im_key_id shortcut = im_key_id(), int height = 0);
 
 /// @overload
 inline void view_begin(std::string_view name, im_key_id shortcut = im_key_id()) {

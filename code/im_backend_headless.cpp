@@ -40,6 +40,9 @@ void im_backend_headless::poll_events(im_input& input) {
       input.add_mouse_pos_event(event.pos);
       input.add_mouse_button_event(event.button, event.pos);
       break;
+    case pending_event::type::mouse_wheel:
+      input.add_mouse_wheel_event(event.wheel, event.pos);
+      break;
     }
   }
   events_.clear();
@@ -81,6 +84,10 @@ void im_backend_headless::push_mouse_pos(im_vec2 pos) {
 
 void im_backend_headless::push_mouse_button(im_mouse_button_id button, im_vec2 pos) {
   events_.push_back({.type = pending_event::type::mouse_button, .button = button, .pos = pos});
+}
+
+void im_backend_headless::push_mouse_wheel(int delta, im_vec2 pos) {
+  events_.push_back({.type = pending_event::type::mouse_wheel, .pos = pos, .wheel = delta});
 }
 
 void im_backend_headless::advance_time(std::chrono::milliseconds delta) noexcept {

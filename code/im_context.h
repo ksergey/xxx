@@ -7,6 +7,7 @@
 #include <memory>
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <termbox2.h>
@@ -38,6 +39,13 @@ struct im_context {
   im_layout layout;
   im_renderer renderer;
 
+  // persistent per-view scroll state
+  struct view_scroll {
+    int offset = 0;          // first visible content row
+    int content_height = 0;  // measured on previous frame
+    im_id focus_id = im_id(); // last widget scrolled into view
+  };
+
   struct {
     std::string current_title;
     im_id current_id = im_id();
@@ -45,6 +53,15 @@ struct im_context {
     im_id active_id = im_id();
     im_id force_next_id = im_id();
     bool active = false;
+
+    // current view geometry, valid between view_begin and view_end
+    bool current_bounded = false; // fixed or fill height
+    int current_bottom = 0;       // last row of view (including border)
+    im_rect current_viewport;     // visible content area
+    int current_content_top = 0;  // y of first content row (scrolled)
+    view_scroll* current_scroll = nullptr;
+
+    std::unordered_map<im_id, view_scroll> scroll;
   } view;
 
   struct {

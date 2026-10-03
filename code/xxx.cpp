@@ -405,7 +405,7 @@ void same_line() {
   g_ctx->layout.same_line = true;
 }
 
-void view_begin(std::string_view name, int flags, im_key_id shortcut) {
+void view_begin(std::string_view name, int flags, im_key_id shortcut, int height) {
   auto& view = g_ctx->view;
   if (view.current_id != im_id()) {
     assert(false && "view_begin(...) inside another view");
@@ -435,6 +435,7 @@ void view_begin(std::string_view name, int flags, im_key_id shortcut) {
   // layout and visuals
   {
     auto const& parent_layout = g_ctx->layout.layout_state_stack.back();
+    auto const available_bottom = g_ctx->layout.available_bottom();
     auto& layout = g_ctx->layout.layout_state_stack.emplace_back();
 
     auto const do_render_border = (im_view_flag_border == (flags & im_view_flag_border));
@@ -444,10 +445,22 @@ void view_begin(std::string_view name, int flags, im_key_id shortcut) {
     // reset cursor to start of container layout
     g_ctx->layout.cursor.x = parent_layout.rect.min.x;
 
+    auto const top = g_ctx->layout.cursor.y;
+    view.current_bounded = (height != 0);
+    if (height > 0) {
+      view.current_bottom = top + height - 1;
+    } else if (height < 0) {
+      // fill(n) == -1 - n
+      view.current_bottom = std::max(top, available_bottom - (-height - 1));
+    }
+
     layout.type = im_layout_type::container;
     layout.rect.min = g_ctx->layout.cursor + im_vec2(border, border);
     layout.rect.max = im_vec2(parent_layout.rect.max.x - border, g_ctx->layout.cursor.y);
-    layout.container = im_layout_data_container{.border = border};
+    layout.container = im_layout_data_container{.border = border, .fixed_height = view.current_bounded};
+    if (view.current_bounded) {
+      layout.rect.max.y = view.current_bottom - border;
+    }
 
     g_ctx->layout.cursor = layout.rect.min;
     g_ctx->layout.last_cursor_y = g_ctx->layout.cursor.y;
@@ -466,6 +479,40 @@ void view_begin(std::string_view name, int flags, im_key_id shortcut) {
     auto clip_rect = g_ctx->renderer.clip_rect();
     clip_rect.min.x = layout.rect.min.x;
     clip_rect.max.x = layout.rect.max.x;
+
+    view.current_scroll = nullptr;
+    if (view.current_bounded) {
+      auto& scroll = view.scroll[view.current_id];
+      view.current_scroll = &scroll;
+      view.current_viewport = im_rect(layout.rect.min.x, g_ctx->layout.cursor.y, layout.rect.max.x, layout.rect.max.y);
+
+      auto const viewport_height = std::max(0, view.current_viewport.height());
+      if (view.active) {
+        if (is_key_pressed(im_key_id::page_down)) {
+          scroll.offset += std::max(1, viewport_height - 1);
+        }
+        if (is_key_pressed(im_key_id::page_up)) {
+          scroll.offset -= std::max(1, viewport_height - 1);
+        }
+      }
+      if (auto const wheel = g_ctx->input.mouse_wheel(); wheel != 0) {
+        auto const mouse = g_ctx->input.mouse_pos();
+        auto const view_rect = im_rect(layout.rect.min.x - border, top, layout.rect.max.x + border, view.current_bottom);
+        if (view_rect.intersection(im_rect(mouse, mouse))) {
+          constexpr auto wheel_step = int(3);
+          scroll.offset += wheel * wheel_step;
+        }
+      }
+      // content height is known from previous frame only
+      scroll.offset = std::clamp(scroll.offset, 0, std::max(0, scroll.content_height - viewport_height));
+
+      g_ctx->layout.cursor.y -= scroll.offset;
+      g_ctx->layout.last_cursor_y = g_ctx->layout.cursor.y;
+      view.current_content_top = g_ctx->layout.cursor.y;
+
+      clip_rect.min.y = std::max(clip_rect.min.y, view.current_viewport.min.y);
+      clip_rect.max.y = std::min(clip_rect.max.y, view.current_viewport.max.y);
+    }
     g_ctx->renderer.push_clip_rect(clip_rect);
   }
 }
@@ -490,16 +537,18 @@ void view_end() {
     auto const border = layout.container.border;
 
     // calculate panel whole size
-    auto const panel_rect = im_rect(layout.rect.min - im_vec2(border, border),
-        im_vec2(layout.rect.max.x + border, g_ctx->layout.cursor.y + border - 1));
+    auto const panel_bottom = view.current_bounded ? view.current_bottom : g_ctx->layout.cursor.y + border - 1;
+    auto const panel_rect =
+        im_rect(layout.rect.min - im_vec2(border, border), im_vec2(layout.rect.max.x + border, panel_bottom));
 
     g_ctx->layout.layout_state_stack.pop_back();
 
+    auto const border_style = view.active
+                                  ? g_ctx->theme.get_style(im_color_id::view_active_border, im_color_id::background)
+                                  : g_ctx->theme.get_style(im_color_id::view_inactive_border, im_color_id::background);
+
     if (do_render_border) {
-      auto const style = view.active
-                             ? g_ctx->theme.get_style(im_color_id::view_active_border, im_color_id::background)
-                             : g_ctx->theme.get_style(im_color_id::view_inactive_border, im_color_id::background);
-      g_ctx->renderer.cmd_draw_rect(panel_rect, style);
+      g_ctx->renderer.cmd_draw_rect(panel_rect, border_style);
 
       if (do_render_title) {
         auto const style = view.active
@@ -510,14 +559,36 @@ void view_end() {
       }
     }
 
+    if (view.current_scroll) {
+      auto& scroll = *view.current_scroll;
+      auto const viewport_height = std::max(0, view.current_viewport.height());
+      scroll.content_height = g_ctx->layout.cursor.y - view.current_content_top;
+      // keep offset valid for next frame if content shrank
+      scroll.offset = std::clamp(scroll.offset, 0, std::max(0, scroll.content_height - viewport_height));
+
+      if (do_render_border && scroll.content_height > viewport_height && viewport_height > 0) {
+        static constexpr auto thumb_ch = std::uint32_t(L'┃');
+        auto const thumb_height =
+            std::max(1, viewport_height * viewport_height / scroll.content_height);
+        auto const max_offset = scroll.content_height - viewport_height;
+        auto const thumb_pos = (viewport_height - thumb_height) * scroll.offset / max_offset;
+        auto const x = panel_rect.max.x;
+        auto const y = view.current_viewport.min.y + thumb_pos;
+        g_ctx->renderer.cmd_fill_rect(im_rect(x, y, x, y + thumb_height - 1), thumb_ch, border_style);
+      }
+    }
+
     auto const& parent_layout = g_ctx->layout.layout_state_stack.back();
-    g_ctx->layout.cursor = im_vec2(parent_layout.rect.min.x, g_ctx->layout.cursor.y + border);
+    g_ctx->layout.cursor = im_vec2(parent_layout.rect.min.x, panel_bottom + 1);
+    g_ctx->layout.last_cursor_y = g_ctx->layout.cursor.y;
   }
 
   view.current_title = "N/A";
   view.current_id = im_id();
   view.current_flags = 0;
   view.active = false;
+  view.current_bounded = false;
+  view.current_scroll = nullptr;
 }
 
 void panel_begin() {
@@ -573,8 +644,8 @@ void label(std::string_view text) {
 namespace internal {
 
 // update widget.* properties
-void common_focusable_behaviour(im_id widget_id) noexcept {
-  auto const& view = g_ctx->view;
+void common_focusable_behaviour(im_id widget_id, im_rect const& widget_rect) noexcept {
+  auto& view = g_ctx->view;
   auto& widget = g_ctx->widget;
 
   widget.current_id = widget_id;
@@ -600,6 +671,18 @@ void common_focusable_behaviour(im_id widget_id) noexcept {
       widget.next_id = im_id();
     }
   }
+
+  // scroll focused widget into view once, when focus arrives (applied next frame)
+  if (widget.active && view.current_scroll && view.current_scroll->focus_id != widget.current_id) {
+    auto& scroll = *view.current_scroll;
+    scroll.focus_id = widget.current_id;
+    auto const& viewport = view.current_viewport;
+    if (widget_rect.min.y < viewport.min.y) {
+      scroll.offset -= viewport.min.y - widget_rect.min.y;
+    } else if (widget_rect.max.y > viewport.max.y) {
+      scroll.offset += widget_rect.max.y - viewport.max.y;
+    }
+  }
 }
 
 } // namespace internal
@@ -617,7 +700,7 @@ auto button(std::string_view label) -> bool {
   auto const button_width = std::max<int>(button_min_width, unicode_str_width + 4);
   auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(button_width, 1));
 
-  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key));
+  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect);
 
   if (widget.active) {
     if (is_key_pressed(im_key_id::space) || is_key_pressed(im_key_id::enter)) {
@@ -664,7 +747,7 @@ auto text_input(std::string_view placeholder, std::string& input, [[maybe_unused
   auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(input_width, 1));
   auto const [str, widget_key] = g_ctx->hash_id.split_str_key(placeholder);
 
-  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key));
+  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect);
 
   if (widget.active) {
     text_input.text.clear();
