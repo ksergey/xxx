@@ -13,7 +13,7 @@ Built on top of [termbox/termbox2](https://github.com/termbox/termbox2) (previou
 - Scrolling: PgUp / PgDn, mouse wheel, auto-scroll to focused widget
 - Widgets: label, button, checkbox, list, tabs, text input (password, readline keys), spinner, progress
 - Modal popups drawn on top of everything, with input capture and focus restore
-- Keyboard focus (Tab / Shift-Tab) and mouse (click to focus, press, place cursor)
+- Keyboard focus (Tab / Shift-Tab, `set_focus`) and mouse (click to focus, press, place cursor)
 - Id scopes (`push_id` / `pop_id`) for widgets built in loops
 - Unicode aware: wide chars (CJK, emoji) take two cells
 - Braille canvas: 2x4 "pixels" per cell

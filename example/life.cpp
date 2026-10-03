@@ -15,6 +15,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include <xxx.h>
@@ -223,6 +224,7 @@ int main() {
   auto events = std::deque<std::string>();
   auto spinner_step = 0.0f;
   auto info_tab = 0;
+  auto focus_keep = false;
   auto quit = false;
 
   auto const note = [&](std::string message) {
@@ -287,6 +289,7 @@ int main() {
       xxx::same_line();
       if (xxx::button("clear")) {
         xxx::open_popup("clear");
+        focus_keep = true; // safe default: Enter must not wipe the world
       }
       if (xxx::button("slower") && speed_index > 0) {
         --speed_index;
@@ -388,6 +391,9 @@ int main() {
         xxx::close_popup();
       }
       xxx::same_line();
+      if (std::exchange(focus_keep, false)) {
+        xxx::set_focus_next();
+      }
       if (xxx::button("keep")) {
         xxx::close_popup();
       }

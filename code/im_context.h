@@ -74,6 +74,17 @@ struct im_context {
     bool active = false;
     bool pressed = false;
 
+    // focus request: set_focus(...) / set_focus_next(), matched while building frame,
+    // applied by process_input_events() of the next frame
+    im_id focus_request_id = im_id();
+    int focus_request_age = 0;    // frames since request, dropped when > 1
+    bool focus_next = false;      // set_focus_next(): next focusable widget is the target
+    struct {
+      im_id id = im_id();
+      im_id view_id = im_id();
+      bool in_popup = false;
+    } focus_target;
+
     // widget clicked by mouse this frame (hit-tested against previous frame)
     im_id clicked_id = im_id();
     im_vec2 clicked_pos;

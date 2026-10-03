@@ -151,6 +151,18 @@ void same_line();
 /// Width of the next widget (text_input, list): > 0 cells, fill(n) - rest of the line minus n cells
 void set_next_item_width(int width);
 
+/// Give keyboard focus to widget with \c label (activates its view, scrolls it into view).
+/// Id is resolved like widget ids: call in the same scope (view, push_id) as the widget.
+/// Takes effect on the next frame; request is dropped if no such widget is built
+/// during this or the next frame. Ignored for widgets outside an open popup.
+void set_focus(std::string_view label);
+
+/// Give keyboard focus to the next widget (e.g. text input when a form opens)
+void set_focus_next();
+
+/// True if the last built widget has keyboard focus
+[[nodiscard]] auto is_item_focused() -> bool;
+
 /// Push id scope: same labels inside different scopes don't collide (e.g. widgets built in a loop)
 void push_id(std::string_view id);
 /// @overload

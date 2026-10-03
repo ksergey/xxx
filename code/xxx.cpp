@@ -254,6 +254,17 @@ void process_input_events() {
     }
   }
 
+  // focus requested on previous frame
+  if (auto const target = std::exchange(widget.focus_target, {}); target.id != im_id()) {
+    if (g_ctx->popup.open_id == im_id()) {
+      view.active_id = target.view_id;
+      widget.active_id = target.id;
+    } else if (target.in_popup) {
+      // modal: only popup widgets can be focused
+      widget.active_id = target.id;
+    }
+  }
+
   // mouse click: activate view and focus widget under cursor
   widget.clicked_id = im_id();
   if (g_ctx->input.is_mouse_clicked(im_mouse_button_id::left)) {
@@ -308,6 +319,11 @@ void new_frame() {
   g_ctx->widget.next_id = im_id();
   g_ctx->widget.prev_id = im_id();
   g_ctx->widget.last_id = im_id();
+  g_ctx->widget.focus_next = false;
+  if (g_ctx->widget.focus_request_id != im_id() && ++g_ctx->widget.focus_request_age > 1) {
+    // widget wasn't built during request frame and the next one
+    g_ctx->widget.focus_request_id = im_id();
+  }
   g_ctx->next_item_width = 0;
   g_ctx->widget.active = false;
   g_ctx->widget.pressed = false;
@@ -457,6 +473,20 @@ void same_line() {
 
 void set_next_item_width(int width) {
   g_ctx->next_item_width = width;
+}
+
+void set_focus(std::string_view label) {
+  auto const [str, key] = g_ctx->hash_id.split_str_key(label);
+  g_ctx->widget.focus_request_id = g_ctx->hash_id.make(key);
+  g_ctx->widget.focus_request_age = 0;
+}
+
+void set_focus_next() {
+  g_ctx->widget.focus_next = true;
+}
+
+auto is_item_focused() -> bool {
+  return g_ctx->widget.active;
 }
 
 void push_id(std::string_view id) {
@@ -886,6 +916,12 @@ void common_focusable_behaviour(im_id widget_id, im_rect const& widget_rect) noe
   widget.current_id = widget_id;
   widget.pressed = false;
   widget.active = false;
+
+  if (view.current_id != im_id() &&
+      (std::exchange(widget.focus_next, false) || widget.focus_request_id == widget_id)) {
+    widget.focus_request_id = im_id();
+    widget.focus_target = {.id = widget_id, .view_id = view.current_id, .in_popup = g_ctx->popup.current_id != im_id()};
+  }
 
   // TODO:
   // https://github.com/ksergey/xxx/blob/20b7cfdab337acda6e69290a8f4a9ee408ad8c37/code_v3/xxx.cpp#L306-L316
