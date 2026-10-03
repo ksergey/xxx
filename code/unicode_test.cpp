@@ -65,6 +65,82 @@ TEST_SUITE("unicode") {
     }
   }
 
+  TEST_CASE("char_width") {
+    CHECK(char_width('a') == 1);
+    CHECK(char_width(U'ж') == 1);
+    CHECK(char_width(U'€') == 1);
+    CHECK(char_width(U'⣿') == 1); // braille, used by canvas/spinner
+    CHECK(char_width(U'╭') == 1); // box drawing, used by borders
+    CHECK(char_width(U'日') == 2);
+    CHECK(char_width(U'Ａ') == 2); // fullwidth latin
+    CHECK(char_width(U'\U0001F600') == 2);
+    // zero-width and control chars take one cell in termbox2
+    CHECK(char_width(0x0301) == 1);
+    CHECK(char_width('\t') == 1);
+  }
+
+  TEST_CASE("text_width") {
+    CHECK(text_width(to_vec("")) == 0);
+    CHECK(text_width(to_vec("hello")) == 5);
+    CHECK(text_width(to_vec("привет")) == 6);
+    CHECK(text_width(to_vec("日本語")) == 6);
+    CHECK(text_width(to_vec("a日😀b")) == 6);
+  }
+
+  TEST_CASE("slice_columns") {
+    // "a日本b": columns  a=0, 日=1..2, 本=3..4, b=5
+    auto const text = to_vec("a日本b");
+    auto const span = std::span<std::uint32_t const>(text);
+
+    auto const check = [&](int skip, int max_width, std::size_t first, std::size_t count, int pad_left, int pad_right) {
+      CAPTURE(skip);
+      CAPTURE(max_width);
+      auto const s = slice_columns(span, skip, max_width);
+      CHECK(s.text.data() == span.data() + first);
+      CHECK(s.text.size() == count);
+      CHECK(s.pad_left == pad_left);
+      CHECK(s.pad_right == pad_right);
+      CHECK(s.width() <= max_width);
+    };
+
+    SUBCASE("whole text") {
+      check(0, 100, 0, 4, 0, 0);
+      check(0, 6, 0, 4, 0, 0);
+    }
+    SUBCASE("cut right on char boundary") {
+      check(0, 3, 0, 2, 0, 0);
+    }
+    SUBCASE("cut right inside wide char") {
+      check(0, 2, 0, 1, 0, 1); // "a" + pad
+      check(0, 4, 0, 2, 0, 1); // "a日" + pad
+    }
+    SUBCASE("skip on char boundary") {
+      check(1, 100, 1, 3, 0, 0);
+      check(3, 100, 2, 2, 0, 0);
+    }
+    SUBCASE("skip inside wide char") {
+      check(2, 100, 2, 2, 1, 0); // pad + "本b"
+      check(4, 100, 3, 1, 1, 0); // pad + "b"
+    }
+    SUBCASE("both edges inside wide chars") {
+      check(2, 2, 2, 0, 1, 1); // pad + pad
+    }
+    SUBCASE("single column inside wide char") {
+      check(2, 1, 2, 0, 1, 0);
+    }
+    SUBCASE("past the end") {
+      CHECK(slice_columns(span, 6, 10).empty());
+      CHECK(slice_columns(span, 100, 10).empty());
+    }
+    SUBCASE("non-positive width") {
+      CHECK(slice_columns(span, 0, 0).empty());
+      CHECK(slice_columns(span, 0, -1).empty());
+    }
+    SUBCASE("negative skip is clamped") {
+      check(-5, 100, 0, 4, 0, 0);
+    }
+  }
+
   TEST_CASE("output overloads overwrite previous contents") {
     std::vector<std::uint32_t> v{1, 2, 3};
     utf8_to_unicode("x", v);

@@ -13,6 +13,7 @@
 
 #include "im_stack.h"
 #include "string_utils.h"
+#include "unicode.h"
 #include "xxx.h"
 
 #if 0
@@ -84,6 +85,9 @@ private:
     // non-owning value
     // should be alive until start_new_frame call
     std::span<std::uint32_t const> text;
+    // draw space before / after text (wide char cut by clip rect)
+    int pad_left;
+    int pad_right;
   };
 
   struct render_cmd_draw_surface_data {
@@ -237,23 +241,8 @@ public:
       return;
     }
 
-    auto const a_rect = this->adjust(im_rect(pos, pos + im_vec2(text.size() - 1, 0)));
-    auto const c_rect = clip_rect_.intersection(a_rect);
-    if (!c_rect) {
-      return;
-    }
-
-    if (c_rect.min.x > a_rect.min.x) {
-      text = substr(text, c_rect.min.x - a_rect.min.x);
-    }
-    if (c_rect.max.x < a_rect.max.x) {
-      text = substr(text, 0, text.size() - (a_rect.max.x - c_rect.max.x));
-    }
-    if (text.empty()) {
-      return;
-    }
-
-    this->append_cmd_draw_text(c_rect.min, text, style);
+    auto const a_pos = pos - viewport_offset_;
+    this->append_cmd_draw_text_clipped(a_pos.x, a_pos.y, text, style);
   }
 
   /// Append command to draw text inside rect
@@ -267,7 +256,7 @@ public:
       return;
     }
 
-    auto const text_length = static_cast<int>(text.size());
+    auto const text_length = text_width(text);
     auto const rect_width = static_cast<int>(a_rect.width());
     auto const rect_height = static_cast<int>(a_rect.height());
 
@@ -302,20 +291,7 @@ public:
       text_min_x = a_rect.min.x + (rect_width - text_length);
       break;
     }
-    auto text_max_x = text_min_x + text_length - 1;
-
-    if (text_min_x < clip_rect_.min.x) {
-      text = substr(text, clip_rect_.min.x - text_min_x);
-      text_min_x = clip_rect_.min.x;
-    }
-    if (text_max_x > clip_rect_.max.x) {
-      text = substr(text, 0, text.size() - (text_max_x - clip_rect_.max.x));
-      text_max_x = clip_rect_.max.x;
-    }
-
-    if (text_min_x <= text_max_x) {
-      this->append_cmd_draw_text(im_vec2(text_min_x, text_min_y), text, style);
-    }
+    this->append_cmd_draw_text_clipped(text_min_x, text_min_y, text, style);
   }
 
   void cmd_draw_surface(im_vec2 const& pos, im_vec2 const& size, std::span<im_cell const> data) {
@@ -348,13 +324,28 @@ private:
     cmd.draw_rect_data = render_cmd_draw_rect_data{.rect = rect};
   }
 
-  void append_cmd_draw_text(im_vec2 const& pos, std::span<std::uint32_t const> text, im_style const& style) {
+  // clip single line text (in screen coords) to clip rect by terminal columns and append command
+  void append_cmd_draw_text_clipped(int x, int y, std::span<std::uint32_t const> text, im_style const& style) {
+    if (!clip_rect_ || y < clip_rect_.min.y || y > clip_rect_.max.y) {
+      return;
+    }
+    auto const skip = clip_rect_.min.x - x;
+    auto const slice = slice_columns(text, skip, clip_rect_.max.x - std::max(x, clip_rect_.min.x) + 1);
+    if (slice.empty()) {
+      return;
+    }
+    this->append_cmd_draw_text(im_vec2(std::max(x, clip_rect_.min.x), y), slice, style);
+  }
+
+  void append_cmd_draw_text(im_vec2 const& pos, text_slice const& slice, im_style const& style) {
     auto& cmd = commands_.emplace_back();
     cmd.type = render_cmd_type::draw_text;
     cmd.style = style;
     cmd.draw_text_data = {};
     cmd.draw_text_data.pos = pos;
-    cmd.draw_text_data.text = text;
+    cmd.draw_text_data.text = slice.text;
+    cmd.draw_text_data.pad_left = slice.pad_left;
+    cmd.draw_text_data.pad_right = slice.pad_right;
   }
 
   void append_cmd_draw_surface(im_rect const& src_rect, im_rect const& rect, std::span<im_cell const> data) {

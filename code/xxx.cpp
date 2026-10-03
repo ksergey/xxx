@@ -688,7 +688,7 @@ void panel_end() {
 
 void label(std::string_view text) {
   auto const unicode_text = to_unicode(text);
-  auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(unicode_text.size(), 1));
+  auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(text_width(unicode_text), 1));
   if (!g_ctx->renderer.is_visible(widget_rect)) {
     return;
   }
@@ -740,7 +740,8 @@ auto button(std::string_view label) -> bool {
 
   auto const [str, widget_key] = g_ctx->hash_id.split_str_key(label);
   auto const unicode_str = to_unicode(str);
-  auto const button_width = std::max<int>(button_min_width, unicode_str.size() + 4);
+  auto const unicode_str_width = text_width(unicode_str);
+  auto const button_width = std::max<int>(button_min_width, unicode_str_width + 4);
   auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(button_width, 1));
 
   internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key));
@@ -758,8 +759,8 @@ auto button(std::string_view label) -> bool {
                       : get_style_bg(im_color_id::button_inactive_background));
 
     // label start pos (signed arithmetic: label may be wider than widget rect)
-    auto const unicode_str_len = static_cast<int>(unicode_str.size());
-    auto const unicode_str_pos = widget_rect.min + im_vec2(std::max(0, (widget_rect.width() - unicode_str_len) / 2), 0);
+    auto const unicode_str_pos =
+        widget_rect.min + im_vec2(std::max(0, (widget_rect.width() - unicode_str_width) / 2), 0);
 
     // draw label
     g_ctx->renderer.cmd_draw_text_at(unicode_str_pos, unicode_str,
@@ -772,7 +773,7 @@ auto button(std::string_view label) -> bool {
                       : get_style(im_color_id::button_inactive_fx, im_color_id::button_inactive_background));
 
     // draw right fx
-    g_ctx->renderer.cmd_draw_text_at(unicode_str_pos + im_vec2(unicode_str_len + 1, 0),
+    g_ctx->renderer.cmd_draw_text_at(unicode_str_pos + im_vec2(unicode_str_width + 1, 0),
         std::span<std::uint32_t const>(&fx_right_ch, 1),
         widget.active ? get_style(im_color_id::button_active_fx, im_color_id::button_active_background)
                       : get_style(im_color_id::button_inactive_fx, im_color_id::button_inactive_background));
@@ -904,87 +905,70 @@ auto text_input(std::string_view placeholder, std::string& input, [[maybe_unused
           rect.min, prompt, get_style(im_color_id::input_inactive_prompt, im_color_id::input_inactive_background));
     }
 
-    rect.min += im_vec2(prompt.size(), 0);
+    rect.min += im_vec2(text_width(prompt), 0);
 
     // "static" keywoard is required here
     static constexpr auto space_ch = std::uint32_t(' ');
+    auto const space = std::span<std::uint32_t const>(&space_ch, 1);
+
+    // text is drawn shifted inside own clip rect; renderer cuts it by columns
+    g_ctx->renderer.push_clip_rect(rect);
 
     if (input.empty()) {
-      auto const unicode_str = substr(to_unicode(str), 0, rect.width());
+      auto const unicode_str = to_unicode(str);
 
       if (widget.active) {
+        auto const cursor_style =
+            get_style(im_color_id::input_active_text, im_color_id::input_active_background).with_reverse();
         if (!unicode_str.empty()) {
-          {
-            auto const style =
-                get_style(im_color_id::input_active_text, im_color_id::input_active_background).with_reverse();
-            g_ctx->renderer.cmd_draw_text_at(rect.min, substr(unicode_str, 0, 1), style);
-          }
-          rect.min += im_vec2(1, 0);
-          {
-            auto const style = get_style(im_color_id::input_placeholder, im_color_id::input_active_background);
-            g_ctx->renderer.cmd_draw_text_at(rect.min, substr(unicode_str, 1), style);
-          }
+          g_ctx->renderer.cmd_draw_text_at(rect.min, substr(unicode_str, 0, 1), cursor_style);
+          g_ctx->renderer.cmd_draw_text_at(rect.min + im_vec2(char_width(unicode_str[0]), 0), substr(unicode_str, 1),
+              get_style(im_color_id::input_placeholder, im_color_id::input_active_background));
         } else {
-          auto const style =
-              get_style(im_color_id::input_active_text, im_color_id::input_active_background).with_reverse();
-          g_ctx->renderer.cmd_draw_text_at(rect.min, std::span<std::uint32_t const>(&space_ch, 1), style);
+          g_ctx->renderer.cmd_draw_text_at(rect.min, space, cursor_style);
         }
-      } else {
-        if (!unicode_str.empty()) {
-          auto const style = get_style(im_color_id::input_placeholder, im_color_id::input_inactive_background);
-          g_ctx->renderer.cmd_draw_text_at(rect.min, unicode_str, style);
-        }
+      } else if (!unicode_str.empty()) {
+        g_ctx->renderer.cmd_draw_text_at(
+            rect.min, unicode_str, get_style(im_color_id::input_placeholder, im_color_id::input_inactive_background));
       }
+    } else if (widget.active) {
+      auto const style = g_ctx->theme.get_style(im_color_id::input_active_text, im_color_id::input_active_background);
+      auto const cursor_style = style.with_reverse();
+      g_ctx->renderer.cmd_fill_rect(rect, ' ', style);
+
+      auto const content = std::span<std::uint32_t const>(text_input.text);
+      auto const cursor_pos = static_cast<std::size_t>(text_input.cursor_pos);
+      auto const display_width = rect.width();
+      // all positions below are in terminal columns
+      auto const content_width = text_width(content);
+      auto const cursor_x = text_width(content.first(cursor_pos));
+      auto const cursor_w = cursor_pos < content.size() ? char_width(content[cursor_pos]) : 1;
+
+      if (content_width + 1 <= display_width) {
+        text_input.scroll_offset = 0;
+      } else {
+        // keep cursor visible, scroll with small step to avoid jitter
+        constexpr auto step = int(3);
+        if (cursor_x < text_input.scroll_offset) {
+          text_input.scroll_offset = cursor_x - step;
+        } else if (cursor_x + cursor_w > text_input.scroll_offset + display_width) {
+          text_input.scroll_offset = cursor_x + cursor_w - display_width + step;
+        }
+        text_input.scroll_offset = std::clamp(text_input.scroll_offset, 0, content_width + 1 - display_width);
+      }
+
+      auto const origin = rect.min - im_vec2(text_input.scroll_offset, 0);
+      g_ctx->renderer.cmd_draw_text_at(origin, content, style);
+      g_ctx->renderer.cmd_draw_text_at(origin + im_vec2(cursor_x, 0),
+          cursor_pos < content.size() ? content.subspan(cursor_pos, 1) : space, cursor_style);
     } else {
-      if (widget.active) {
-        auto const style = g_ctx->theme.get_style(im_color_id::input_active_text, im_color_id::input_active_background);
-        auto const cursor_style = style.with_reverse();
-        g_ctx->renderer.cmd_fill_rect(rect, ' ', style);
-
-        auto const display_width = rect.width();
-        auto a_content = std::span<std::uint32_t const>(text_input.text);
-        auto a_content_size = int(a_content.size());
-        auto a_cursor_pos = text_input.cursor_pos;
-
-        if (a_content_size + 1 > display_width) {
-          // context is greater of widget rect
-          constexpr auto step = int(3);
-
-          auto const abs_cursor_pos = a_cursor_pos + 1 - text_input.scroll_offset;
-          if (abs_cursor_pos < 0) {
-            text_input.scroll_offset -= abs_cursor_pos + step;
-          } else if (abs_cursor_pos > display_width) {
-            text_input.scroll_offset += abs_cursor_pos - display_width + step;
-          }
-          text_input.scroll_offset = std::max<int>(text_input.scroll_offset, 0);
-
-          a_content = substr(a_content, text_input.scroll_offset);
-          a_content_size = int(a_content.size());
-          a_cursor_pos = a_cursor_pos - text_input.scroll_offset;
-        }
-
-        if (a_cursor_pos < a_content_size) {
-          if (a_cursor_pos > 0) {
-            g_ctx->renderer.cmd_draw_text_at(rect.min, substr(a_content, 0, a_cursor_pos), style);
-          }
-          g_ctx->renderer.cmd_draw_text_at(
-              rect.min + im_vec2(a_cursor_pos, 0), substr(a_content, a_cursor_pos, 1), cursor_style);
-          if (a_cursor_pos + 1 < a_content_size) {
-            g_ctx->renderer.cmd_draw_text_at(
-                rect.min + im_vec2(a_cursor_pos + 1, 0), substr(a_content, a_cursor_pos + 1, display_width), style);
-          }
-        } else {
-          g_ctx->renderer.cmd_draw_text_at(rect.min, a_content, style);
-          g_ctx->renderer.cmd_draw_text_at(
-              rect.min + im_vec2(a_content_size, 0), std::span<std::uint32_t const>(&space_ch, 1), cursor_style);
-        }
-      } else {
-        auto const style =
-            g_ctx->theme.get_style(im_color_id::input_inactive_text, im_color_id::input_inactive_background);
-        g_ctx->renderer.cmd_fill_rect(rect, ' ', style);
-        g_ctx->renderer.cmd_draw_text_at(rect.min, substr(to_unicode(input), 0, rect.width()), style);
-      }
+      auto const style =
+          g_ctx->theme.get_style(im_color_id::input_inactive_text, im_color_id::input_inactive_background);
+      g_ctx->renderer.cmd_fill_rect(rect, ' ', style);
+      g_ctx->renderer.cmd_draw_text_at(rect.min, to_unicode(input), style);
     }
+
+    g_ctx->renderer.pop_clip_rect();
   }
 
   return widget.pressed;
@@ -1004,7 +988,7 @@ void spinner(std::string_view text, float& step) {
   static constexpr int spinner_min_width = 10;
 
   auto const unicode_text = to_unicode(text);
-  auto const spinner_width = std::max<int>(spinner_min_width, unicode_text.size() + 2);
+  auto const spinner_width = std::max<int>(spinner_min_width, text_width(unicode_text) + 2);
   auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(spinner_width, 1));
 
   // update step

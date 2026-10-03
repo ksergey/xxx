@@ -57,7 +57,7 @@ struct im_context {
     im_id active_id = im_id();
     std::vector<std::uint32_t> text;
     int cursor_pos = 0;
-    int scroll_offset = 0;
+    int scroll_offset = 0; // in terminal columns
   } text_input;
 
   struct {

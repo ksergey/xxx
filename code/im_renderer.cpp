@@ -102,8 +102,17 @@ void im_renderer::do_draw_text(render_cmd const& cmd) {
   auto const& pos = cmd.draw_text_data.pos;
   auto const& text = cmd.draw_text_data.text;
 
-  for (auto const& [pos_x, pos_y, ch] : std::views::zip(std::views::iota(pos.x), std::views::repeat(pos.y), text)) {
-    ::tb_set_cell(pos_x, pos_y, ch, style.fg, style.bg);
+  auto pos_x = pos.x;
+  if (cmd.draw_text_data.pad_left) {
+    ::tb_set_cell(pos_x++, pos.y, ' ', style.fg, style.bg);
+  }
+  for (auto const ch : text) {
+    ::tb_set_cell(pos_x, pos.y, ch, style.fg, style.bg);
+    // termbox2 skips cells covered by wide char on present
+    pos_x += char_width(ch);
+  }
+  if (cmd.draw_text_data.pad_right) {
+    ::tb_set_cell(pos_x, pos.y, ' ', style.fg, style.bg);
   }
 }
 

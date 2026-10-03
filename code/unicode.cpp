@@ -3,6 +3,8 @@
 
 #include "unicode.h"
 
+#include <algorithm>
+
 #include <termbox2.h>
 
 namespace xxx {
@@ -68,6 +70,58 @@ void unicode_to_utf8(std::span<std::uint32_t const> input, std::string& output) 
     ::tb_utf8_unicode_to_char(codepoint, ch);
     output.append(codepoint);
   }
+}
+
+auto char_width(std::uint32_t ch) noexcept -> int {
+  if (ch < 0x80) [[likely]] {
+    return 1;
+  }
+  return ::tb_wcwidth(ch) >= 2 ? 2 : 1;
+}
+
+auto text_width(std::span<std::uint32_t const> text) noexcept -> int {
+  auto width = 0;
+  for (auto const ch : text) {
+    width += char_width(ch);
+  }
+  return width;
+}
+
+auto slice_columns(std::span<std::uint32_t const> text, int skip, int max_width) noexcept -> text_slice {
+  auto result = text_slice();
+  if (max_width <= 0) {
+    return result;
+  }
+  skip = std::max(skip, 0);
+
+  auto const size = text.size();
+  auto i = std::size_t(0);
+  auto column = 0;
+
+  // drop leading columns
+  while (i < size && column + char_width(text[i]) <= skip) {
+    column += char_width(text[i++]);
+  }
+  auto used = 0;
+  if (i < size && column < skip) {
+    // wide char cut by left edge
+    column += char_width(text[i++]);
+    result.pad_left = 1;
+    used = 1;
+  }
+
+  // take columns which fit
+  auto const first = i;
+  while (i < size && used + char_width(text[i]) <= max_width) {
+    used += char_width(text[i++]);
+  }
+  result.text = text.subspan(first, i - first);
+
+  if (i < size && used < max_width) {
+    // wide char cut by right edge
+    result.pad_right = 1;
+  }
+  return result;
 }
 
 } // namespace xxx
