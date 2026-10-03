@@ -271,7 +271,7 @@ public:
     auto const rect_width = static_cast<int>(a_rect.width());
     auto const rect_height = static_cast<int>(a_rect.height());
 
-    int text_min_y;
+    int text_min_y = a_rect.min.y;
     switch (valign) {
     case im_valign::top:
       text_min_y = a_rect.min.y;
@@ -290,7 +290,7 @@ public:
       return;
     }
 
-    int text_min_x;
+    int text_min_x = a_rect.min.x;
     switch (halign) {
     case im_halign::left:
       text_min_x = a_rect.min.x;

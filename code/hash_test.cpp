@@ -21,10 +21,8 @@ TEST_SUITE("hash") {
     CHECK(hash("zo20u7Lfodi7"sv, 3318) == 2261267491u);
   }
 
-  // Skipped: bytes >= 0x80 are sign-extended (std::uint32_t(char)) in mm3_32,
-  // so non-ASCII input differs from canonical murmur3. Ids still work since the
-  // hash is deterministic; un-skip after casting through unsigned char.
-  TEST_CASE("murmur3 reference: non-ascii" * doctest::skip()) {
+  // regression: bytes >= 0x80 used to be sign-extended
+  TEST_CASE("murmur3 reference: non-ascii") {
     CHECK(hash("привет"sv, 0) == 993413998u);
     CHECK(hash("\xff\xfe\xfd\xfc\x80"sv, 42) == 79148982u);
   }

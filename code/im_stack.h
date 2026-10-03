@@ -24,10 +24,10 @@ public:
     std::copy_n(other.data(), other.size(), data_.get());
   }
 
+  // copy-and-swap: strong exception guarantee, *this untouched if allocation throws
   constexpr im_stack& operator=(im_stack const& other) {
     if (this != &other) {
-      this->~im_stack();
-      new (this) im_stack(other);
+      im_stack(other).swap(*this);
     }
     return *this;
   }
@@ -38,10 +38,22 @@ public:
 
   constexpr im_stack& operator=(im_stack&& other) noexcept {
     if (this != &other) {
-      this->~im_stack();
-      new (this) im_stack(std::move(other));
+      data_ = std::move(other.data_);
+      capacity_ = std::exchange(other.capacity_, 0);
+      size_ = std::exchange(other.size_, 0);
     }
     return *this;
+  }
+
+  constexpr void swap(im_stack& other) noexcept {
+    using std::swap;
+    swap(data_, other.data_);
+    swap(capacity_, other.capacity_);
+    swap(size_, other.size_);
+  }
+
+  friend constexpr void swap(im_stack& a, im_stack& b) noexcept {
+    a.swap(b);
   }
 
   constexpr im_stack() = default;

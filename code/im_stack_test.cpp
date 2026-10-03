@@ -93,6 +93,46 @@ TEST_SUITE("im_stack") {
     CHECK(b.back() == 3);
   }
 
+  TEST_CASE("self copy assignment") {
+    im_stack<int> a(2);
+    a.push_back(5);
+    auto& ref = a;
+    a = ref;
+    CHECK(a.size() == 1);
+    CHECK(a.back() == 5);
+  }
+
+  TEST_CASE("move assignment") {
+    im_stack<int> a(4);
+    a.push_back(1);
+    im_stack<int> b(2);
+    b.push_back(9);
+    b = std::move(a);
+    CHECK(b.capacity() == 4);
+    CHECK(b.back() == 1);
+    CHECK(a.capacity() == 0);
+    CHECK(a.empty());
+  }
+
+  TEST_CASE("swap") {
+    im_stack<int> a(1), b(3);
+    a.push_back(1);
+    b.push_back(2);
+    b.push_back(3);
+    swap(a, b);
+    CHECK(a.size() == 2);
+    CHECK(a.capacity() == 3);
+    CHECK(b.size() == 1);
+    CHECK(b.back() == 1);
+  }
+
+  TEST_CASE("copy of default constructed") {
+    im_stack<int> a;
+    auto b = a;
+    CHECK(b.empty());
+    CHECK(b.capacity() == 0);
+  }
+
   TEST_CASE("move leaves source empty") {
     im_stack<int> a(4);
     a.push_back(1);

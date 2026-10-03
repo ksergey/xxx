@@ -23,11 +23,15 @@ namespace detail {
 
   auto hash = seed;
 
+  // bytes must be read as unsigned: plain char is signed on most platforms and
+  // std::uint32_t(char(0x80)) would sign-extend to 0xffffff80
+  auto const byte = [](char c) constexpr noexcept { return std::uint32_t(static_cast<unsigned char>(c)); };
+
   for (auto const& block : std::span(p_data, p_tail) | std::views::chunk(4)) {
-    auto chunk = std::uint32_t(block[0]);
-    chunk |= std::uint32_t(block[1]) << 8;
-    chunk |= std::uint32_t(block[2]) << 16;
-    chunk |= std::uint32_t(block[3]) << 24;
+    auto chunk = byte(block[0]);
+    chunk |= byte(block[1]) << 8;
+    chunk |= byte(block[2]) << 16;
+    chunk |= byte(block[3]) << 24;
 
     chunk *= c1;
     chunk = std::rotl(chunk, 15);
@@ -41,13 +45,13 @@ namespace detail {
   auto chunk = std::uint32_t(0);
   switch (size & 0x3) {
   case 3:
-    chunk ^= std::uint32_t(p_tail[2]) << 16;
+    chunk ^= byte(p_tail[2]) << 16;
     [[fallthrough]];
   case 2:
-    chunk ^= std::uint32_t(p_tail[1]) << 8;
+    chunk ^= byte(p_tail[1]) << 8;
     [[fallthrough]];
   case 1:
-    chunk ^= std::uint32_t(p_tail[0]);
+    chunk ^= byte(p_tail[0]);
     chunk *= c1;
     chunk = std::rotl(chunk, 15);
     chunk *= c2;
@@ -91,5 +95,7 @@ template <typename T>
 
 static_assert(hash("1923cj32ASF}~", 99913) == 2301554477);
 static_assert(hash("zo20u7Lfodi7", 3318) == 2261267491);
+// non-ASCII input must match canonical murmur3 too
+static_assert(hash("\xff\xfe\xfd\xfc\x80", 42) == 79148982);
 
 } // namespace xxx
