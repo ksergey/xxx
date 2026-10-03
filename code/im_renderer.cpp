@@ -29,13 +29,16 @@ void im_renderer::start_new_frame(im_rect const& clip_rect) {
   clip_rect_stack_.clear();
   clip_rect_ = clip_rect;
   viewport_offset_ = im_vec2(0, 0);
-  commands_.clear();
+  for (auto& layer : commands_) {
+    layer.clear();
+  }
+  layer_ = 0;
 }
 
 void im_renderer::render(im_backend& backend) {
   backend.clear(clear_style_);
 
-  for (auto const& cmd : commands_) {
+  for (auto const& cmd : commands_ | std::views::join) {
     switch (cmd.type) {
     case render_cmd_type::fill_rect:
       do_fill_rect(backend, cmd);

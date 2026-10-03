@@ -210,6 +210,28 @@ void panel_begin();
 /// End panel
 void panel_end();
 
+// -----------------------------------------
+// Popup (modal)
+// -----------------------------------------
+
+/// Open modal popup with \c id (e.g. on button press). One popup is open at a time.
+/// While open: views are inactive, input goes only to the popup, Esc closes it.
+void open_popup(std::string_view id);
+
+/// Begin popup: draws centered on top of everything, height fits content.
+/// Call outside of views. When true is returned, build content and call popup_end().
+/// theme: view_active_border, view_active_title, background
+auto popup_begin(std::string_view id, std::string_view title, int width = 40) -> bool;
+
+/// End popup
+void popup_end();
+
+/// Close open popup; keyboard focus returns where it was before opening
+void close_popup();
+
+/// True when any popup is open
+[[nodiscard]] auto is_popup_open() -> bool;
+
 /// Widget: label
 /// @param text is label text
 ///

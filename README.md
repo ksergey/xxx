@@ -12,6 +12,7 @@ Built on top of [termbox/termbox2](https://github.com/termbox/termbox2) (previou
 - Views with border, title and shortcut; fixed, fit-content or `fill()` height
 - Scrolling: PgUp / PgDn, mouse wheel, auto-scroll to focused widget
 - Widgets: label, button, checkbox, list, tabs, text input (password, readline keys), spinner, progress
+- Modal popups drawn on top of everything, with input capture and focus restore
 - Keyboard focus (Tab / Shift-Tab) and mouse (click to focus, press, place cursor)
 - Id scopes (`push_id` / `pop_id`) for widgets built in loops
 - Unicode aware: wide chars (CJK, emoji) take two cells
@@ -48,7 +49,7 @@ int main() {
 ```
 
 [`example/life.cpp`](example/life.cpp) is Conway's Game of Life (screenshot above):
-play / pause, speed, patterns list, population chart, event log and help in tabs.
+play / pause, speed, patterns list, population chart, event log and help in tabs, confirmation popup.
 
 ```sh
 cmake -B build && cmake --build build

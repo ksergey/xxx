@@ -131,6 +131,12 @@ public:
     }
   }
 
+  /// Drop keyboard input of this frame (it was handled and must not reach other widgets)
+  void consume_keyboard() noexcept {
+    keyboard_.keys.fill(keyboard_state::key_state{.clicked = 0});
+    keyboard_.input_events.clear();
+  }
+
   void reset() noexcept {
     keyboard_.keys.fill(keyboard_state::key_state{.clicked = 0});
     keyboard_.input_events.clear(); // keeps capacity

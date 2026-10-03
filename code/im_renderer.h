@@ -115,7 +115,10 @@ private:
   im_vec2 viewport_offset_;
   im_rect clip_rect_;
   im_style clear_style_;
-  std::vector<render_cmd> commands_;
+  // commands are drawn layer by layer: later layers on top regardless of submit order
+  static constexpr int layers_count = 3;
+  std::array<std::vector<render_cmd>, layers_count> commands_;
+  int layer_ = 0;
 
 public:
   im_renderer(im_renderer const&) = delete;
@@ -157,6 +160,20 @@ public:
 
   void set_clear_color(im_style const& style) noexcept {
     clear_style_ = style;
+  }
+
+  /// Layer for following commands: 0 - main ui, 1 - popup background, 2 - popup content
+  void set_layer(int layer) noexcept {
+    layer_ = std::clamp(layer, 0, layers_count - 1);
+  }
+
+  [[nodiscard]] auto layer() const noexcept -> int {
+    return layer_;
+  }
+
+  /// Drop commands submitted to layer this frame
+  void clear_layer(int layer) noexcept {
+    commands_[std::size_t(std::clamp(layer, 0, layers_count - 1))].clear();
   }
 
   /// Start drawing new frame
@@ -314,14 +331,14 @@ private:
   }
 
   void append_cmd_fill_rect(im_rect const& rect, std::uint32_t ch, im_style const& style) {
-    auto& cmd = commands_.emplace_back();
+    auto& cmd = commands_[std::size_t(layer_)].emplace_back();
     cmd.type = render_cmd_type::fill_rect;
     cmd.style = style;
     cmd.fill_rect_data = render_cmd_fill_rect_data{.rect = rect, .ch = ch};
   }
 
   void append_cmd_draw_rect(im_rect const& rect, im_style const& style) {
-    auto& cmd = commands_.emplace_back();
+    auto& cmd = commands_[std::size_t(layer_)].emplace_back();
     cmd.type = render_cmd_type::draw_rect;
     cmd.style = style;
     cmd.draw_rect_data = render_cmd_draw_rect_data{.rect = rect};
@@ -341,7 +358,7 @@ private:
   }
 
   void append_cmd_draw_text(im_vec2 const& pos, text_slice const& slice, im_style const& style) {
-    auto& cmd = commands_.emplace_back();
+    auto& cmd = commands_[std::size_t(layer_)].emplace_back();
     cmd.type = render_cmd_type::draw_text;
     cmd.style = style;
     cmd.draw_text_data = {};
@@ -352,7 +369,7 @@ private:
   }
 
   void append_cmd_draw_surface(im_rect const& src_rect, im_rect const& rect, std::span<im_cell const> data) {
-    auto& cmd = commands_.emplace_back();
+    auto& cmd = commands_[std::size_t(layer_)].emplace_back();
     cmd.type = render_cmd_type::draw_surface;
     cmd.style = {};
     cmd.draw_surface_data = {.src_rect = src_rect, .rect = rect, .data = data};

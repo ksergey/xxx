@@ -102,6 +102,23 @@ struct im_context {
     std::span<im_cell> data;
   } canvas;
 
+  struct {
+    im_id open_id = im_id();
+    im_id saved_widget_id = im_id();           // focus to restore on close
+    std::unordered_map<im_id, int> heights;    // content height measured on previous frame
+
+    // valid between popup_begin and popup_end
+    im_id current_id = im_id();
+    std::string current_title;
+    im_rect current_rect; // outer rect, bottom is fixed in popup_end
+    bool measuring = false; // first frame: height unknown, layers are not shown
+    bool close_requested = false;
+    int saved_layer = 0;
+    im_vec2 saved_cursor;
+    int saved_last_cursor_y = 0;
+    bool saved_same_line = false;
+  } popup;
+
   // width for the next widget, 0 - widget default (see set_next_item_width)
   int next_item_width = 0;
 

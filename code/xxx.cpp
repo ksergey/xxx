@@ -11,6 +11,7 @@
 #include <ranges>
 #include <string_view>
 
+#include "hash.h"
 #include "im_context.h"
 
 #if 0
@@ -259,9 +260,11 @@ void process_input_events() {
     auto const pos = g_ctx->input.mouse_clicked_pos(im_mouse_button_id::left);
     auto const hit = [&](auto const& item) { return item.rect.contains(pos); };
 
-    // later drawn is on top
+    // later drawn is on top; open popup takes all clicks
+    auto const popup_id = g_ctx->popup.open_id;
     auto const& views = g_ctx->view_hits;
-    if (auto const v = std::find_if(views.rbegin(), views.rend(), hit); v != views.rend()) {
+    auto const view_hit = [&](auto const& item) { return (popup_id == im_id() || item.id == popup_id) && hit(item); };
+    if (auto const v = std::find_if(views.rbegin(), views.rend(), view_hit); v != views.rend()) {
       if (view.active_id != v->id) {
         view.active_id = v->id;
         widget.active_id = im_id();
@@ -506,9 +509,10 @@ void view_begin(std::string_view name, int flags, im_key_id shortcut, int height
   if (view.active_id == im_id()) {
     view.active_id = view.current_id;
   }
-  view.active = (view.active_id == view.current_id);
+  auto const popup_open = g_ctx->popup.open_id != im_id();
+  view.active = (view.active_id == view.current_id) && !popup_open;
 
-  if (is_key_pressed(shortcut) && !view.active) {
+  if (is_key_pressed(shortcut) && !view.active && !popup_open) {
     view.force_next_id = view.current_id;
   }
   // TODO: skip frame?
@@ -572,7 +576,7 @@ void view_begin(std::string_view name, int flags, im_key_id shortcut, int height
         auto const page = std::max(1, viewport_height - 1);
         scroll.offset += page * (key_press_count(im_key_id::page_down) - key_press_count(im_key_id::page_up));
       }
-      if (auto const wheel = g_ctx->input.mouse_wheel(); wheel != 0) {
+      if (auto const wheel = g_ctx->input.mouse_wheel(); wheel != 0 && !popup_open) {
         auto const mouse = g_ctx->input.mouse_pos();
         auto const view_rect = im_rect(layout.rect.min.x - border, top, layout.rect.max.x + border, view.current_bottom);
         if (view_rect.contains(mouse)) {
@@ -672,6 +676,156 @@ void view_end() {
   view.current_scroll = nullptr;
 }
 
+namespace {
+
+[[nodiscard]] auto popup_id(std::string_view id) noexcept -> im_id {
+  // global (not scoped): open_popup and popup_begin may be called from different scopes
+  return im_id(hash(id, 0x706f7075u));
+}
+
+void close_popup_now() noexcept {
+  auto& popup = g_ctx->popup;
+  popup.open_id = im_id();
+  popup.close_requested = false;
+  g_ctx->widget.active_id = popup.saved_widget_id;
+}
+
+} // namespace
+
+void open_popup(std::string_view id) {
+  auto& popup = g_ctx->popup;
+  auto const pid = popup_id(id);
+  if (popup.open_id == pid) {
+    return;
+  }
+  if (popup.open_id == im_id()) {
+    popup.saved_widget_id = g_ctx->widget.active_id;
+  }
+  popup.open_id = pid;
+  popup.close_requested = false;
+  // first popup widget takes focus
+  g_ctx->widget.active_id = im_id();
+  // the key or click that opened the popup is used up: it must not press a popup button
+  g_ctx->input.consume_keyboard();
+  g_ctx->widget.clicked_id = im_id();
+}
+
+void close_popup() {
+  if (g_ctx->popup.current_id != im_id()) {
+    // inside popup_begin / popup_end: finish building first
+    g_ctx->popup.close_requested = true;
+  } else {
+    close_popup_now();
+  }
+}
+
+auto is_popup_open() -> bool {
+  return g_ctx->popup.open_id != im_id();
+}
+
+auto popup_begin(std::string_view id, std::string_view title, int width) -> bool {
+  auto& popup = g_ctx->popup;
+  auto& view = g_ctx->view;
+  auto const pid = popup_id(id);
+  if (popup.open_id != pid) {
+    return false;
+  }
+  if (view.current_id != im_id() || popup.current_id != im_id()) [[unlikely]] {
+    assert(false && "popup_begin(...) inside view or popup");
+    return false;
+  }
+  if (is_key_pressed(im_key_id::esc)) {
+    close_popup_now();
+    return false;
+  }
+
+  auto const screen = get_screen_rect();
+  auto const it = popup.heights.find(pid);
+  popup.measuring = (it == popup.heights.end());
+  auto const w = std::clamp(width, 4, std::max(4, screen.width()));
+  auto const h = (popup.measuring ? 1 : it->second) + 2;
+  auto const left = screen.min.x + std::max(0, (screen.width() - w) / 2);
+  auto const top = screen.min.y + std::max(0, (screen.height() - h) / 2);
+
+  popup.current_id = pid;
+  popup.current_title = std::format(" {} ", title);
+  popup.current_rect = im_rect(left, top, left + w - 1, top + h - 1);
+
+  // own layout, surrounding layout is restored in popup_end
+  popup.saved_cursor = g_ctx->layout.cursor;
+  popup.saved_last_cursor_y = g_ctx->layout.last_cursor_y;
+  popup.saved_same_line = g_ctx->layout.same_line;
+  auto& layout = g_ctx->layout.layout_state_stack.emplace_back();
+  layout.type = im_layout_type::container;
+  layout.rect = im_rect(left + 1, top + 1, left + w - 2, top + 1);
+  layout.container = im_layout_data_container{.border = 1, .fixed_height = false};
+  g_ctx->layout.cursor = layout.rect.min;
+  g_ctx->layout.last_cursor_y = layout.rect.min.y;
+  g_ctx->layout.same_line = false;
+
+  // popup acts as the only active view
+  view.current_id = pid;
+  view.current_flags = 0;
+  view.active = true;
+  view.current_bounded = false;
+  view.current_scroll = nullptr;
+  g_ctx->hash_id.push_id(id);
+
+  popup.saved_layer = g_ctx->renderer.layer();
+  g_ctx->renderer.set_layer(2);
+  g_ctx->renderer.push_clip_rect(im_rect(left + 1, top + 1, left + w - 2, screen.max.y).intersection(screen), false);
+  return true;
+}
+
+void popup_end() {
+  auto& popup = g_ctx->popup;
+  auto& view = g_ctx->view;
+  if (popup.current_id == im_id()) [[unlikely]] {
+    assert(false && "popup_end(...) without popup_begin(...)");
+    return;
+  }
+
+  g_ctx->renderer.pop_clip_rect();
+  g_ctx->hash_id.pop_id();
+
+  auto& rect = popup.current_rect;
+  auto const content_height = g_ctx->layout.cursor.y - (rect.min.y + 1);
+  popup.heights[popup.current_id] = content_height;
+  rect.max.y = rect.min.y + content_height + 1;
+
+  // background and frame below content
+  auto const screen = get_screen_rect();
+  g_ctx->renderer.set_layer(1);
+  g_ctx->renderer.push_clip_rect(screen, false);
+  g_ctx->renderer.cmd_fill_rect(rect, ' ', get_style_bg(im_color_id::background));
+  g_ctx->renderer.cmd_draw_rect(rect, get_style(im_color_id::view_active_border, im_color_id::background));
+  g_ctx->renderer.cmd_draw_text_in_rect(rect, to_unicode(popup.current_title),
+      get_style(im_color_id::view_active_title, im_color_id::background), im_halign::center, im_valign::top);
+  g_ctx->renderer.pop_clip_rect();
+  g_ctx->renderer.set_layer(popup.saved_layer);
+
+  if (popup.measuring) {
+    // height was unknown: don't show misplaced popup, next frame is centered
+    g_ctx->renderer.clear_layer(1);
+    g_ctx->renderer.clear_layer(2);
+  } else if (auto const visible = rect.intersection(screen); visible) {
+    g_ctx->view_hits.push_back({.id = popup.current_id, .view_id = popup.current_id, .rect = visible});
+  }
+
+  g_ctx->layout.layout_state_stack.pop_back();
+  g_ctx->layout.cursor = popup.saved_cursor;
+  g_ctx->layout.last_cursor_y = popup.saved_last_cursor_y;
+  g_ctx->layout.same_line = popup.saved_same_line;
+
+  view.current_id = im_id();
+  view.active = false;
+  popup.current_id = im_id();
+
+  if (popup.close_requested) {
+    close_popup_now();
+  }
+}
+
 void panel_begin() {
   constexpr auto border = int(1);
 
@@ -736,8 +890,11 @@ void common_focusable_behaviour(im_id widget_id, im_rect const& widget_rect) noe
   // TODO:
   // https://github.com/ksergey/xxx/blob/20b7cfdab337acda6e69290a8f4a9ee408ad8c37/code_v3/xxx.cpp#L306-L316
 
-  // focus staff
-  if (view.active) {
+  // focus staff: while popup is open only its widgets take part, even in a view
+  // started before the popup was opened in this frame
+  auto const& popup = g_ctx->popup;
+  auto const focusable = view.active && (popup.open_id == im_id() || popup.current_id == popup.open_id);
+  if (focusable) {
     if (widget.active_id == im_id()) {
       widget.active_id = widget.current_id;
     }

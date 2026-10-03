@@ -79,6 +79,7 @@ constexpr auto keys_text = std::to_array({
     "C-o C-p C-e   panels"sv,
     "C-q           quit"sv,
     ""sv,
+    "Esc           close dialog"sv,
     "mouse: click, wheel"sv,
 });
 
@@ -285,10 +286,7 @@ int main() {
       }
       xxx::same_line();
       if (xxx::button("clear")) {
-        life.clear();
-        life.reset_generation();
-        history.clear();
-        note("cleared");
+        xxx::open_popup("clear");
       }
       if (xxx::button("slower") && speed_index > 0) {
         --speed_index;
@@ -377,6 +375,24 @@ int main() {
       xxx::view_end();
     }
     xxx::layout_row_end();
+
+    if (xxx::popup_begin("clear", "clear the world?", 34)) {
+      xxx::label(std::format("{} cells after {} generations", life.population(), life.generation()));
+      xxx::label("will be gone forever");
+      xxx::label(" ");
+      if (xxx::button("clear")) {
+        life.clear();
+        life.reset_generation();
+        history.clear();
+        note("cleared");
+        xxx::close_popup();
+      }
+      xxx::same_line();
+      if (xxx::button("keep")) {
+        xxx::close_popup();
+      }
+      xxx::popup_end();
+    }
 
     xxx::render();
     std::this_thread::sleep_for(std::chrono::milliseconds(16));
