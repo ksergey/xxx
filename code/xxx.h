@@ -163,6 +163,14 @@ void set_focus_next();
 /// True if the last built widget has keyboard focus
 [[nodiscard]] auto is_item_focused() -> bool;
 
+/// Number of ids used by more than one widget or view in the last rendered frame.
+/// Colliding widgets share focus and state (e.g. two buttons "ok" in one view);
+/// fix with push_id(...) or "label##key".
+[[nodiscard]] auto id_collision_count() -> int;
+
+/// Mark colliding widgets with red '!' on screen. Default: on in debug builds (no NDEBUG).
+void show_id_collisions(bool show);
+
 /// Push id scope: same labels inside different scopes don't collide (e.g. widgets built in a loop)
 void push_id(std::string_view id);
 /// @overload

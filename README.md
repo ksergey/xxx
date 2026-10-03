@@ -19,6 +19,7 @@ Built on top of [termbox/termbox2](https://github.com/termbox/termbox2) (previou
 - Braille canvas: 2x4 "pixels" per cell
 - Color theming
 - Headless backend for testing UI without a terminal
+- Debug builds mark widgets with colliding ids (same label twice) with a red `!`
 
 ## Example
 

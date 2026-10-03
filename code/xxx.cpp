@@ -299,6 +299,7 @@ void new_frame() {
   // hit areas of previous frame were consumed by process_input_events()
   g_ctx->view_hits.clear();
   g_ctx->widget_hits.clear();
+  g_ctx->frame_ids.clear();
 
   // TODO: frame delta
 
@@ -336,10 +337,60 @@ void new_frame() {
   g_ctx->renderer.start_new_frame(screen_rect);
 }
 
+namespace {
+
+// count ids used more than once this frame, mark them on top of everything
+void check_id_collisions() {
+  auto& sorted = g_ctx->frame_ids_sorted;
+  sorted.assign(g_ctx->frame_ids.begin(), g_ctx->frame_ids.end());
+  std::stable_sort(sorted.begin(), sorted.end(), [](auto const& a, auto const& b) { return a.id < b.id; });
+
+  auto& renderer = g_ctx->renderer;
+  auto const saved_layer = renderer.layer();
+  if (g_ctx->show_id_collisions) {
+    renderer.set_layer(2);
+    renderer.push_clip_rect(get_screen_rect(), false);
+  }
+
+  static constexpr auto marker = std::uint32_t('!');
+  auto const style = im_style(0xffffff_c, 0xd70000_c);
+  g_ctx->id_collisions = 0;
+  for (auto first = sorted.begin(); first != sorted.end();) {
+    auto const last = std::find_if(first, sorted.end(), [&](auto const& item) { return item.id != first->id; });
+    if (std::distance(first, last) > 1) {
+      ++g_ctx->id_collisions;
+      if (g_ctx->show_id_collisions) {
+        for (auto it = first; it != last; ++it) {
+          if (it->visible) {
+            renderer.cmd_draw_text_at(it->visible.min, std::span<std::uint32_t const>(&marker, 1), style);
+          }
+        }
+      }
+    }
+    first = last;
+  }
+
+  if (g_ctx->show_id_collisions) {
+    renderer.pop_clip_rect();
+    renderer.set_layer(saved_layer);
+  }
+}
+
+} // namespace
+
 void render() {
   assert(g_ctx);
 
+  check_id_collisions();
   g_ctx->renderer.render(*g_ctx->backend);
+}
+
+auto id_collision_count() -> int {
+  return g_ctx->id_collisions;
+}
+
+void show_id_collisions(bool show) {
+  g_ctx->show_id_collisions = show;
 }
 
 void debug() {
@@ -654,8 +705,10 @@ void view_end() {
 
     g_ctx->layout.layout_state_stack.pop_back();
 
-    if (auto const visible = panel_rect.intersection(g_ctx->renderer.clip_rect()); visible) {
-      g_ctx->view_hits.push_back({.id = view.current_id, .view_id = view.current_id, .rect = visible});
+    auto const visible_panel = panel_rect.intersection(g_ctx->renderer.clip_rect());
+    g_ctx->frame_ids.push_back({.id = view.current_id, .visible = visible_panel});
+    if (visible_panel) {
+      g_ctx->view_hits.push_back({.id = view.current_id, .view_id = view.current_id, .rect = visible_panel});
     }
 
     auto const border_style = view.active
@@ -949,10 +1002,10 @@ void common_focusable_behaviour(im_id widget_id, im_rect const& widget_rect) noe
     widget.last_id = widget.current_id;
   }
 
-  if (view.current_id != im_id()) {
-    if (auto const visible = widget_rect.intersection(g_ctx->renderer.clip_rect()); visible) {
-      g_ctx->widget_hits.push_back({.id = widget_id, .view_id = view.current_id, .rect = visible});
-    }
+  auto const visible = widget_rect.intersection(g_ctx->renderer.clip_rect());
+  g_ctx->frame_ids.push_back({.id = widget_id, .visible = visible});
+  if (view.current_id != im_id() && visible) {
+    g_ctx->widget_hits.push_back({.id = widget_id, .view_id = view.current_id, .rect = visible});
   }
 
   // scroll focused widget into view once, when focus arrives (applied next frame)

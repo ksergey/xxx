@@ -130,6 +130,20 @@ struct im_context {
     bool saved_same_line = false;
   } popup;
 
+  // id collision detector: ids registered while building a frame, checked in render()
+  struct registered_id {
+    im_id id;
+    im_rect visible; // clipped area for the marker, may be empty
+  };
+  std::vector<registered_id> frame_ids;
+  std::vector<registered_id> frame_ids_sorted; // scratch, keeps capacity
+  int id_collisions = 0;
+#ifdef NDEBUG
+  bool show_id_collisions = false;
+#else
+  bool show_id_collisions = true;
+#endif
+
   // width for the next widget, 0 - widget default (see set_next_item_width)
   int next_item_width = 0;
 
