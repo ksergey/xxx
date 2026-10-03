@@ -41,7 +41,7 @@ struct im_context {
     int current_flags = 0;
     im_id active_id = im_id();
     im_id force_next_id = im_id();
-    bool active;
+    bool active = false;
   } view;
 
   struct {
@@ -49,8 +49,8 @@ struct im_context {
     im_id active_id = im_id();
     im_id first_id = im_id();
     im_id next_id = im_id();
-    bool active;
-    bool pressed;
+    bool active = false;
+    bool pressed = false;
   } widget;
 
   struct {
@@ -72,6 +72,6 @@ struct im_context {
   float elapsed = 0.0;
 };
 
-im_context* g_ctx = nullptr;
+inline im_context* g_ctx = nullptr;
 
 } // namespace xxx

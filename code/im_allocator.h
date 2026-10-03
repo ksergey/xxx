@@ -74,7 +74,7 @@ public:
   template <std::size_t Align>
     requires(std::popcount(Align) == 1)
   [[nodiscard]] auto allocate(std::size_t size) noexcept -> void* {
-    auto space = std::size_t(static_cast<std::byte*>(end_) - buffer_.get());
+    auto space = std::size_t(static_cast<std::byte*>(end_) - static_cast<std::byte*>(begin_));
     if (std::align(Align, size, begin_, space)) [[likely]] {
       auto const allocation_address = begin_;
       begin_ = static_cast<std::byte*>(begin_) + size;

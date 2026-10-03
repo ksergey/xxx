@@ -278,6 +278,11 @@ auto to_utf8(std::span<std::uint32_t const> input, OutputIt first) -> OutputIt {
   return first;
 }
 
+// std::isblank is UB for values outside unsigned char range, so check codepoints explicitly
+[[nodiscard]] constexpr auto is_blank_codepoint(std::uint32_t ch) noexcept -> bool {
+  return ch == U' ' || ch == U'\t';
+}
+
 [[nodiscard]] auto get_style_bg(im_color_id bg_id) noexcept -> im_style {
   return im_style(im_color(), g_ctx->theme.get_color(bg_id));
 }
@@ -752,8 +757,9 @@ auto button(std::string_view label) -> bool {
         widget.active ? get_style_bg(im_color_id::button_active_background)
                       : get_style_bg(im_color_id::button_inactive_background));
 
-    // label start pos
-    auto const unicode_str_pos = widget_rect.min + im_vec2((widget_rect.width() - unicode_str.size()) / 2, 0);
+    // label start pos (signed arithmetic: label may be wider than widget rect)
+    auto const unicode_str_len = static_cast<int>(unicode_str.size());
+    auto const unicode_str_pos = widget_rect.min + im_vec2(std::max(0, (widget_rect.width() - unicode_str_len) / 2), 0);
 
     // draw label
     g_ctx->renderer.cmd_draw_text_at(unicode_str_pos, unicode_str,
@@ -766,7 +772,7 @@ auto button(std::string_view label) -> bool {
                       : get_style(im_color_id::button_inactive_fx, im_color_id::button_inactive_background));
 
     // draw right fx
-    g_ctx->renderer.cmd_draw_text_at(unicode_str_pos + im_vec2(2 + unicode_str.size() - 1, 0),
+    g_ctx->renderer.cmd_draw_text_at(unicode_str_pos + im_vec2(unicode_str_len + 1, 0),
         std::span<std::uint32_t const>(&fx_right_ch, 1),
         widget.active ? get_style(im_color_id::button_active_fx, im_color_id::button_active_background)
                       : get_style(im_color_id::button_inactive_fx, im_color_id::button_inactive_background));
@@ -846,16 +852,16 @@ auto text_input(std::string_view placeholder, std::string& input, [[maybe_unused
             if (auto const text_length = int(text_input.text.size()); text_input.cursor_pos >= text_length) {
               // on end of input move cursor to last char
               text_input.cursor_pos = text_length - 1;
-            } else if (!std::isblank(text_input.text[text_input.cursor_pos])) {
+            } else if (!is_blank_codepoint(text_input.text[text_input.cursor_pos])) {
               // keep symbol under cursor if non blank
               text_input.cursor_pos--;
             }
             // drop blanks before cursor
-            while (text_input.cursor_pos >= 0 && std::isblank(text_input.text[text_input.cursor_pos])) {
+            while (text_input.cursor_pos >= 0 && is_blank_codepoint(text_input.text[text_input.cursor_pos])) {
               text_input.text.erase(text_input.text.begin() + text_input.cursor_pos--);
             }
             // drop until blank
-            while (text_input.cursor_pos >= 0 && !std::isblank(text_input.text[text_input.cursor_pos])) {
+            while (text_input.cursor_pos >= 0 && !is_blank_codepoint(text_input.text[text_input.cursor_pos])) {
               text_input.text.erase(text_input.text.begin() + text_input.cursor_pos--);
             }
             if (text_input.cursor_pos < 0) {

@@ -55,7 +55,7 @@ public:
 
   // split string into content and string key
   // i.e.
-  //   "hello##1234" -> ("hello", "1234")
+  //   "hello##1234" -> ("hello", "##1234")
   //   "world" -> ("world", "world")
   [[nodiscard]] static constexpr auto split_str_key(
       std::string_view str) -> std::tuple<std::string_view, std::string_view> {
