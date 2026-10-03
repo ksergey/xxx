@@ -1,8 +1,6 @@
 // Copyright (c) Sergey Kovalevich <inndie@gmail.com>
 // SPDX-License-Identifier: MIT
 
-#include <cassert>
-
 #include <doctest/doctest.h>
 
 #include "im_input.h"

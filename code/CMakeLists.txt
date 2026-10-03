@@ -1,6 +1,7 @@
 set(TargetName xxx)
 
-add_library(${TargetName} xxx.cpp unicode.cpp im_rect.cpp im_renderer.cpp)
+add_library(${TargetName}
+    xxx.cpp unicode.cpp im_rect.cpp im_renderer.cpp im_backend_termbox.cpp im_backend_headless.cpp)
 target_compile_features(${TargetName} PUBLIC cxx_std_23)
 target_compile_options(${TargetName} PRIVATE -Wall -Wextra -g)
 target_link_libraries(${TargetName} PUBLIC 3rdparty::termbox2)

@@ -88,100 +88,6 @@ namespace {
   }
 }
 
-void handle_terminal_key_event(::tb_event const& event) {
-  switch (event.key) {
-  case TB_KEY_BACKSPACE:
-    return g_ctx->input.add_key_event(im_key_id::backspace);
-  case TB_KEY_BACKSPACE2:
-    return g_ctx->input.add_key_event(im_key_id::backspace2);
-  case TB_KEY_DELETE:
-    return g_ctx->input.add_key_event(im_key_id::del);
-  case TB_KEY_TAB:
-    return g_ctx->input.add_key_event(im_key_id::tab);
-  case TB_KEY_ENTER:
-    return g_ctx->input.add_key_event(im_key_id::enter);
-  case TB_KEY_ESC:
-    return g_ctx->input.add_key_event(im_key_id::esc);
-  case TB_KEY_SPACE:
-    return g_ctx->input.add_key_event(im_key_id::space);
-  case TB_KEY_HOME:
-    return g_ctx->input.add_key_event(im_key_id::home);
-  case TB_KEY_END:
-    return g_ctx->input.add_key_event(im_key_id::end);
-  case TB_KEY_ARROW_UP:
-    return g_ctx->input.add_key_event(im_key_id::arrow_up);
-  case TB_KEY_ARROW_DOWN:
-    return g_ctx->input.add_key_event(im_key_id::arrow_down);
-  case TB_KEY_ARROW_LEFT:
-    return g_ctx->input.add_key_event(im_key_id::arrow_left);
-  case TB_KEY_ARROW_RIGHT:
-    return g_ctx->input.add_key_event(im_key_id::arrow_right);
-  case TB_KEY_CTRL_A:
-    return g_ctx->input.add_key_event(im_key_id::ctrl_a);
-  case TB_KEY_CTRL_B:
-    return g_ctx->input.add_key_event(im_key_id::ctrl_b);
-  case TB_KEY_CTRL_C:
-    return g_ctx->input.add_key_event(im_key_id::ctrl_c);
-  case TB_KEY_CTRL_D:
-    return g_ctx->input.add_key_event(im_key_id::ctrl_d);
-  case TB_KEY_CTRL_E:
-    return g_ctx->input.add_key_event(im_key_id::ctrl_e);
-  case TB_KEY_CTRL_F:
-    return g_ctx->input.add_key_event(im_key_id::ctrl_f);
-  case TB_KEY_CTRL_G:
-    return g_ctx->input.add_key_event(im_key_id::ctrl_g);
-  case TB_KEY_CTRL_J:
-    return g_ctx->input.add_key_event(im_key_id::ctrl_j);
-  case TB_KEY_CTRL_K:
-    return g_ctx->input.add_key_event(im_key_id::ctrl_k);
-  case TB_KEY_CTRL_N:
-    return g_ctx->input.add_key_event(im_key_id::ctrl_n);
-  case TB_KEY_CTRL_O:
-    return g_ctx->input.add_key_event(im_key_id::ctrl_o);
-  case TB_KEY_CTRL_P:
-    return g_ctx->input.add_key_event(im_key_id::ctrl_p);
-  case TB_KEY_CTRL_Q:
-    return g_ctx->input.add_key_event(im_key_id::ctrl_q);
-  case TB_KEY_CTRL_R:
-    return g_ctx->input.add_key_event(im_key_id::ctrl_r);
-  case TB_KEY_CTRL_S:
-    return g_ctx->input.add_key_event(im_key_id::ctrl_s);
-  case TB_KEY_CTRL_T:
-    return g_ctx->input.add_key_event(im_key_id::ctrl_t);
-  case TB_KEY_CTRL_U:
-    return g_ctx->input.add_key_event(im_key_id::ctrl_u);
-  case TB_KEY_CTRL_V:
-    return g_ctx->input.add_key_event(im_key_id::ctrl_v);
-  case TB_KEY_CTRL_W:
-    return g_ctx->input.add_key_event(im_key_id::ctrl_w);
-  case TB_KEY_CTRL_X:
-    return g_ctx->input.add_key_event(im_key_id::ctrl_x);
-  case TB_KEY_CTRL_Y:
-    return g_ctx->input.add_key_event(im_key_id::ctrl_y);
-  case TB_KEY_CTRL_Z:
-    return g_ctx->input.add_key_event(im_key_id::ctrl_z);
-  default:
-    break;
-  }
-}
-
-void handle_terminal_mouse_event(::tb_event const& event) {
-  g_ctx->input.add_mouse_pos_event(im_vec2(event.x, event.y));
-
-  if (event.key > 0) {
-    switch (event.key) {
-    case TB_KEY_MOUSE_LEFT:
-      return g_ctx->input.add_mouse_button_event(im_mouse_button_id::left, im_vec2(event.x, event.y));
-    case TB_KEY_MOUSE_RIGHT:
-      return g_ctx->input.add_mouse_button_event(im_mouse_button_id::right, im_vec2(event.x, event.y));
-    case TB_KEY_MOUSE_MIDDLE:
-      return g_ctx->input.add_mouse_button_event(im_mouse_button_id::middle, im_vec2(event.x, event.y));
-    default:
-      break;
-    }
-  }
-}
-
 template <typename OutputIt>
 auto to_unicode(std::string_view input, OutputIt first) -> OutputIt {
   char const* begin = input.data();
@@ -293,70 +199,35 @@ auto to_utf8(std::span<std::uint32_t const> input, OutputIt first) -> OutputIt {
 
 } // namespace
 
+void init(std::unique_ptr<im_backend> backend) {
+  assert(backend);
+
+  // previous backend must be released before new one starts using terminal
+  shutdown();
+
+  auto ctx = std::make_unique<im_context>();
+  ctx->allocator.reserve(2 * 1024 * 1024);
+  ctx->backend = std::move(backend);
+  ctx->last_frame_time = ctx->backend->now();
+  g_ctx = ctx.release();
+}
+
 void init() {
-  if (g_ctx) {
-    delete g_ctx;
-  }
-  g_ctx = new im_context;
-  g_ctx->allocator.reserve(2 * 1024 * 1024);
-
-  // init termbox2 library
-  if (auto const rc = ::tb_init(); rc != TB_OK) {
-    throw std::runtime_error(::tb_strerror(rc));
-  }
-
-  ::tb_set_input_mode(TB_INPUT_ESC | TB_INPUT_MOUSE);
-  ::tb_set_output_mode(TB_OUTPUT_TRUECOLOR);
-  ::tb_sendf("\x1b[?%d;%dh", 1003, 1006);
-
-  g_ctx->last_frame_time = im_clock::now();
+  // shutdown first: termbox can't be initialized twice
+  shutdown();
+  init(make_termbox_backend());
 }
 
 void shutdown() {
-  ::tb_sendf("\x1b[?%d;%dl", 1003, 1006);
-  ::tb_shutdown();
-
   delete g_ctx;
   g_ctx = nullptr;
 }
 
 void process_input_events() {
+  assert(g_ctx);
+
   g_ctx->input.reset();
-
-  ::tb_event event;
-
-  auto do_peek_events = true;
-  while (do_peek_events) {
-    auto const rc = ::tb_peek_event(&event, 0);
-    if (rc == TB_OK) {
-      switch (event.type) {
-      case TB_EVENT_KEY: {
-        if (event.ch > 0) {
-          g_ctx->input.add_character(event.ch);
-          if (event.ch == ' ') {
-            g_ctx->input.add_key_event(im_key_id::space);
-          }
-        } else if (event.key > 0) {
-          handle_terminal_key_event(event);
-        }
-      } break;
-      case TB_EVENT_MOUSE: {
-        handle_terminal_mouse_event(event);
-      } break;
-      case TB_EVENT_RESIZE: {
-      } break;
-      default:
-        break;
-      }
-    } else if (rc == TB_ERR_NO_EVENT) {
-      do_peek_events = false;
-    } else if (rc == TB_ERR_POLL) {
-      // handle poll error
-      if (::tb_last_errno() != EINTR) {
-        throw std::runtime_error(::tb_strerror(rc));
-      }
-    }
-  }
+  g_ctx->backend->poll_events(g_ctx->input);
 
   auto& view = g_ctx->view;
   auto& widget = g_ctx->widget;
@@ -384,7 +255,7 @@ void new_frame() {
 
   // TODO: frame delta
 
-  auto const screen_rect = im_rect(0, 0, ::tb_width() - 1, ::tb_height() - 1);
+  auto const screen_rect = get_screen_rect();
 
   g_ctx->hash_id.reset();
   g_ctx->theme.reset();
@@ -402,7 +273,7 @@ void new_frame() {
   g_ctx->widget.active = false;
   g_ctx->widget.pressed = false;
 
-  auto const now = im_clock::now();
+  auto const now = g_ctx->backend->now();
   g_ctx->elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - g_ctx->last_frame_time).count() * 0.001f;
   g_ctx->last_frame_time = now;
 
@@ -413,7 +284,7 @@ void new_frame() {
 void render() {
   assert(g_ctx);
 
-  g_ctx->renderer.render();
+  g_ctx->renderer.render(*g_ctx->backend);
 }
 
 void debug() {
@@ -426,7 +297,9 @@ void debug() {
 }
 
 auto get_screen_rect() -> im_rect {
-  return im_rect(0, 0, ::tb_width() - 1, ::tb_height() - 1);
+  assert(g_ctx);
+  auto const size = g_ctx->backend->size();
+  return im_rect(0, 0, size.x - 1, size.y - 1);
 }
 
 auto is_key_pressed(im_key_id id) -> bool {

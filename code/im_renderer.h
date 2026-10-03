@@ -36,6 +36,8 @@ void debug(std::format_string<Ts...> fmt, Ts&&... args) {
 
 namespace xxx {
 
+class im_backend;
+
 struct im_style {
   std::uint64_t fg = 0;
   std::uint64_t bg = 0;
@@ -112,6 +114,7 @@ private:
   im_stack<im_rect> clip_rect_stack_ = im_stack<im_rect>(32);
   im_vec2 viewport_offset_;
   im_rect clip_rect_;
+  im_style clear_style_;
   std::vector<render_cmd> commands_;
 
 public:
@@ -153,14 +156,14 @@ public:
   }
 
   void set_clear_color(im_style const& style) noexcept {
-    ::tb_set_clear_attrs(style.fg, style.bg);
+    clear_style_ = style;
   }
 
   /// Start drawing new frame
   void start_new_frame(im_rect const& clip_rect);
 
   /// Render frame
-  void render();
+  void render(im_backend& backend);
 
   /// Append command to fill rect
   void cmd_fill_rect(im_rect const& rect, std::uint32_t ch, im_style const& style) {
@@ -355,10 +358,10 @@ private:
     cmd.draw_surface_data = {.src_rect = src_rect, .rect = rect, .data = data};
   }
 
-  static void do_fill_rect(render_cmd const& cmd);
-  static void do_draw_rect(render_cmd const& cmd);
-  static void do_draw_text(render_cmd const& cmd);
-  static void do_draw_surface(render_cmd const& cmd);
+  static void do_fill_rect(im_backend& backend, render_cmd const& cmd);
+  static void do_draw_rect(im_backend& backend, render_cmd const& cmd);
+  static void do_draw_text(im_backend& backend, render_cmd const& cmd);
+  static void do_draw_surface(im_backend& backend, render_cmd const& cmd);
 };
 
 } // namespace xxx

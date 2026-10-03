@@ -4,6 +4,7 @@
 #pragma once
 
 #include <chrono>
+#include <memory>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -13,6 +14,7 @@
 #include "xxx.h"
 
 #include "im_allocator.h"
+#include "im_backend.h"
 #include "im_hash_id.h"
 #include "im_input.h"
 #include "im_layout.h"
@@ -24,9 +26,10 @@ namespace xxx {
 
 static_assert(std::is_same_v<uintattr_t, std::uint64_t>, "termbox2 invalid configuration");
 
-using im_clock = std::chrono::steady_clock;
-
 struct im_context {
+  // declared first: destroyed last, after everything that may reference terminal state
+  std::unique_ptr<im_backend> backend;
+
   im_allocator allocator;
 
   im_input input;

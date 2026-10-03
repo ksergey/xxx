@@ -3,6 +3,8 @@
 
 #include "im_renderer.h"
 
+#include "im_backend.h"
+
 #if 0
 #include <print>
 namespace xxx {
@@ -30,93 +32,93 @@ void im_renderer::start_new_frame(im_rect const& clip_rect) {
   commands_.clear();
 }
 
-void im_renderer::render() {
-  ::tb_clear();
+void im_renderer::render(im_backend& backend) {
+  backend.clear(clear_style_);
 
   for (auto const& cmd : commands_) {
     switch (cmd.type) {
     case render_cmd_type::fill_rect:
-      this->do_fill_rect(cmd);
+      do_fill_rect(backend, cmd);
       break;
     case render_cmd_type::draw_rect:
-      this->do_draw_rect(cmd);
+      do_draw_rect(backend, cmd);
       break;
     case render_cmd_type::draw_text:
-      this->do_draw_text(cmd);
+      do_draw_text(backend, cmd);
       break;
     case render_cmd_type::draw_surface:
-      this->do_draw_surface(cmd);
+      do_draw_surface(backend, cmd);
       break;
     default:
       break;
     }
   }
 
-  ::tb_present();
+  backend.present();
 }
 
-void im_renderer::do_fill_rect(render_cmd const& cmd) {
+void im_renderer::do_fill_rect(im_backend& backend, render_cmd const& cmd) {
   auto const& style = cmd.style;
   auto const& rect = cmd.fill_rect_data.rect;
   auto const& ch = cmd.fill_rect_data.ch;
 
   for (int pos_x : std::views::iota(rect.min.x, rect.max.x + 1)) {
     for (int pos_y : std::views::iota(rect.min.y, rect.max.y + 1)) {
-      ::tb_set_cell(pos_x, pos_y, ch, style.fg, style.bg);
+      backend.set_cell(pos_x, pos_y, ch, style);
     }
   }
 }
 
-void im_renderer::do_draw_rect(render_cmd const& cmd) {
+void im_renderer::do_draw_rect(im_backend& backend, render_cmd const& cmd) {
   auto const& style = cmd.style;
   auto const& rect = cmd.draw_rect_data.rect;
 
   for (auto const& [pos_x, pos_y, ch] : std::views::zip(std::views::iota(rect.min.x + 1, rect.max.x),
            std::views::repeat(rect.min.y), std::views::repeat(border_style[5]))) {
-    ::tb_set_cell(pos_x, pos_y, ch, style.fg, style.bg);
+    backend.set_cell(pos_x, pos_y, ch, style);
   }
   for (auto const& [pos_x, pos_y, ch] : std::views::zip(std::views::iota(rect.min.x + 1, rect.max.x),
            std::views::repeat(rect.max.y), std::views::repeat(border_style[5]))) {
-    ::tb_set_cell(pos_x, pos_y, ch, style.fg, style.bg);
+    backend.set_cell(pos_x, pos_y, ch, style);
   }
   for (auto const& [pos_x, pos_y, ch] : std::views::zip(std::views::repeat(rect.min.x),
            std::views::iota(rect.min.y + 1, rect.max.y), std::views::repeat(border_style[4]))) {
-    ::tb_set_cell(pos_x, pos_y, ch, style.fg, style.bg);
+    backend.set_cell(pos_x, pos_y, ch, style);
   }
   for (auto const& [pos_x, pos_y, ch] : std::views::zip(std::views::repeat(rect.max.x),
            std::views::iota(rect.min.y + 1, rect.max.y), std::views::repeat(border_style[4]))) {
-    ::tb_set_cell(pos_x, pos_y, ch, style.fg, style.bg);
+    backend.set_cell(pos_x, pos_y, ch, style);
   }
   auto const& top_left = rect.top_left();
-  ::tb_set_cell(top_left.x, top_left.y, border_style[0], style.fg, style.bg);
+  backend.set_cell(top_left.x, top_left.y, border_style[0], style);
   auto const& top_right = rect.top_right();
-  ::tb_set_cell(top_right.x, top_right.y, border_style[1], style.fg, style.bg);
+  backend.set_cell(top_right.x, top_right.y, border_style[1], style);
   auto const& bottom_left = rect.bottom_left();
-  ::tb_set_cell(bottom_left.x, bottom_left.y, border_style[2], style.fg, style.bg);
+  backend.set_cell(bottom_left.x, bottom_left.y, border_style[2], style);
   auto const& bottom_right = rect.bottom_right();
-  ::tb_set_cell(bottom_right.x, bottom_right.y, border_style[3], style.fg, style.bg);
+  backend.set_cell(bottom_right.x, bottom_right.y, border_style[3], style);
 }
 
-void im_renderer::do_draw_text(render_cmd const& cmd) {
+void im_renderer::do_draw_text(im_backend& backend, render_cmd const& cmd) {
   auto const& style = cmd.style;
   auto const& pos = cmd.draw_text_data.pos;
   auto const& text = cmd.draw_text_data.text;
 
   auto pos_x = pos.x;
   if (cmd.draw_text_data.pad_left) {
-    ::tb_set_cell(pos_x++, pos.y, ' ', style.fg, style.bg);
+    backend.set_cell(pos_x++, pos.y, ' ', style);
   }
   for (auto const ch : text) {
-    ::tb_set_cell(pos_x, pos.y, ch, style.fg, style.bg);
+    backend.set_cell(pos_x, pos.y, ch, style);
     // termbox2 skips cells covered by wide char on present
     pos_x += char_width(ch);
   }
   if (cmd.draw_text_data.pad_right) {
-    ::tb_set_cell(pos_x, pos.y, ' ', style.fg, style.bg);
+    backend.set_cell(pos_x, pos.y, ' ', style);
   }
 }
 
-void im_renderer::do_draw_surface(render_cmd const& cmd) {
+void im_renderer::do_draw_surface(im_backend& backend, render_cmd const& cmd) {
   auto const& src_rect = cmd.draw_surface_data.src_rect;
   auto const& rect = cmd.draw_surface_data.rect;
   auto const& data = cmd.draw_surface_data.data;
@@ -126,7 +128,7 @@ void im_renderer::do_draw_surface(render_cmd const& cmd) {
   //   for (auto const& [pos_y, line] :
   //       std::views::zip(std::views::iota(src_rect.min.y), data | std::views::chunk(src_rect.width()))) {
   //     for (auto const& [pos_x, cell] : std::views::zip(std::views::iota(src_rect.min.x), line)) {
-  //       ::tb_set_cell(pos_x, pos_y, cell.ch, cell.style.fg, cell.style.bg);
+  //       backend.set_cell(pos_x, pos_y, cell.ch, cell.style);
   //     }
   //   }
   //   return;
@@ -142,7 +144,7 @@ void im_renderer::do_draw_surface(render_cmd const& cmd) {
           std::views::drop(drop_y) | std::views::take(take_y)) {
     for (auto const& [pos_x, cell] :
         std::views::zip(std::views::iota(rect.min.x), line | std::views::drop(drop_x) | std::views::take(take_x))) {
-      ::tb_set_cell(pos_x, pos_y, cell.ch, cell.style.fg, cell.style.bg);
+      backend.set_cell(pos_x, pos_y, cell.ch, cell.style);
     }
   }
 }
