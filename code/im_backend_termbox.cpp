@@ -97,6 +97,12 @@ void handle_terminal_key_event(::tb_event const& event, im_input& input) {
 void handle_terminal_mouse_event(::tb_event const& event, im_input& input) {
   input.add_mouse_pos_event(im_vec2(event.x, event.y));
 
+  // with any-event tracking (1003) dragging reports the held button on every move:
+  // only the initial press is a click
+  if (event.mod & TB_MOD_MOTION) {
+    return;
+  }
+
   if (event.key > 0) {
     switch (event.key) {
     case TB_KEY_MOUSE_LEFT:

@@ -91,6 +91,18 @@ public:
     mouse_.wheel += delta;
   }
 
+  /// Button pressed this frame
+  [[nodiscard]] auto is_mouse_clicked(im_mouse_button_id id) const noexcept -> bool {
+    assert(id < im_mouse_button_id::last);
+    return mouse_.buttons[static_cast<std::size_t>(id)].clicked > 0;
+  }
+
+  /// Position of last press of the button this frame
+  [[nodiscard]] auto mouse_clicked_pos(im_mouse_button_id id) const noexcept -> im_vec2 {
+    assert(id < im_mouse_button_id::last);
+    return mouse_.buttons[static_cast<std::size_t>(id)].clicked_pos;
+  }
+
   /// Last known mouse position, (-1, -1) if unknown
   [[nodiscard]] auto mouse_pos() const noexcept -> im_vec2 {
     return mouse_.pos;

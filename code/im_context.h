@@ -71,7 +71,21 @@ struct im_context {
     im_id next_id = im_id();
     bool active = false;
     bool pressed = false;
+
+    // widget clicked by mouse this frame (hit-tested against previous frame)
+    im_id clicked_id = im_id();
+    im_vec2 clicked_pos;
   } widget;
+
+  // visible (clipped) areas recorded while building a frame, hit-tested by
+  // process_input_events() of the next frame: clicks land on what user saw
+  struct hit_item {
+    im_id id;
+    im_id view_id;
+    im_rect rect;
+  };
+  std::vector<hit_item> view_hits;
+  std::vector<hit_item> widget_hits;
 
   struct {
     im_id active_id = im_id();

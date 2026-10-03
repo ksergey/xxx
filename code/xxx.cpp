@@ -246,12 +246,39 @@ void process_input_events() {
       widget.active_id = im_id();
     }
   }
+
+  // mouse click: activate view and focus widget under cursor
+  widget.clicked_id = im_id();
+  if (g_ctx->input.is_mouse_clicked(im_mouse_button_id::left)) {
+    auto const pos = g_ctx->input.mouse_clicked_pos(im_mouse_button_id::left);
+    auto const hit = [&](auto const& item) { return item.rect.contains(pos); };
+
+    // later drawn is on top
+    auto const& views = g_ctx->view_hits;
+    if (auto const v = std::find_if(views.rbegin(), views.rend(), hit); v != views.rend()) {
+      if (view.active_id != v->id) {
+        view.active_id = v->id;
+        widget.active_id = im_id();
+      }
+      auto const& widgets = g_ctx->widget_hits;
+      auto const w = std::find_if(widgets.rbegin(), widgets.rend(),
+          [&](auto const& item) { return item.view_id == v->id && hit(item); });
+      if (w != widgets.rend()) {
+        widget.active_id = w->id;
+        widget.clicked_id = w->id;
+        widget.clicked_pos = pos;
+      }
+    }
+  }
 }
 
 void new_frame() {
   assert(g_ctx);
 
   g_ctx->allocator.reset();
+  // hit areas of previous frame were consumed by process_input_events()
+  g_ctx->view_hits.clear();
+  g_ctx->widget_hits.clear();
 
   // TODO: frame delta
 
@@ -498,7 +525,7 @@ void view_begin(std::string_view name, int flags, im_key_id shortcut, int height
       if (auto const wheel = g_ctx->input.mouse_wheel(); wheel != 0) {
         auto const mouse = g_ctx->input.mouse_pos();
         auto const view_rect = im_rect(layout.rect.min.x - border, top, layout.rect.max.x + border, view.current_bottom);
-        if (view_rect.intersection(im_rect(mouse, mouse))) {
+        if (view_rect.contains(mouse)) {
           constexpr auto wheel_step = int(3);
           scroll.offset += wheel * wheel_step;
         }
@@ -542,6 +569,10 @@ void view_end() {
         im_rect(layout.rect.min - im_vec2(border, border), im_vec2(layout.rect.max.x + border, panel_bottom));
 
     g_ctx->layout.layout_state_stack.pop_back();
+
+    if (auto const visible = panel_rect.intersection(g_ctx->renderer.clip_rect()); visible) {
+      g_ctx->view_hits.push_back({.id = view.current_id, .view_id = view.current_id, .rect = visible});
+    }
 
     auto const border_style = view.active
                                   ? g_ctx->theme.get_style(im_color_id::view_active_border, im_color_id::background)
@@ -672,6 +703,12 @@ void common_focusable_behaviour(im_id widget_id, im_rect const& widget_rect) noe
     }
   }
 
+  if (view.current_id != im_id()) {
+    if (auto const visible = widget_rect.intersection(g_ctx->renderer.clip_rect()); visible) {
+      g_ctx->widget_hits.push_back({.id = widget_id, .view_id = view.current_id, .rect = visible});
+    }
+  }
+
   // scroll focused widget into view once, when focus arrives (applied next frame)
   if (widget.active && view.current_scroll && view.current_scroll->focus_id != widget.current_id) {
     auto& scroll = *view.current_scroll;
@@ -703,7 +740,8 @@ auto button(std::string_view label) -> bool {
   internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect);
 
   if (widget.active) {
-    if (is_key_pressed(im_key_id::space) || is_key_pressed(im_key_id::enter)) {
+    if (is_key_pressed(im_key_id::space) || is_key_pressed(im_key_id::enter) ||
+        widget.clicked_id == widget.current_id) {
       widget.pressed = true;
     }
   }
@@ -740,6 +778,7 @@ auto button(std::string_view label) -> bool {
 
 auto text_input(std::string_view placeholder, std::string& input, [[maybe_unused]] int flags) -> bool {
   static constexpr int input_width = 16;
+  static constexpr int input_prompt_width = 2; // "> "
 
   auto& widget = g_ctx->widget;
   auto& text_input = g_ctx->text_input;
@@ -760,6 +799,18 @@ auto text_input(std::string_view placeholder, std::string& input, [[maybe_unused
     }
     if (int const text_length = text_input.text.size(); text_input.cursor_pos > text_length) {
       text_input.cursor_pos = text_length;
+    }
+    if (widget.clicked_id == widget.current_id) {
+      // place cursor before the char under mouse (text is shown after prompt, shifted by scroll)
+      auto const column = widget.clicked_pos.x - (widget_rect.min.x + input_prompt_width) + text_input.scroll_offset;
+      auto cursor = 0;
+      for (auto x = 0; cursor < int(text_input.text.size()); ++cursor) {
+        x += char_width(text_input.text[cursor]);
+        if (column < x) {
+          break;
+        }
+      }
+      text_input.cursor_pos = column < 0 ? 0 : cursor;
     }
     if (is_key_pressed(im_key_id::enter)) {
       widget.pressed = true;
