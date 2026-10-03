@@ -8,6 +8,14 @@ target_include_directories(${TargetName} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_library(xxx::xxx ALIAS ${TargetName})
 
+if (xxx_BUILD_TESTS)
+    file(GLOB Tests "${CMAKE_CURRENT_SOURCE_DIR}/*_test.cpp")
+    XxxAddTestsFromSourceList(Tests
+        PREFIX xxx
+        COMPILE_OPTIONS -Wall -Wextra -g
+        LIBS doctest::doctest_with_main xxx::xxx)
+endif()
+
 set(TargetName xtest)
 add_executable(${TargetName} test.cpp)
 target_compile_options(${TargetName} PRIVATE -Wall -Wextra -g)
