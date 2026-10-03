@@ -1353,24 +1353,16 @@ auto checkbox(std::string_view label, bool& value) -> bool {
 
 namespace {
 
-template <typename ItemAt>
-auto list_impl(std::string_view label, int count, ItemAt&& item_at, int& selected, int height) -> bool {
-  auto& widget = g_ctx->widget;
-
-  auto const rows = std::max(1, height > 0 ? height : count);
-  auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(internal::item_width(fill()), rows));
-
-  auto const [str, widget_key] = g_ctx->hash_id.split_str_key(label);
-  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect);
-
-  auto& offset = g_ctx->list_scroll[widget.current_id];
+// selection shared by list and table: rows_rect shows `rows` items starting at `offset`
+auto selection_behaviour(im_rect const& rows_rect, int rows, int count, int& selected, int& offset) -> bool {
+  auto const& widget = g_ctx->widget;
   selected = count > 0 ? std::clamp(selected, -1, count - 1) : -1;
 
   auto activated = false;
   if (widget.active && count > 0) {
     // click is mapped with offset user saw (previous frame)
-    if (widget.clicked_id == widget.current_id) {
-      if (auto const index = offset + (widget.clicked_pos.y - widget_rect.min.y); index >= 0 && index < count) {
+    if (widget.clicked_id == widget.current_id && rows_rect.contains(widget.clicked_pos)) {
+      if (auto const index = offset + (widget.clicked_pos.y - rows_rect.min.y); index >= 0 && index < count) {
         selected = index;
         activated = true;
       }
@@ -1399,18 +1391,37 @@ auto list_impl(std::string_view label, int count, ItemAt&& item_at, int& selecte
     }
   }
   offset = std::clamp(offset, 0, std::max(0, count - rows));
+  return activated;
+}
+
+[[nodiscard]] auto selected_row_style() -> im_style {
+  return get_style(g_ctx->widget.active ? im_color_id::button_active_text : im_color_id::button_inactive_text,
+      im_color_id::background)
+      .with_reverse();
+}
+
+template <typename ItemAt>
+auto list_impl(std::string_view label, int count, ItemAt&& item_at, int& selected, int height) -> bool {
+  auto& widget = g_ctx->widget;
+
+  auto const rows = std::max(1, height > 0 ? height : count);
+  auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(internal::item_width(fill()), rows));
+
+  auto const [str, widget_key] = g_ctx->hash_id.split_str_key(label);
+  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect);
+
+  auto& offset = g_ctx->list_scroll[widget.current_id];
+  auto const activated = selection_behaviour(widget_rect, rows, count, selected, offset);
 
   if (g_ctx->renderer.is_visible(widget_rect)) {
     auto const style = get_style(im_color_id::text, im_color_id::background);
-    auto const selected_style =
-        get_style(widget.active ? im_color_id::button_active_text : im_color_id::button_inactive_text,
-            im_color_id::background)
-            .with_reverse();
+    auto const selected_style = selected_row_style();
 
     g_ctx->renderer.cmd_fill_rect(widget_rect, ' ', style);
     for (int row = 0; row < rows && offset + row < count; ++row) {
       auto const index = offset + row;
-      auto const row_rect = im_rect(widget_rect.min.x, widget_rect.min.y + row, widget_rect.max.x, widget_rect.min.y + row);
+      auto const y = widget_rect.min.y + row;
+      auto const row_rect = im_rect(widget_rect.min.x, y, widget_rect.max.x, y);
       if (!g_ctx->renderer.is_visible(row_rect)) {
         continue;
       }
@@ -1425,7 +1436,106 @@ auto list_impl(std::string_view label, int count, ItemAt&& item_at, int& selecte
   return activated;
 }
 
+template <typename CellAt>
+auto table_impl(std::string_view label, std::span<im_table_column const> columns, int count, CellAt&& cell_at,
+    int& selected, int height) -> bool {
+  auto& widget = g_ctx->widget;
+  auto const ncols = int(columns.size());
+
+  auto const rows = std::max(1, height > 0 ? height : count);
+  auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(internal::item_width(fill()), rows + 1));
+  auto const rows_rect = widget_rect.crop_top(1);
+
+  auto const [str, widget_key] = g_ctx->hash_id.split_str_key(label);
+  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect);
+
+  auto& offset = g_ctx->list_scroll[widget.current_id];
+  auto const activated = selection_behaviour(rows_rect, rows, count, selected, offset);
+
+  if (ncols == 0 || !g_ctx->renderer.is_visible(widget_rect)) {
+    return activated;
+  }
+
+  // column widths: fixed and ratio first, fill() columns share the rest; 1 cell gap between columns
+  auto widths = g_ctx->allocator.allocate<int>(std::size_t(ncols));
+  if (!widths) [[unlikely]] {
+    return activated;
+  }
+  auto const available = std::max(0, widget_rect.width() - (ncols - 1));
+  auto used = 0, fills = 0;
+  for (int c = 0; c < ncols; ++c) {
+    auto const w = columns[std::size_t(c)].width;
+    widths[c] = w < 0.0f ? 0 : w > 1.0f ? int(w) : int(std::ceil(w * float(available)));
+    fills += w < 0.0f ? 1 : 0;
+    used += widths[c];
+  }
+  for (int c = 0, rest = std::max(0, available - used); c < ncols; ++c) {
+    if (columns[std::size_t(c)].width < 0.0f) {
+      auto const leave = int(-columns[std::size_t(c)].width) - 1;
+      widths[c] = std::max(0, rest / fills - leave);
+    }
+  }
+
+  auto const align = [](im_align a) {
+    return a == im_align::right ? im_halign::right : a == im_align::center ? im_halign::center : im_halign::left;
+  };
+  auto const draw_row = [&](int y, auto&& text_at, im_style const& style) {
+    for (int c = 0, x = widget_rect.min.x; c < ncols && x <= widget_rect.max.x; ++c) {
+      auto const cell = im_rect(x, y, std::min(x + widths[c] - 1, widget_rect.max.x), y);
+      if (cell) {
+        // text is cut by its column, not by the next one
+        g_ctx->renderer.push_clip_rect(cell);
+        g_ctx->renderer.cmd_draw_text_in_rect(
+            cell, to_unicode(text_at(c)), style, align(columns[std::size_t(c)].align), im_valign::top);
+        g_ctx->renderer.pop_clip_rect();
+      }
+      x += widths[c] + 1;
+    }
+  };
+
+  auto const style = get_style(im_color_id::text, im_color_id::background);
+  auto const selected_style = selected_row_style();
+  auto const header_style = get_style(im_color_id::button_inactive_fx, im_color_id::background).with_underline();
+
+  g_ctx->renderer.cmd_fill_rect(widget_rect, ' ', style);
+  auto const header = im_rect(widget_rect.min.x, widget_rect.min.y, widget_rect.max.x, widget_rect.min.y);
+  g_ctx->renderer.cmd_fill_rect(header, ' ', header_style);
+  draw_row(widget_rect.min.y, [&](int c) { return columns[std::size_t(c)].title; }, header_style);
+
+  for (int row = 0; row < rows && offset + row < count; ++row) {
+    auto const index = offset + row;
+    auto const y = rows_rect.min.y + row;
+    if (!g_ctx->renderer.is_visible(im_rect(widget_rect.min.x, y, widget_rect.max.x, y))) {
+      continue;
+    }
+    auto const& row_style = index == selected ? selected_style : style;
+    if (index == selected) {
+      g_ctx->renderer.cmd_fill_rect(im_rect(widget_rect.min.x, y, widget_rect.max.x, y), ' ', row_style);
+    }
+    draw_row(y, [&](int c) { return cell_at(index, c); }, row_style);
+  }
+
+  return activated;
+}
+
 } // namespace
+
+auto table(std::string_view label, std::span<im_table_column const> columns, std::span<std::string_view const> cells,
+    int& selected, int height) -> bool {
+  auto const ncols = std::max<std::size_t>(1, columns.size());
+  return table_impl(
+      label, columns, int(cells.size() / ncols),
+      [&](int r, int c) { return cells[std::size_t(r) * ncols + std::size_t(c)]; }, selected, height);
+}
+
+auto table(std::string_view label, std::span<im_table_column const> columns, std::span<std::string const> cells,
+    int& selected, int height) -> bool {
+  auto const ncols = std::max<std::size_t>(1, columns.size());
+  return table_impl(
+      label, columns, int(cells.size() / ncols),
+      [&](int r, int c) { return std::string_view(cells[std::size_t(r) * ncols + std::size_t(c)]); }, selected,
+      height);
+}
 
 auto list(std::string_view label, std::span<std::string_view const> items, int& selected, int height) -> bool {
   return list_impl(

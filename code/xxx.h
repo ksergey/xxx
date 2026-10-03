@@ -317,6 +317,28 @@ auto list(std::string_view label, std::span<std::string_view const> items, int& 
 /// @overload
 auto list(std::string_view label, std::span<std::string const> items, int& selected, int height = 0) -> bool;
 
+/// Text alignment inside table column
+enum class im_align { left, center, right };
+
+/// Table column
+struct im_table_column {
+  std::string_view title;
+  float width = -1.0f; // like layout_row_push: > 1 cells, (0..1] ratio of table width, fill(n) - the rest
+  im_align align = im_align::left;
+};
+
+/// Widget: table with underlined header; rows are selectable like in list(...)
+/// @param cells are row-major: rows * columns.size() items
+/// @param height is number of visible data rows (header excluded), 0 - all rows
+/// @return true when row is activated: enter or click
+/// theme: text, background; header: button_inactive_fx; selected row like in list(...)
+auto table(std::string_view label, std::span<im_table_column const> columns, std::span<std::string_view const> cells,
+    int& selected, int height = 0) -> bool;
+
+/// @overload
+auto table(std::string_view label, std::span<im_table_column const> columns, std::span<std::string const> cells,
+    int& selected, int height = 0) -> bool;
+
 /// Widget: spinner
 /// @param text is optional spinner text
 /// @param step is storage for step counter

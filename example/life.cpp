@@ -27,21 +27,22 @@ using namespace xxx::literals;
 
 struct pattern {
   std::string_view name;
+  std::string_view kind;
   std::array<std::string_view, 13> rows; // 'O' alive, anything else dead; empty rows ignored
 };
 
 // clang-format off
 constexpr auto patterns = std::to_array<pattern>({
-  {"glider", {".O.", "..O", "OOO"}},
-  {"spaceship", {".O..O", "O....", "O...O", "OOOO."}},
-  {"r-pentomino", {".OO", "OO.", ".O."}},
-  {"acorn", {".O.....", "...O...", "OO..OOO"}},
-  {"diehard", {"......O.", "OO......", ".O...OOO"}},
-  {"pulsar", {
+  {"glider", "ship", {".O.", "..O", "OOO"}},
+  {"spaceship", "ship", {".O..O", "O....", "O...O", "OOOO."}},
+  {"r-pentomino", "chaos", {".OO", "OO.", ".O."}},
+  {"acorn", "chaos", {".O.....", "...O...", "OO..OOO"}},
+  {"diehard", "vanish", {"......O.", "OO......", ".O...OOO"}},
+  {"pulsar", "osc", {
     "..OOO...OOO..", ".............", "O....O.O....O", "O....O.O....O", "O....O.O....O",
     "..OOO...OOO..", ".............", "..OOO...OOO..", "O....O.O....O", "O....O.O....O",
     "O....O.O....O", ".............", "..OOO...OOO.."}},
-  {"glider gun", {
+  {"glider gun", "gun", {
     "........................O...........",
     "......................O.O...........",
     "............OO......OO............OO",
@@ -55,6 +56,27 @@ constexpr auto patterns = std::to_array<pattern>({
 // clang-format on
 
 constexpr auto speeds = std::to_array({1, 2, 5, 10, 20, 30, 60}); // generations per second
+
+constexpr auto pattern_columns = std::to_array<xxx::im_table_column>({
+    {"pattern", xxx::fill()},
+    {"cells", 5, xxx::im_align::right},
+    {"kind", 7, xxx::im_align::right},
+});
+
+// row-major cells for the patterns table
+[[nodiscard]] auto pattern_cells() -> std::vector<std::string> {
+  auto cells = std::vector<std::string>();
+  for (auto const& p : patterns) {
+    auto alive = 0;
+    for (auto const row : p.rows) {
+      alive += int(std::count(row.begin(), row.end(), 'O'));
+    }
+    cells.emplace_back(p.name);
+    cells.push_back(std::to_string(alive));
+    cells.emplace_back(p.kind);
+  }
+  return cells;
+}
 
 constexpr auto info_tabs = std::to_array({"events"sv, "rules"sv, "keys"sv});
 
@@ -225,6 +247,7 @@ int main() {
   auto spinner_step = 0.0f;
   auto info_tab = 0;
   auto focus_keep = false;
+  auto const patterns_table = pattern_cells();
   auto quit = false;
 
   auto const note = [&](std::string message) {
@@ -306,9 +329,7 @@ int main() {
       xxx::view_end();
 
       xxx::view_begin("patterns", xxx::im_key_id::ctrl_p);
-      auto names = std::array<std::string_view, patterns.size()>();
-      std::transform(patterns.begin(), patterns.end(), names.begin(), [](auto const& p) { return p.name; });
-      if (xxx::list("patterns", names, selected_pattern, 4)) {
+      if (xxx::table("patterns", pattern_columns, patterns_table, selected_pattern, 4)) {
         auto const& p = patterns[std::size_t(selected_pattern)];
         auto const x = std::uniform_int_distribution(0, life.width() - 1)(rng);
         auto const y = std::uniform_int_distribution(0, life.height() - 1)(rng);
