@@ -69,6 +69,8 @@ struct im_context {
     im_id active_id = im_id();
     im_id first_id = im_id();
     im_id next_id = im_id();
+    im_id prev_id = im_id(); // focusable right before active one (shift-tab)
+    im_id last_id = im_id(); // last focusable of active view (shift-tab wrap)
     bool active = false;
     bool pressed = false;
 
@@ -99,6 +101,9 @@ struct im_context {
     im_vec2 size;
     std::span<im_cell> data;
   } canvas;
+
+  // width for the next widget, 0 - widget default (see set_next_item_width)
+  int next_item_width = 0;
 
   // persistent first visible row per list widget
   std::unordered_map<im_id, int> list_scroll;

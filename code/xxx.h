@@ -65,6 +65,7 @@ enum class im_key_id {
   ctrl_z,
   page_up,
   page_down,
+  back_tab, // shift-tab
   last
 };
 
@@ -147,6 +148,16 @@ void layout_row_end();
 /// Place next widget at the same line
 void same_line();
 
+/// Width of the next widget (text_input, list): > 0 cells, fill(n) - rest of the line minus n cells
+void set_next_item_width(int width);
+
+/// Push id scope: same labels inside different scopes don't collide (e.g. widgets built in a loop)
+void push_id(std::string_view id);
+/// @overload
+void push_id(int id);
+/// Pop id scope
+void pop_id();
+
 // -----------------------------------------
 // View
 // -----------------------------------------
@@ -155,10 +166,12 @@ constexpr auto im_view_flag_border = int(1 << 0);
 constexpr auto im_view_flag_title = int(1 << 1);
 constexpr auto im_view_flags_default = im_view_flag_border | im_view_flag_title;
 
-/// Height for view_begin(...): stretch view to the bottom of available area,
-/// leaving \c rows_below rows (e.g. for a footer)
-[[nodiscard]] constexpr auto fill(int rows_below = 0) noexcept -> int {
-  return -1 - (rows_below > 0 ? rows_below : 0);
+/// Size meaning "the rest of available space minus \c n":
+///   view_begin(...) height - up to the bottom, leaving n rows (e.g. for a footer)
+///   layout_row_push(...) - rest of the row, leaving n columns
+///   set_next_item_width(...) - rest of the line, leaving n cells
+[[nodiscard]] constexpr auto fill(int n = 0) noexcept -> int {
+  return -1 - (n > 0 ? n : 0);
 }
 
 /// Begin view
@@ -231,6 +244,18 @@ auto button(std::string_view label) -> bool;
 ///   input_active_prompt
 ///   input_placeholder
 auto text_input(std::string_view placeholder, std::string& input, int flags = 0) -> bool;
+
+/// text_input flags
+constexpr auto im_input_flag_password = int(1 << 0); // show '*' instead of chars
+
+/// Widget: tab bar " one  two  three ", selected tab highlighted
+/// Left / Right switch tabs when focused (wrapping), click selects.
+/// @param label is used only as widget id
+/// @return true when selection changed this frame
+auto tabs(std::string_view label, std::span<std::string_view const> items, int& selected) -> bool;
+
+/// @overload
+auto tabs(std::string_view label, std::span<std::string const> items, int& selected) -> bool;
 
 /// Widget: checkbox "[x] label"
 /// Toggled by space / enter when focused or by mouse click.

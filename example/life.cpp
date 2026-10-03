@@ -3,10 +3,7 @@
 
 // Conway's Game of Life on a braille canvas: every terminal cell shows 2x4 cells of the world.
 //
-//   Tab / click  move focus              Enter / Space / click  press
-//   Up / Down / Enter in patterns list   stamp a pattern at random place
-//   Ctrl-O / Ctrl-P / Ctrl-E  jump to controls / patterns / events
-//   PgUp / PgDn / wheel  scroll events   Ctrl-Q  quit
+// Keys are listed in the "keys" tab of the info panel.
 
 #include <algorithm>
 #include <array>
@@ -57,6 +54,33 @@ constexpr auto patterns = std::to_array<pattern>({
 // clang-format on
 
 constexpr auto speeds = std::to_array({1, 2, 5, 10, 20, 30, 60}); // generations per second
+
+constexpr auto info_tabs = std::to_array({"events"sv, "rules"sv, "keys"sv});
+
+constexpr auto rules_text = std::to_array({
+    "every cell has 8 neighbours"sv,
+    ""sv,
+    "dead cell with exactly 3"sv,
+    "  live neighbours is born"sv,
+    "live cell with 2 or 3"sv,
+    "  live neighbours survives"sv,
+    "all other cells die"sv,
+    ""sv,
+    "color shows cell age:"sv,
+    "  newborn -> old-timer"sv,
+});
+
+constexpr auto keys_text = std::to_array({
+    "Tab / S-Tab   move focus"sv,
+    "Enter / Space press"sv,
+    "Up / Down     pick pattern"sv,
+    "Left / Right  switch tab"sv,
+    "PgUp / PgDn   scroll"sv,
+    "C-o C-p C-e   panels"sv,
+    "C-q           quit"sv,
+    ""sv,
+    "mouse: click, wheel"sv,
+});
 
 class world {
 public:
@@ -197,6 +221,7 @@ int main() {
   auto history = std::deque<int>();
   auto events = std::deque<std::string>();
   auto spinner_step = 0.0f;
+  auto info_tab = 0;
   auto quit = false;
 
   auto const note = [&](std::string message) {
@@ -314,9 +339,24 @@ int main() {
       }
       xxx::view_end();
 
-      xxx::view_begin("events", xxx::im_view_flags_default, xxx::im_key_id::ctrl_e, xxx::fill());
-      for (auto const& e : events) {
-        xxx::label(e);
+      xxx::view_begin("info", xxx::im_view_flags_default, xxx::im_key_id::ctrl_e, xxx::fill());
+      xxx::tabs("info", info_tabs, info_tab);
+      switch (info_tab) {
+      case 0:
+        for (auto const& e : events) {
+          xxx::label(e);
+        }
+        break;
+      case 1:
+        for (auto const line : rules_text) {
+          xxx::label(line.empty() ? " "sv : line);
+        }
+        break;
+      default:
+        for (auto const line : keys_text) {
+          xxx::label(line.empty() ? " "sv : line);
+        }
+        break;
       }
       xxx::view_end();
     }

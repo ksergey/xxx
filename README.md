@@ -8,11 +8,12 @@ Built on top of [termbox/termbox2](https://github.com/termbox/termbox2) (previou
 ## Features
 
 - Immediate mode API: describe UI every frame, no widget objects to manage
-- Automatic layout: rows with ratio or fixed width columns, `same_line`
+- Automatic layout: rows with ratio, fixed or `fill()` width columns, `same_line`
 - Views with border, title and shortcut; fixed, fit-content or `fill()` height
 - Scrolling: PgUp / PgDn, mouse wheel, auto-scroll to focused widget
-- Widgets: label, button, checkbox, list, text input, spinner, progress
-- Keyboard focus (Tab) and mouse (click to focus, press, place cursor)
+- Widgets: label, button, checkbox, list, tabs, text input (password, readline keys), spinner, progress
+- Keyboard focus (Tab / Shift-Tab) and mouse (click to focus, press, place cursor)
+- Id scopes (`push_id` / `pop_id`) for widgets built in loops
 - Unicode aware: wide chars (CJK, emoji) take two cells
 - Braille canvas: 2x4 "pixels" per cell
 - Color theming
@@ -47,7 +48,7 @@ int main() {
 ```
 
 [`example/life.cpp`](example/life.cpp) is Conway's Game of Life (screenshot above):
-play / pause, speed, patterns list, population chart and event log.
+play / pause, speed, patterns list, population chart, event log and help in tabs.
 
 ```sh
 cmake -B build && cmake --build build

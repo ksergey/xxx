@@ -237,6 +237,12 @@ void process_input_events() {
     } else if (widget.first_id != im_id()) {
       widget.active_id = widget.first_id;
     }
+  } else if (is_key_pressed(im_key_id::back_tab)) {
+    if (widget.prev_id != im_id()) {
+      widget.active_id = widget.prev_id;
+    } else if (widget.last_id != im_id()) {
+      widget.active_id = widget.last_id;
+    }
   }
 
   if (view.force_next_id != im_id()) {
@@ -297,6 +303,9 @@ void new_frame() {
   g_ctx->widget.current_id = im_id();
   g_ctx->widget.first_id = im_id();
   g_ctx->widget.next_id = im_id();
+  g_ctx->widget.prev_id = im_id();
+  g_ctx->widget.last_id = im_id();
+  g_ctx->next_item_width = 0;
   g_ctx->widget.active = false;
   g_ctx->widget.pressed = false;
 
@@ -372,7 +381,6 @@ void layout_row_begin(std::size_t columns) {
 }
 
 void layout_row_push(float ratio_or_width) {
-  ratio_or_width = std::max<float>(0.0f, ratio_or_width);
 
   // offset position x since previous column
   int offset_min_x = 0;
@@ -396,8 +404,16 @@ void layout_row_push(float ratio_or_width) {
   // update cursor max y
   row_layout.row.cursor_max_y = std::max(row_layout.row.cursor_max_y, g_ctx->layout.cursor.y);
 
-  auto const width =
-      ratio_or_width > 1.0f ? int(ratio_or_width) : int(std::ceil(ratio_or_width * row_layout.rect.width()));
+  auto width = 0;
+  if (ratio_or_width < 0.0f) {
+    // fill(n): rest of the row minus n columns
+    auto const leave = int(-ratio_or_width) - 1;
+    width = std::max(0, row_layout.rect.max.x - offset_min_x + 1 - leave);
+  } else if (ratio_or_width > 1.0f) {
+    width = int(ratio_or_width);
+  } else {
+    width = int(std::ceil(ratio_or_width * row_layout.rect.width()));
+  }
   auto const offset_max_x = std::min<int>(offset_min_x + width - 1, row_layout.rect.max.x);
 
   auto& column_layout = g_ctx->layout.layout_state_stack.emplace_back();
@@ -435,6 +451,40 @@ void layout_row_end() {
 void same_line() {
   g_ctx->layout.same_line = true;
 }
+
+void set_next_item_width(int width) {
+  g_ctx->next_item_width = width;
+}
+
+void push_id(std::string_view id) {
+  g_ctx->hash_id.push_id(id);
+}
+
+void push_id(int id) {
+  g_ctx->hash_id.push_id(id);
+}
+
+void pop_id() {
+  g_ctx->hash_id.pop_id();
+}
+
+namespace internal {
+
+// width for widget being added: set_next_item_width(...) or default, fill(n) resolved against current line
+[[nodiscard]] auto item_width(int default_width) noexcept -> int {
+  auto width = std::exchange(g_ctx->next_item_width, 0);
+  if (width == 0) {
+    width = default_width;
+  }
+  if (width > 0) {
+    return width;
+  }
+  auto const& layout = g_ctx->layout.layout_state_stack.back();
+  auto const x = g_ctx->layout.same_line ? g_ctx->layout.cursor.x : layout.rect.min.x;
+  return std::max(1, layout.rect.max.x - x + 1 - (-width - 1));
+}
+
+} // namespace internal
 
 void view_begin(std::string_view name, int flags, im_key_id shortcut, int height) {
   auto& view = g_ctx->view;
@@ -700,7 +750,10 @@ void common_focusable_behaviour(im_id widget_id, im_rect const& widget_rect) noe
     widget.active = (widget.active_id == widget.current_id);
     if (widget.active) {
       widget.next_id = im_id();
+      // previous focusable in this view; none if active is first (wraps to last_id)
+      widget.prev_id = widget.last_id;
     }
+    widget.last_id = widget.current_id;
   }
 
   if (view.current_id != im_id()) {
@@ -776,14 +829,18 @@ auto button(std::string_view label) -> bool {
   return widget.pressed;
 }
 
-auto text_input(std::string_view placeholder, std::string& input, [[maybe_unused]] int flags) -> bool {
+auto text_input(std::string_view placeholder, std::string& input, int flags) -> bool {
   static constexpr int input_width = 16;
+  static constexpr auto password_ch = std::uint32_t('*');
+  auto const password = (flags & im_input_flag_password) != 0;
+  // cells taken by char as displayed
+  auto const display_width = [password](std::uint32_t ch) { return password ? 1 : char_width(ch); };
   static constexpr int input_prompt_width = 2; // "> "
 
   auto& widget = g_ctx->widget;
   auto& text_input = g_ctx->text_input;
 
-  auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(input_width, 1));
+  auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(internal::item_width(input_width), 1));
   auto const [str, widget_key] = g_ctx->hash_id.split_str_key(placeholder);
 
   internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect);
@@ -805,7 +862,7 @@ auto text_input(std::string_view placeholder, std::string& input, [[maybe_unused
       auto const column = widget.clicked_pos.x - (widget_rect.min.x + input_prompt_width) + text_input.scroll_offset;
       auto cursor = 0;
       for (auto x = 0; cursor < int(text_input.text.size()); ++cursor) {
-        x += char_width(text_input.text[cursor]);
+        x += display_width(text_input.text[cursor]);
         if (column < x) {
           break;
         }
@@ -848,12 +905,29 @@ auto text_input(std::string_view placeholder, std::string& input, [[maybe_unused
             text_input.cursor_pos++;
           }
         } break;
-        case im_key_id::home: {
+        case im_key_id::home:
+        case im_key_id::ctrl_a: {
           text_input.cursor_pos = 0;
           text_input.scroll_offset = 0;
         } break;
-        case im_key_id::end: {
+        case im_key_id::end:
+        case im_key_id::ctrl_e: {
           text_input.cursor_pos = text_input.text.size();
+        } break;
+        case im_key_id::ctrl_u: {
+          // readline: kill to start of line
+          if (text_input.cursor_pos > 0) {
+            text_input.text.erase(text_input.text.begin(), text_input.text.begin() + text_input.cursor_pos);
+            text_input.cursor_pos = 0;
+            text_changed = true;
+          }
+        } break;
+        case im_key_id::ctrl_k: {
+          // readline: kill to end of line
+          if (text_input.cursor_pos < int(text_input.text.size())) {
+            text_input.text.erase(text_input.text.begin() + text_input.cursor_pos, text_input.text.end());
+            text_changed = true;
+          }
         } break;
         case im_key_id::ctrl_w: {
           if (!text_input.text.empty()) {
@@ -943,7 +1017,13 @@ auto text_input(std::string_view placeholder, std::string& input, [[maybe_unused
       auto const cursor_style = style.with_reverse();
       g_ctx->renderer.cmd_fill_rect(rect, ' ', style);
 
-      auto const content = std::span<std::uint32_t const>(text_input.text);
+      auto content = std::span<std::uint32_t const>(text_input.text);
+      if (password) {
+        if (auto const masked = g_ctx->allocator.allocate<std::uint32_t>(content.size()); masked) {
+          std::fill_n(masked, content.size(), password_ch);
+          content = std::span<std::uint32_t const>(masked, content.size());
+        }
+      }
       auto const cursor_pos = static_cast<std::size_t>(text_input.cursor_pos);
       auto const display_width = rect.width();
       // all positions below are in terminal columns
@@ -972,7 +1052,14 @@ auto text_input(std::string_view placeholder, std::string& input, [[maybe_unused
       auto const style =
           g_ctx->theme.get_style(im_color_id::input_inactive_text, im_color_id::input_inactive_background);
       g_ctx->renderer.cmd_fill_rect(rect, ' ', style);
-      g_ctx->renderer.cmd_draw_text_at(rect.min, to_unicode(input), style);
+      auto content = std::span<std::uint32_t const>(to_unicode(input));
+      if (password) {
+        if (auto const masked = g_ctx->allocator.allocate<std::uint32_t>(content.size()); masked) {
+          std::fill_n(masked, content.size(), password_ch);
+          content = std::span<std::uint32_t const>(masked, content.size());
+        }
+      }
+      g_ctx->renderer.cmd_draw_text_at(rect.min, content, style);
     }
 
     g_ctx->renderer.pop_clip_rect();
@@ -1025,9 +1112,7 @@ auto list_impl(std::string_view label, int count, ItemAt&& item_at, int& selecte
   auto& widget = g_ctx->widget;
 
   auto const rows = std::max(1, height > 0 ? height : count);
-  auto const& layout = g_ctx->layout.layout_state_stack.back();
-  auto const width = layout.rect.max.x - layout.rect.min.x + 1;
-  auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(width, rows));
+  auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(internal::item_width(fill()), rows));
 
   auto const [str, widget_key] = g_ctx->hash_id.split_str_key(label);
   internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect);
@@ -1104,6 +1189,75 @@ auto list(std::string_view label, std::span<std::string_view const> items, int& 
 auto list(std::string_view label, std::span<std::string const> items, int& selected, int height) -> bool {
   return list_impl(
       label, int(items.size()), [&](int i) { return std::string_view(items[std::size_t(i)]); }, selected, height);
+}
+
+namespace {
+
+template <typename ItemAt>
+auto tabs_impl(std::string_view label, int count, ItemAt&& item_at, int& selected) -> bool {
+  auto& widget = g_ctx->widget;
+
+  // segments " name " separated by one cell
+  auto names = g_ctx->allocator.allocate<std::span<std::uint32_t const>>(std::size_t(std::max(count, 1)));
+  if (!names) [[unlikely]] {
+    return false;
+  }
+  auto total_width = 0;
+  for (int i = 0; i < count; ++i) {
+    names[i] = to_unicode(item_at(i));
+    total_width += text_width(names[i]) + 2 + (i > 0 ? 1 : 0);
+  }
+  auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(std::max(total_width, 1), 1));
+
+  auto const [str, widget_key] = g_ctx->hash_id.split_str_key(label);
+  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect);
+
+  auto const previous = selected = count > 0 ? std::clamp(selected, 0, count - 1) : -1;
+  if (widget.active && count > 0) {
+    if (widget.clicked_id == widget.current_id) {
+      for (int i = 0, x = widget_rect.min.x; i < count; ++i) {
+        auto const w = text_width(names[i]) + 2;
+        if (widget.clicked_pos.x >= x && widget.clicked_pos.x < x + w) {
+          selected = i;
+        }
+        x += w + 1;
+      }
+    }
+    auto const delta = key_press_count(im_key_id::arrow_right) - key_press_count(im_key_id::arrow_left);
+    selected = ((selected + delta) % count + count) % count;
+  }
+
+  if (g_ctx->renderer.is_visible(widget_rect)) {
+    auto const style = get_style(im_color_id::button_inactive_text, im_color_id::background);
+    auto const selected_style =
+        get_style(widget.active ? im_color_id::button_active_text : im_color_id::button_inactive_text,
+            im_color_id::background)
+            .with_reverse();
+    static constexpr auto space = std::uint32_t(' ');
+
+    g_ctx->renderer.cmd_fill_rect(widget_rect, ' ', get_style_bg(im_color_id::background));
+    for (int i = 0, x = widget_rect.min.x; i < count; ++i) {
+      auto const w = text_width(names[i]) + 2;
+      auto const& s = i == selected ? selected_style : style;
+      g_ctx->renderer.cmd_fill_rect(im_rect(x, widget_rect.min.y, x + w - 1, widget_rect.min.y), space, s);
+      g_ctx->renderer.cmd_draw_text_at(im_vec2(x + 1, widget_rect.min.y), names[i], s);
+      x += w + 1;
+    }
+  }
+
+  return selected != previous;
+}
+
+} // namespace
+
+auto tabs(std::string_view label, std::span<std::string_view const> items, int& selected) -> bool {
+  return tabs_impl(
+      label, int(items.size()), [&](int i) { return items[std::size_t(i)]; }, selected);
+}
+
+auto tabs(std::string_view label, std::span<std::string const> items, int& selected) -> bool {
+  return tabs_impl(
+      label, int(items.size()), [&](int i) { return std::string_view(items[std::size_t(i)]); }, selected);
 }
 
 namespace {

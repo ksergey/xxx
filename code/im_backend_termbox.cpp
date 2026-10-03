@@ -23,6 +23,8 @@ void handle_terminal_key_event(::tb_event const& event, im_input& input) {
     return input.add_key_event(im_key_id::del);
   case TB_KEY_TAB:
     return input.add_key_event(im_key_id::tab);
+  case TB_KEY_BACK_TAB:
+    return input.add_key_event(im_key_id::back_tab);
   case TB_KEY_ENTER:
     return input.add_key_event(im_key_id::enter);
   case TB_KEY_ESC:
