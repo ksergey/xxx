@@ -69,7 +69,7 @@ TEST_SUITE("im_backend_headless") {
     b.push_text("я ");
 
     im_input in;
-    b.poll_events(in);
+    b.poll_events(in, std::chrono::milliseconds(0));
     CHECK(in.is_key_pressed(im_key_id::enter));
     CHECK(in.is_key_pressed(im_key_id::space)); // typed space also is a key
     auto const events = in.get_input_events();
@@ -77,7 +77,7 @@ TEST_SUITE("im_backend_headless") {
     CHECK(events[1].ch == std::uint32_t(U'я'));
 
     in.reset();
-    b.poll_events(in);
+    b.poll_events(in, std::chrono::milliseconds(0));
     CHECK(in.get_input_events().empty());
   }
 

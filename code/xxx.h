@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <source_location>
 #include <span>
 #include <string>
@@ -104,8 +105,20 @@ void init();
 /// Shutdown library
 void shutdown();
 
-/// Update internal state
+/// Update internal state: take pending input without waiting
 void process_input_events();
+
+/// Wait for \c timeout (or until first input) and update internal state.
+/// Event driven main loop: build a frame only when something happened, instead of busy redraw:
+///   while (true) {
+///     process_input_events(running ? time_to_next_update : xxx::wait_forever);
+///     ...build ui, render()...
+///   }
+/// @return true if any event (key, mouse, resize) arrived, false on timeout
+auto process_input_events(std::chrono::milliseconds timeout) -> bool;
+
+/// Timeout for process_input_events(...): wait until input arrives
+inline constexpr auto wait_forever = std::chrono::milliseconds(-1);
 
 /// Start drawing new frame
 void new_frame();

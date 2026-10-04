@@ -21,7 +21,13 @@ auto im_backend_headless::now() const -> im_clock::time_point {
   return now_;
 }
 
-void im_backend_headless::poll_events(im_input& input) {
+auto im_backend_headless::poll_events(im_input& input, std::chrono::milliseconds timeout) -> bool {
+  if (events_.empty()) {
+    if (timeout.count() > 0) {
+      now_ += timeout;
+    }
+    return false;
+  }
   for (auto const& event : events_) {
     switch (event.type) {
     case pending_event::type::key:
@@ -46,6 +52,7 @@ void im_backend_headless::poll_events(im_input& input) {
     }
   }
   events_.clear();
+  return true;
 }
 
 void im_backend_headless::clear(im_style const& style) {

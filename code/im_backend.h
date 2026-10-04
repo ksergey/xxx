@@ -29,8 +29,10 @@ public:
     return im_clock::now();
   }
 
-  /// Move pending input events into \c input (without blocking)
-  virtual void poll_events(im_input& input) = 0;
+  /// Move pending input events into \c input.
+  /// Waits up to \c timeout for the first event: 0 - don't wait, negative - wait forever.
+  /// @return true if any event (key, mouse, resize) arrived
+  virtual auto poll_events(im_input& input, std::chrono::milliseconds timeout) -> bool = 0;
 
   /// Start new frame: fill back buffer with spaces using \c style
   virtual void clear(im_style const& style) = 0;

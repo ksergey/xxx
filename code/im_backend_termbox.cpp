@@ -1,7 +1,9 @@
 // Copyright (c) Sergey Kovalevich <inndie@gmail.com>
 // SPDX-License-Identifier: MIT
 
+#include <algorithm>
 #include <cerrno>
+#include <cstdint>
 #include <cstdlib>
 #include <stdexcept>
 
@@ -127,6 +129,27 @@ void handle_terminal_mouse_event(::tb_event const& event, im_input& input) {
 
 } // namespace
 
+void handle_event(::tb_event const& event, im_input& input) {
+  switch (event.type) {
+  case TB_EVENT_KEY:
+    if (event.ch > 0) {
+      input.add_character(event.ch);
+      if (event.ch == ' ') {
+        input.add_key_event(im_key_id::space);
+      }
+    } else if (event.key > 0) {
+      handle_terminal_key_event(event, input);
+    }
+    break;
+  case TB_EVENT_MOUSE:
+    handle_terminal_mouse_event(event, input);
+    break;
+  default:
+    // TB_EVENT_RESIZE: nothing to store, caller redraws with new size
+    break;
+  }
+}
+
 class im_backend_termbox final : public im_backend {
 public:
   im_backend_termbox() {
@@ -151,38 +174,27 @@ public:
     return im_vec2(::tb_width(), ::tb_height());
   }
 
-  void poll_events(im_input& input) override {
+  auto poll_events(im_input& input, std::chrono::milliseconds timeout) -> bool override {
+    auto got_event = false;
     ::tb_event event;
-    while (true) {
-      auto const rc = ::tb_peek_event(&event, 0);
+    // block only for the first event, then drain whatever is queued
+    for (auto first = true;; first = false) {
+      auto const wait = first ? timeout : std::chrono::milliseconds(0);
+      auto const rc = wait.count() < 0 ? ::tb_poll_event(&event)
+                                       : ::tb_peek_event(&event, int(std::min<std::int64_t>(wait.count(), INT32_MAX)));
       if (rc == TB_OK) {
-        switch (event.type) {
-        case TB_EVENT_KEY:
-          if (event.ch > 0) {
-            input.add_character(event.ch);
-            if (event.ch == ' ') {
-              input.add_key_event(im_key_id::space);
-            }
-          } else if (event.key > 0) {
-            handle_terminal_key_event(event, input);
-          }
-          break;
-        case TB_EVENT_MOUSE:
-          handle_terminal_mouse_event(event, input);
-          break;
-        case TB_EVENT_RESIZE:
-          break;
-        default:
-          break;
-        }
+        got_event = true;
+        handle_event(event, input);
       } else if (rc == TB_ERR_NO_EVENT) {
-        return;
+        return got_event;
       } else if (rc == TB_ERR_POLL) {
         if (::tb_last_errno() != EINTR) {
           throw std::runtime_error(::tb_strerror(rc));
         }
+        // interrupted by a signal (SIGWINCH on resize): worth a new frame
+        return true;
       } else {
-        return;
+        return got_event;
       }
     }
   }

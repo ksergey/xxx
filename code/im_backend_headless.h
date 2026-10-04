@@ -21,7 +21,9 @@ public:
   // im_backend
   [[nodiscard]] auto size() const -> im_vec2 override;
   [[nodiscard]] auto now() const -> im_clock::time_point override;
-  void poll_events(im_input& input) override;
+  /// Never blocks: with no queued events a positive timeout just advances the clock
+  /// (as if the wait expired), so tests can drive time through process_input_events(timeout)
+  auto poll_events(im_input& input, std::chrono::milliseconds timeout) -> bool override;
   void clear(im_style const& style) override;
   void set_cell(int x, int y, std::uint32_t ch, im_style const& style) override;
   void present() override;

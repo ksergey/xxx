@@ -225,10 +225,14 @@ void shutdown() {
 }
 
 void process_input_events() {
+  process_input_events(std::chrono::milliseconds(0));
+}
+
+auto process_input_events(std::chrono::milliseconds timeout) -> bool {
   assert(g_ctx);
 
   g_ctx->input.reset();
-  g_ctx->backend->poll_events(g_ctx->input);
+  auto const got_event = g_ctx->backend->poll_events(g_ctx->input, timeout);
 
   auto& view = g_ctx->view;
   auto& widget = g_ctx->widget;
@@ -290,6 +294,7 @@ void process_input_events() {
       }
     }
   }
+  return got_event;
 }
 
 void new_frame() {
@@ -1763,9 +1768,12 @@ auto canvas_begin(im_vec2 p_size) -> bool {
 
   g_ctx->renderer.push_clip_rect(canvas.rect);
 
+  auto const style = g_ctx->theme.get_style(im_color_id::text, im_color_id::background);
   if (!canvas.data.empty()) {
-    auto const style = g_ctx->theme.get_style(im_color_id::text, im_color_id::background);
+    // no background fill: canvas_end() draws every cell of the surface anyway
     std::fill(canvas.data.begin(), canvas.data.end(), im_cell{.ch = braille_offset, .style = style});
+  } else {
+    // allocation failed: nothing would be drawn, keep area clean
     g_ctx->renderer.cmd_fill_rect(canvas.rect, ' ', style);
   }
 

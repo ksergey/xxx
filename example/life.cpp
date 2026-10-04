@@ -14,7 +14,6 @@
 #include <random>
 #include <string>
 #include <string_view>
-#include <thread>
 #include <utility>
 #include <vector>
 
@@ -261,7 +260,19 @@ int main() {
   auto first_frame = true;
 
   while (!quit) {
-    xxx::process_input_events();
+    // event driven: sleep until input or until the next generation is due.
+    // Paused world costs no CPU; running one draws a frame per generation
+    // (at least every 100 ms to keep the spinner moving) instead of 60 per second.
+    auto timeout = xxx::wait_forever;
+    if (first_frame) {
+      timeout = std::chrono::milliseconds(0);
+    } else if (running) {
+      auto const period = std::chrono::milliseconds(1000 / speeds[std::size_t(speed_index)]);
+      auto const due = last_step + period - std::chrono::steady_clock::now();
+      timeout = std::clamp(std::chrono::duration_cast<std::chrono::milliseconds>(due), std::chrono::milliseconds(0),
+          std::chrono::milliseconds(100));
+    }
+    xxx::process_input_events(timeout);
     if (xxx::is_key_pressed(xxx::im_key_id::ctrl_q)) {
       break;
     }
@@ -422,7 +433,6 @@ int main() {
     }
 
     xxx::render();
-    std::this_thread::sleep_for(std::chrono::milliseconds(16));
   }
 
   xxx::shutdown();

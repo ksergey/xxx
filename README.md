@@ -8,6 +8,7 @@ Built on top of [termbox/termbox2](https://github.com/termbox/termbox2) (previou
 ## Features
 
 - Immediate mode API: describe UI every frame, no widget objects to manage
+- Event driven: frames are built on input or timeout, idle app uses no CPU
 - Automatic layout: rows with ratio, fixed or `fill()` width columns, `same_line`
 - Views with border, title and shortcut; fixed, fit-content or `fill()` height
 - Scrolling: PgUp / PgDn, mouse wheel, auto-scroll to focused widget
@@ -32,7 +33,8 @@ int main() {
   auto name = std::string();
   auto agree = false;
   while (true) {
-    xxx::process_input_events();
+    // sleep until input arrives: no CPU spent while nothing happens
+    xxx::process_input_events(xxx::wait_forever);
     if (xxx::is_key_pressed(xxx::im_key_id::ctrl_q)) {
       break;
     }
