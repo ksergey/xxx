@@ -66,9 +66,9 @@ public:
     return backend_->line(y);
   }
 
-  /// Foreground color of presented cell, attributes stripped
+  /// Foreground color of presented cell
   [[nodiscard]] auto fg(int x, int y) const -> im_color {
-    return im_color(std::uint32_t(backend_->cell(x, y).style.fg & 0xffffff));
+    return im_color(backend_->cell(x, y).style.fg);
   }
 
   /// Cells drawn with reverse attribute (text cursor, focused placeholder)
@@ -77,7 +77,7 @@ public:
     auto const size = backend_->size();
     for (int y = 0; y < size.y; ++y) {
       for (int x = 0; x < size.x; ++x) {
-        if (backend_->cell(x, y).style.fg & TB_REVERSE) {
+        if (backend_->cell(x, y).style.attrs & im_attr_reverse) {
           result.emplace_back(x, y);
         }
       }

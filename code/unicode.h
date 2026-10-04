@@ -25,6 +25,28 @@ void utf8_to_unicode(std::string_view input, std::vector<std::uint32_t>& output)
 // convert unicode string into utf8 string
 void unicode_to_utf8(std::span<std::uint32_t const> input, std::string& output);
 
+/// Replacement character for invalid input
+inline constexpr auto replacement_char = std::uint32_t(0xfffd);
+
+/// Decode one codepoint from the start of \c input.
+/// @return bytes consumed; 0 at end of input, at NUL or when the last sequence is truncated.
+/// Invalid byte (stray continuation, overlong form, surrogate, > U+10FFFF) gives U+FFFD and consumes 1 byte.
+[[nodiscard]] auto utf8_decode(std::string_view input, std::uint32_t& ch) noexcept -> std::size_t;
+
+/// Encode codepoint into \c out (at least 4 bytes); invalid codepoints are encoded as U+FFFD.
+/// @return bytes written (1..4)
+[[nodiscard]] auto utf8_encode(std::uint32_t ch, char* out) noexcept -> std::size_t;
+
+/// Call f(codepoint) for every codepoint of \c input (see utf8_decode for stop rules)
+template <typename F>
+void for_each_codepoint(std::string_view input, F&& f) {
+  std::uint32_t ch;
+  while (auto const n = utf8_decode(input, ch)) {
+    f(ch);
+    input.remove_prefix(n);
+  }
+}
+
 // number of terminal cells occupied by codepoint: 2 for wide (CJK, emoji), 1 otherwise
 // matches termbox2 rendering, which draws zero-width and non-printable codepoints in one cell
 [[nodiscard]] auto char_width(std::uint32_t ch) noexcept -> int;

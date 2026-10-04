@@ -10,7 +10,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include <termbox2.h>
 
 #include "xxx.h"
 
@@ -25,7 +24,6 @@
 
 namespace xxx {
 
-static_assert(std::is_same_v<uintattr_t, std::uint64_t>, "termbox2 invalid configuration");
 
 struct im_context {
   // declared first: destroyed last, after everything that may reference terminal state

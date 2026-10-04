@@ -77,8 +77,8 @@ TEST_SUITE("table") {
 
   TEST_CASE("header is underlined") {
     table_app app;
-    CHECK((app.backend().cell(0, 0).style.fg & TB_UNDERLINE) != 0);
-    CHECK((app.backend().cell(0, 1).style.fg & TB_UNDERLINE) == 0);
+    CHECK((app.backend().cell(0, 0).style.attrs & im_attr_underline) != 0);
+    CHECK((app.backend().cell(0, 1).style.attrs & im_attr_underline) == 0);
   }
 
   TEST_CASE("long cell is cut by its own column") {

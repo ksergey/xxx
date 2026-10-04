@@ -91,97 +91,28 @@ namespace {
 
 template <typename OutputIt>
 auto to_unicode(std::string_view input, OutputIt first) -> OutputIt {
-  char const* begin = input.data();
-  char const* end = begin + input.size();
-
-  while (begin < end) {
-    if (*begin == '\0') {
-      break;
-    }
-    auto const length = ::tb_utf8_char_length(*begin);
-    if (begin + length > end) [[unlikely]] {
-      break;
-    }
-    std::uint32_t ch;
-    ::tb_utf8_char_to_unicode(&ch, begin);
-    *first++ = ch;
-
-    begin += length;
-  }
-
+  for_each_codepoint(input, [&](std::uint32_t ch) { *first++ = ch; });
   return first;
 }
 
+// decode into frame allocator: valid until next frame
 [[nodiscard]] auto to_unicode(std::string_view input) noexcept -> std::span<std::uint32_t const> {
+  // a codepoint takes at least one byte
   auto buffer = g_ctx->allocator.allocate<std::uint32_t>(input.size());
   if (!buffer) [[unlikely]] {
     return std::span<std::uint32_t const>();
   }
-
-  char const* begin = input.data();
-  char const* end = begin + input.size();
-  std::size_t pos = 0;
-
-  while (begin < end) {
-    if (*begin == '\0') {
-      break;
-    }
-    auto const length = ::tb_utf8_char_length(*begin);
-    if (begin + length > end) [[unlikely]] {
-      break;
-    }
-    ::tb_utf8_char_to_unicode(&buffer[pos++], begin);
-    begin += length;
-  }
-
+  auto pos = std::size_t(0);
+  for_each_codepoint(input, [&](std::uint32_t ch) { buffer[pos++] = ch; });
   return std::span(buffer, pos);
 }
 
-[[nodiscard]] constexpr auto unicode_codepoint_length(std::uint32_t c) noexcept -> std::size_t {
-  if (c < 0x80) {
-    return 1;
-  } else if (c < 0x800) {
-    return 2;
-  } else if (c < 0x10000) {
-    return 3;
-  } else if (c < 0x200000) {
-    return 4;
-  } else if (c < 0x4000000) {
-    return 5;
-  } else {
-    return 6;
-  }
-}
-
-#if 0
-[[nodiscard]] auto to_utf8(std::span<std::uint32_t const> input) -> std::string_view {
-  auto const output_length =
-      std::ranges::fold_left(std::views::transform(input, unicode_codepoint_length), 0, std::plus{});
-
-  auto buffer = g_ctx->allocator.allocate<char>(output_length);
-  if (!buffer) [[unlikely]] {
-    return std::string_view();
-  }
-
-  auto offset = std::size_t(0);
-  for (auto ch : input) {
-    offset += ::tb_utf8_unicode_to_char(buffer + offset, ch);
-  }
-
-  return std::string_view(buffer, offset);
-}
-#endif
-
 template <typename OutputIt>
 auto to_utf8(std::span<std::uint32_t const> input, OutputIt first) -> OutputIt {
-  char codepoint[7];
-  for (auto ch : input) {
-    auto const length = ::tb_utf8_unicode_to_char(codepoint, ch);
-    for (auto c : std::string_view(codepoint, length)) {
-      *first++ = c;
-    }
+  char buffer[4];
+  for (auto const ch : input) {
+    first = std::copy_n(buffer, utf8_encode(ch, buffer), first);
   }
-
   return first;
 }
 
@@ -1805,7 +1736,7 @@ void canvas_point(im_vec2 p_pos, im_color color) {
 
   auto const cell = canvas.data.data() + pos.y * canvas.size.x + pos.x;
   cell->ch |= braille_pixel_map[p_pos.y % braille_pixels_per_height][p_pos.x % braille_pixels_per_width];
-  cell->style.fg = color;
+  cell->style.fg = color.value;
 }
 
 } // namespace xxx

@@ -13,6 +13,8 @@
 #include "im_backend.h"
 #include "unicode.h"
 
+static_assert(sizeof(uintattr_t) == 8, "termbox2 must be built with TB_OPT_ATTR_W=64");
+
 namespace xxx {
 
 namespace {
@@ -127,8 +129,6 @@ void handle_terminal_mouse_event(::tb_event const& event, im_input& input) {
   }
 }
 
-} // namespace
-
 void handle_event(::tb_event const& event, im_input& input) {
   switch (event.type) {
   case TB_EVENT_KEY:
@@ -149,6 +149,26 @@ void handle_event(::tb_event const& event, im_input& input) {
     break;
   }
 }
+
+// im_style -> termbox attributes (truecolor mode, TB_OPT_ATTR_W=64)
+[[nodiscard]] auto to_tb_fg(im_style const& style) noexcept -> uintattr_t {
+  auto result = uintattr_t(style.fg);
+  auto const a = style.attrs;
+  result |= (a & im_attr_bold) ? TB_BOLD : 0;
+  result |= (a & im_attr_dim) ? TB_DIM : 0;
+  result |= (a & im_attr_italic) ? TB_ITALIC : 0;
+  result |= (a & im_attr_underline) ? TB_UNDERLINE : 0;
+  result |= (a & im_attr_blink) ? TB_BLINK : 0;
+  result |= (a & im_attr_reverse) ? TB_REVERSE : 0;
+  result |= (a & im_attr_strikeout) ? TB_STRIKEOUT : 0;
+  return result;
+}
+
+[[nodiscard]] auto to_tb_bg(im_style const& style) noexcept -> uintattr_t {
+  return uintattr_t(style.bg);
+}
+
+} // namespace
 
 class im_backend_termbox final : public im_backend {
 public:
@@ -200,12 +220,12 @@ public:
   }
 
   void clear(im_style const& style) override {
-    ::tb_set_clear_attrs(style.fg, style.bg);
+    ::tb_set_clear_attrs(to_tb_fg(style), to_tb_bg(style));
     ::tb_clear();
   }
 
   void set_cell(int x, int y, std::uint32_t ch, im_style const& style) override {
-    ::tb_set_cell(x, y, ch, style.fg, style.bg);
+    ::tb_set_cell(x, y, ch, to_tb_fg(style), to_tb_bg(style));
   }
 
   void present() override {

@@ -9,8 +9,6 @@
 #include <type_traits>
 #include <vector>
 
-#include <termbox2.h>
-
 #include "im_stack.h"
 #include "string_utils.h"
 #include "unicode.h"
@@ -38,26 +36,46 @@ namespace xxx {
 
 class im_backend;
 
+// text attributes, combined with |
+constexpr auto im_attr_bold = std::uint32_t(1 << 0);
+constexpr auto im_attr_dim = std::uint32_t(1 << 1);
+constexpr auto im_attr_italic = std::uint32_t(1 << 2);
+constexpr auto im_attr_underline = std::uint32_t(1 << 3);
+constexpr auto im_attr_blink = std::uint32_t(1 << 4);
+constexpr auto im_attr_reverse = std::uint32_t(1 << 5);
+constexpr auto im_attr_strikeout = std::uint32_t(1 << 6);
+
+/// Cell style: 24-bit colors (0 - terminal default) and attributes.
+/// Backend independent: each backend translates it to its own representation.
 struct im_style {
-  std::uint64_t fg = 0;
-  std::uint64_t bg = 0;
+  std::uint32_t fg = 0;
+  std::uint32_t bg = 0;
+  std::uint32_t attrs = 0;
 
   constexpr im_style() = default;
-  constexpr im_style(im_color color_fg, im_color color_bg = im_color()) noexcept : fg(color_fg), bg(color_bg) {}
+  constexpr im_style(im_color color_fg, im_color color_bg = im_color(), std::uint32_t attributes = 0) noexcept
+      : fg(color_fg.value), bg(color_bg.value), attrs(attributes) {}
 
+  [[nodiscard]] constexpr auto with_attrs(std::uint32_t attributes) const noexcept -> im_style {
+    auto result = *this;
+    result.attrs |= attributes;
+    return result;
+  }
   [[nodiscard]] constexpr auto with_underline() const noexcept -> im_style {
-    return im_style(im_color(fg | TB_UNDERLINE), im_color(bg));
+    return with_attrs(im_attr_underline);
   }
   [[nodiscard]] constexpr auto with_reverse() const noexcept -> im_style {
-    return im_style(im_color(fg | TB_REVERSE), im_color(bg));
+    return with_attrs(im_attr_reverse);
   }
   [[nodiscard]] constexpr auto with_blink() const noexcept -> im_style {
-    return im_style(im_color(fg | TB_BLINK), im_color(bg));
+    return with_attrs(im_attr_blink);
   }
+
+  [[nodiscard]] constexpr auto operator==(im_style const&) const noexcept -> bool = default;
 };
 
 struct im_cell {
-  uint32_t ch;
+  std::uint32_t ch;
   im_style style;
 };
 
