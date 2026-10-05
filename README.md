@@ -67,7 +67,7 @@ do the requests and call `xxx::wake_up()` when new data arrives, the UI thread s
 `process_input_events(wait_forever)` and never blocks on the network.
 
 ```sh
-# needs libcurl and nlohmann_json (e.g. apt install libcurl4-openssl-dev nlohmann-json3-dev); cxxopts comes with CPM
+# needs libcurl (e.g. apt install libcurl4-openssl-dev); nlohmann_json and cxxopts come with CPM
 ./build/example/mihomo -u https://127.0.0.1:9090 -s "$SECRET" --cacert controller.crt
 ```
 
