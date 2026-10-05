@@ -6,6 +6,7 @@
 #include <array>
 #include <cassert>
 #include <format>
+#include <limits>
 #include <functional>
 #include <iterator>
 #include <ranges>
@@ -155,6 +156,90 @@ void shutdown() {
   g_ctx = nullptr;
 }
 
+namespace internal {
+
+// distance between ranges [a0, a1] and [b0, b1], 0 when they overlap
+[[nodiscard]] constexpr auto range_gap(int a0, int a1, int b0, int b1) noexcept -> int {
+  return std::max(0, std::max(a0, b0) - std::min(a1, b1));
+}
+
+// arrows the focused widget doesn't use move focus to the nearest item in that direction (previous frame layout)
+void navigate_with_arrows() {
+  auto& view = g_ctx->view;
+  auto& widget = g_ctx->widget;
+  auto const& items = g_ctx->nav_items;
+  auto const popup = g_ctx->popup.open_id;
+
+  struct arrow {
+    im_key_id key;
+    std::uint8_t dir;
+  };
+  static constexpr arrow arrows[] = {{im_key_id::arrow_up, im_context::nav_up},
+      {im_key_id::arrow_down, im_context::nav_down}, {im_key_id::arrow_left, im_context::nav_left},
+      {im_key_id::arrow_right, im_context::nav_right}};
+
+  auto const find = [&](im_id id) {
+    return std::find_if(items.begin(), items.end(), [id](auto const& item) { return item.id == id; });
+  };
+
+  for (auto const& a : arrows) {
+    auto moved = false;
+    for (int n = g_ctx->input.key_press_count(a.key); n > 0; --n) {
+      // focused widget, or the active view itself when it is a scroll stop
+      auto const current = find(widget.active_id != im_id() ? widget.active_id : view.active_id);
+      if (current == items.end() || (current->keys & a.dir)) {
+        break; // the widget handles this arrow itself
+      }
+      auto const& from = current->rect;
+      auto const* best = static_cast<im_context::nav_item const*>(nullptr);
+      auto best_score = std::numeric_limits<int>::max();
+      for (auto const& c : items) {
+        if (c.id == current->id || (popup != im_id() && c.view_id != popup) ||
+            (!c.visible && c.view_id != current->view_id)) {
+          continue; // modal popup; hidden widgets only inside the current (scrollable) view
+        }
+        auto gap = 0, cross = 0;
+        switch (a.dir) {
+        case im_context::nav_up:
+          gap = from.min.y - c.rect.max.y, cross = range_gap(from.min.x, from.max.x, c.rect.min.x, c.rect.max.x);
+          break;
+        case im_context::nav_down:
+          gap = c.rect.min.y - from.max.y, cross = range_gap(from.min.x, from.max.x, c.rect.min.x, c.rect.max.x);
+          break;
+        case im_context::nav_left:
+          gap = from.min.x - c.rect.max.x, cross = range_gap(from.min.y, from.max.y, c.rect.min.y, c.rect.max.y);
+          break;
+        default:
+          gap = c.rect.min.x - from.max.x, cross = range_gap(from.min.y, from.max.y, c.rect.min.y, c.rect.max.y);
+          break;
+        }
+        if (gap <= 0) {
+          continue; // not strictly in that direction
+        }
+        // stay in the same row / column when possible: sideways offset costs much more than distance
+        if (auto const score = gap + cross * 8; score < best_score) {
+          best_score = score;
+          best = &c;
+        }
+      }
+      if (!best) {
+        break;
+      }
+      widget.active_id = (best->id == best->view_id) ? im_id() : best->id;
+      if (popup == im_id()) {
+        view.active_id = best->view_id;
+      }
+      moved = true;
+    }
+    if (moved) {
+      // the arrow is used up: e.g. arriving at tabs must not also switch the tab
+      g_ctx->input.consume_key(a.key);
+    }
+  }
+}
+
+} // namespace internal
+
 void process_input_events() {
   process_input_events(std::chrono::milliseconds(0));
 }
@@ -204,6 +289,8 @@ auto process_input_events(std::chrono::milliseconds timeout) -> bool {
     }
   }
 
+  internal::navigate_with_arrows();
+
   // mouse click: activate view and focus widget under cursor
   widget.clicked_id = im_id();
   if (g_ctx->input.is_mouse_clicked(im_mouse_button_id::left)) {
@@ -240,6 +327,7 @@ void new_frame() {
   g_ctx->view_hits.clear();
   g_ctx->widget_hits.clear();
   g_ctx->frame_ids.clear();
+  g_ctx->nav_items.clear();
 
   // TODO: frame delta
 
@@ -598,6 +686,7 @@ void view_begin(std::string_view name, int flags, im_key_id shortcut, int height
     clip_rect.max.x = layout.rect.max.x;
 
     view.current_scroll = nullptr;
+    view.current_focusable = 0;
     if (view.current_bounded) {
       auto& scroll = view.scroll[view.current_id];
       view.current_scroll = &scroll;
@@ -607,6 +696,10 @@ void view_begin(std::string_view name, int flags, im_key_id shortcut, int height
       if (view.active) {
         auto const page = std::max(1, viewport_height - 1);
         scroll.offset += page * (key_press_count(im_key_id::page_down) - key_press_count(im_key_id::page_up));
+        if (scroll.focusable == 0) {
+          // nothing to focus (e.g. a log): up / down scroll by line
+          scroll.offset += key_press_count(im_key_id::arrow_down) - key_press_count(im_key_id::arrow_up);
+        }
       }
       if (auto const wheel = g_ctx->input.mouse_wheel(); wheel != 0 && !popup_open) {
         auto const mouse = g_ctx->input.mouse_pos();
@@ -682,6 +775,15 @@ void view_end() {
       auto& scroll = *view.current_scroll;
       auto const viewport_height = std::max(0, view.current_viewport.height());
       scroll.content_height = g_ctx->layout.cursor.y - view.current_content_top;
+      scroll.focusable = view.current_focusable;
+      if (view.current_focusable == 0 && scroll.content_height > viewport_height && visible_panel) {
+        // only text that doesn't fit: arrows must be able to reach it to scroll
+        g_ctx->nav_items.push_back({.id = view.current_id,
+            .view_id = view.current_id,
+            .rect = visible_panel,
+            .visible = true,
+            .keys = im_context::nav_vertical});
+      }
       // keep offset valid for next frame if content shrank
       scroll.offset = std::clamp(scroll.offset, 0, std::max(0, scroll.content_height - viewport_height));
 
@@ -916,9 +1018,18 @@ void label(std::string_view text) {
 namespace internal {
 
 // update widget.* properties
-void common_focusable_behaviour(im_id widget_id, im_rect const& widget_rect) noexcept {
+void common_focusable_behaviour(im_id widget_id, im_rect const& widget_rect, std::uint8_t nav_keys) noexcept {
   auto& view = g_ctx->view;
   auto& widget = g_ctx->widget;
+
+  if (view.current_id != im_id()) {
+    ++view.current_focusable;
+    g_ctx->nav_items.push_back({.id = widget_id,
+        .view_id = view.current_id,
+        .rect = widget_rect,
+        .visible = bool(widget_rect.intersection(g_ctx->renderer.clip_rect())),
+        .keys = nav_keys});
+  }
 
   widget.current_id = widget_id;
   widget.pressed = false;
@@ -993,7 +1104,7 @@ auto button(std::string_view label) -> bool {
   auto const button_width = std::max<int>(button_min_width, unicode_str_width + 4);
   auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(button_width, 1));
 
-  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect);
+  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect, im_context::nav_none);
 
   if (widget.active) {
     if (is_key_pressed(im_key_id::space) || is_key_pressed(im_key_id::enter) ||
@@ -1056,7 +1167,7 @@ auto text_input(std::string_view placeholder, std::string& input, int flags) -> 
   auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(internal::item_width(input_width), 1));
   auto const [str, widget_key] = g_ctx->hash_id.split_str_key(placeholder);
 
-  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect);
+  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect, im_context::nav_horizontal);
 
   if (widget.active) {
     text_input.text.clear();
@@ -1309,7 +1420,7 @@ auto checkbox(std::string_view label, bool& value) -> bool {
   auto const unicode_str = to_unicode(str);
   auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(4 + text_width(unicode_str), 1));
 
-  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect);
+  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect, im_context::nav_none);
 
   auto toggled = false;
   if (widget.active && (is_key_pressed(im_key_id::space) || is_key_pressed(im_key_id::enter) ||
@@ -1340,6 +1451,23 @@ auto checkbox(std::string_view label, bool& value) -> bool {
 }
 
 namespace {
+
+// arrows a list / table uses depend on the selection: at the first row up leaves the widget,
+// at the last row down does (used by arrow navigation on the next frame)
+void update_nav_keys_for_selection(int selected, int count) {
+  auto& items = g_ctx->nav_items;
+  if (items.empty() || items.back().id != g_ctx->widget.current_id) {
+    return;
+  }
+  auto keys = std::uint8_t(im_context::nav_none);
+  if (count > 0 && selected > 0) {
+    keys |= im_context::nav_up;
+  }
+  if (count > 0 && selected < count - 1) {
+    keys |= im_context::nav_down;
+  }
+  items.back().keys = keys;
+}
 
 // selection shared by list and table: rows_rect shows `rows` items starting at `offset`
 auto selection_behaviour(im_rect const& rows_rect, int rows, int count, int& selected, int& offset) -> bool {
@@ -1379,6 +1507,7 @@ auto selection_behaviour(im_rect const& rows_rect, int rows, int count, int& sel
     }
   }
   offset = std::clamp(offset, 0, std::max(0, count - rows));
+  update_nav_keys_for_selection(selected, count);
   return activated;
 }
 
@@ -1396,7 +1525,7 @@ auto list_impl(std::string_view label, int count, ItemAt&& item_at, int& selecte
   auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(internal::item_width(fill()), rows));
 
   auto const [str, widget_key] = g_ctx->hash_id.split_str_key(label);
-  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect);
+  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect, im_context::nav_vertical);
 
   auto& offset = g_ctx->list_scroll[widget.current_id];
   auto const activated = selection_behaviour(widget_rect, rows, count, selected, offset);
@@ -1438,7 +1567,7 @@ auto table_impl(std::string_view label, std::span<im_table_column const> columns
   auto const rows_rect = widget_rect.crop_top(1);
 
   auto const [str, widget_key] = g_ctx->hash_id.split_str_key(label);
-  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect);
+  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect, im_context::nav_vertical);
 
   auto& offset = g_ctx->list_scroll[widget.current_id];
   auto const activated = selection_behaviour(rows_rect, rows, count, selected, offset);
@@ -1577,7 +1706,7 @@ auto tabs_impl(std::string_view label, int count, ItemAt&& item_at, int& selecte
   auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(std::max(total_width, 1), 1));
 
   auto const [str, widget_key] = g_ctx->hash_id.split_str_key(label);
-  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect);
+  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect, im_context::nav_horizontal);
 
   auto const previous = selected = count > 0 ? std::clamp(selected, 0, count - 1) : -1;
   if (widget.active && count > 0) {

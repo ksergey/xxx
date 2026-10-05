@@ -93,7 +93,8 @@ constexpr auto rules_text = std::to_array({
 });
 
 constexpr auto keys_text = std::to_array({
-    "Tab / S-Tab   move focus"sv,
+    "arrows        move focus"sv,
+    "Tab / S-Tab   next / prev"sv,
     "Enter / Space press"sv,
     "Up / Down     pick pattern"sv,
     "Left / Right  switch tab"sv,

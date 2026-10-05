@@ -696,8 +696,8 @@ int main(int argc, char** argv) {
       } else {
         connections_tab(s, ui);
       }
-      xxx::label(ui.tab == 0 ? "c-t tabs · c-g groups · c-p proxies · Tab focus · Enter select · c-c copy · c-q quit"
-                             : "c-t tabs · c-o connections · Enter close connection · c-c copy row · c-q quit");
+      xxx::label(ui.tab == 0 ? "arrows move · Enter select · c-c copy row · c-q quit"
+                             : "arrows move · Enter close connection · c-c copy row · c-q quit");
 
       if (xxx::popup_begin("close", "close connection?", 50)) {
         xxx::label(ui.closing.host);

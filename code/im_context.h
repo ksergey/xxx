@@ -42,6 +42,7 @@ struct im_context {
     int offset = 0;          // first visible content row
     int content_height = 0;  // measured on previous frame
     im_id focus_id = im_id(); // last widget scrolled into view
+    int focusable = 0;        // focusable widgets on previous frame (none: arrows scroll by line)
   };
 
   struct {
@@ -58,6 +59,7 @@ struct im_context {
     im_rect current_viewport;     // visible content area
     int current_content_top = 0;  // y of first content row (scrolled)
     view_scroll* current_scroll = nullptr;
+    int current_focusable = 0; // focusable widgets in current view so far
 
     std::unordered_map<im_id, view_scroll> scroll;
   } view;
@@ -97,6 +99,26 @@ struct im_context {
   };
   std::vector<hit_item> view_hits;
   std::vector<hit_item> widget_hits;
+
+  // arrow keys navigation: focus moves to the nearest item in the direction of an arrow
+  // the focused widget doesn't use. Recorded while building a frame, used by the next one.
+  enum nav_keys : std::uint8_t {
+    nav_none = 0,
+    nav_up = 1 << 0,
+    nav_down = 1 << 1,
+    nav_left = 1 << 2,
+    nav_right = 1 << 3,
+    nav_vertical = nav_up | nav_down,
+    nav_horizontal = nav_left | nav_right,
+  };
+  struct nav_item {
+    im_id id;          // widget, or view itself for a scrollable view without widgets
+    im_id view_id;
+    im_rect rect;      // full rect, also when scrolled out of the view
+    bool visible;      // at least partly visible
+    std::uint8_t keys; // arrows the item uses itself
+  };
+  std::vector<nav_item> nav_items;
 
   struct {
     im_id active_id = im_id();

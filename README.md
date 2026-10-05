@@ -15,7 +15,7 @@ Earlier versions were built on [termbox/termbox2](https://github.com/termbox/ter
 - Widgets: label, button, checkbox, list, table, tabs, text input (password, readline keys), spinner, progress
 - Clipboard via OSC 52 (works over ssh and in tmux): ctrl-c in inputs, lists and tables; readline kill / yank
 - Modal popups drawn on top of everything, with input capture and focus restore
-- Keyboard focus (Tab / Shift-Tab, `set_focus`) and mouse (click to focus, press, place cursor)
+- Keyboard focus: arrows move to the nearest widget (also across views), Tab / Shift-Tab, `set_focus` and mouse (click to focus, press, place cursor)
 - Id scopes (`push_id` / `pop_id`) for widgets built in loops
 - Unicode aware: wide chars (CJK, emoji) take two cells
 - Braille canvas: 2x4 "pixels" per cell

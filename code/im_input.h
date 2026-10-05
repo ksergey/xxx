@@ -131,6 +131,13 @@ public:
     }
   }
 
+  /// Drop presses of one key this frame (it was handled and must not reach widgets)
+  void consume_key(im_key_id id) noexcept {
+    assert(id < im_key_id::last);
+    keyboard_.keys[static_cast<std::size_t>(id)].clicked = 0;
+    std::erase_if(keyboard_.input_events, [id](im_input_event const& e) { return e.key == id && e.ch == 0; });
+  }
+
   /// Drop keyboard input of this frame (it was handled and must not reach other widgets)
   void consume_keyboard() noexcept {
     keyboard_.keys.fill(keyboard_state::key_state{.clicked = 0});
