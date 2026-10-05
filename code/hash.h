@@ -5,8 +5,6 @@
 
 #include <cstdint>
 #include <cstring>
-#include <ranges>
-#include <span>
 #include <type_traits>
 
 namespace xxx {
@@ -27,7 +25,8 @@ namespace detail {
   // std::uint32_t(char(0x80)) would sign-extend to 0xffffff80
   auto const byte = [](char c) constexpr noexcept { return std::uint32_t(static_cast<unsigned char>(c)); };
 
-  for (auto const& block : std::span(p_data, p_tail) | std::views::chunk(4)) {
+  // plain loop over 4 byte blocks: std::views::chunk (C++23) is missing in libc++ 18
+  for (auto block = p_data; block != p_tail; block += 4) {
     auto chunk = byte(block[0]);
     chunk |= byte(block[1]) << 8;
     chunk |= byte(block[2]) << 16;

@@ -142,12 +142,12 @@ void im_renderer::do_draw_surface(im_backend& backend, render_cmd const& cmd) {
   auto const drop_y = rect.min.y - src_rect.min.y;
   auto const take_y = rect.height();
 
-  for (auto const& [pos_y, line] :
-      std::views::zip(std::views::iota(rect.min.y), data | std::views::chunk(src_rect.width())) |
-          std::views::drop(drop_y) | std::views::take(take_y)) {
-    for (auto const& [pos_x, cell] :
-        std::views::zip(std::views::iota(rect.min.x), line | std::views::drop(drop_x) | std::views::take(take_x))) {
-      backend.set_cell(pos_x, pos_y, cell.ch, cell.style);
+  // plain indices: std::views::chunk (C++23) is missing in libc++ 18
+  auto const src_width = src_rect.width();
+  for (int y = 0; y < take_y; ++y) {
+    auto const* const line = data.data() + std::size_t(drop_y + y) * std::size_t(src_width) + std::size_t(drop_x);
+    for (int x = 0; x < take_x; ++x) {
+      backend.set_cell(rect.min.x + x, rect.min.y + y, line[x].ch, line[x].style);
     }
   }
 }

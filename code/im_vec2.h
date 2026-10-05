@@ -45,7 +45,9 @@ struct std::formatter<xxx::im_vec2> {
   constexpr auto parse(std::format_parse_context& ctx) {
     return ctx.begin();
   }
-  auto format(xxx::im_vec2 const& v, std::format_context& ctx) const {
+  // templated on the context: std::formattable checks it with an unspecified output iterator (libc++)
+  template <typename FormatContext>
+  auto format(xxx::im_vec2 const& v, FormatContext& ctx) const {
     return std::format_to(ctx.out(), "im_vec2({}, {})", v.x, v.y);
   }
 };

@@ -22,11 +22,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include <deque>
-#include <expected>
 #include <format>
 #include <functional>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -59,8 +59,14 @@ struct options {
 // command line first, then environment, then defaults.
 // Environment is applied after parsing on purpose: as a cxxopts default value the secret would be
 // printed by --help.
-// @return options or the exit code (0 for --help)
-[[nodiscard]] auto parse_options(int argc, char** argv) -> std::expected<options, int> {
+// options, or the exit code when the program should stop (0 for --help).
+// Not std::expected: clang < 19 can't use it with libstdc++ 13/14
+struct parsed_options {
+  std::optional<options> opts;
+  int exit_code = 0;
+};
+
+[[nodiscard]] auto parse_options(int argc, char** argv) -> parsed_options {
   auto opts = options();
   auto cli = cxxopts::Options("mihomo", "Terminal dashboard for mihomo (Clash.Meta) RESTful API");
   // clang-format off
@@ -80,7 +86,7 @@ struct options {
     auto const args = cli.parse(argc, argv);
     if (args.count("help")) {
       std::fputs(cli.help().c_str(), stdout);
-      return std::unexpected(0);
+      return {.opts = std::nullopt, .exit_code = 0};
     }
     if (!args.unmatched().empty()) {
       throw cxxopts::exceptions::exception("unexpected argument '" + args.unmatched().front() + "'");
@@ -99,13 +105,13 @@ struct options {
     opts.delay_url = args["delay-url"].as<std::string>();
   } catch (cxxopts::exceptions::exception const& e) {
     std::fprintf(stderr, "mihomo: %s\n\n%s", e.what(), cli.help().c_str());
-    return std::unexpected(2);
+    return {.opts = std::nullopt, .exit_code = 2};
   }
 
   while (!opts.url.empty() && opts.url.back() == '/') {
     opts.url.pop_back();
   }
-  return opts;
+  return {.opts = opts, .exit_code = 0};
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -670,10 +676,11 @@ void connections_tab(snapshot const& s, ui_state& ui) {
 } // namespace
 
 int main(int argc, char** argv) {
-  auto const opts = parse_options(argc, argv);
-  if (!opts) {
-    return opts.error();
+  auto const parsed = parse_options(argc, argv);
+  if (!parsed.opts) {
+    return parsed.exit_code;
   }
+  auto const& opts = parsed.opts;
   ::curl_global_init(CURL_GLOBAL_DEFAULT);
   xxx::init();
   {

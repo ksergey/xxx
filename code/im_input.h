@@ -40,7 +40,7 @@ private:
     static constexpr std::size_t max_buttons = static_cast<std::size_t>(im_mouse_button_id::last);
 
     struct button_state {
-      std::size_t clicked;
+      std::size_t clicked = 0;
       im_vec2 clicked_pos;
     };
 

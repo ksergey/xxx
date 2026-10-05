@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 4.0)
 
 project(xxx)
 
+# no C++ modules here: skip dependency scanning (with clang it would need clang-scan-deps)
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
+
 # Default build type
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Choose the type of build" FORCE)

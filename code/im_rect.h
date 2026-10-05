@@ -112,7 +112,9 @@ struct std::formatter<xxx::im_rect> {
   constexpr auto parse(std::format_parse_context& ctx) {
     return ctx.begin();
   }
-  auto format(xxx::im_rect const& r, std::format_context& ctx) const {
+  // templated on the context: std::formattable checks it with an unspecified output iterator (libc++)
+  template <typename FormatContext>
+  auto format(xxx::im_rect const& r, FormatContext& ctx) const {
     if (!r.valid()) {
       std::format_to(ctx.out(), "<!>");
     }
