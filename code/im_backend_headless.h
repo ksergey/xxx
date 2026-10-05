@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <chrono>
 #include <string>
 #include <string_view>
@@ -40,6 +41,7 @@ public:
   void push_mouse_wheel(int delta, im_vec2 pos);
 
   void set_clipboard(std::string_view text) override;
+  void wake_up() override;
 
   /// Last text put into clipboard
   [[nodiscard]] auto clipboard() const -> std::string const& {
@@ -83,6 +85,7 @@ private:
   im_clock::time_point now_ = im_clock::time_point();
   int frames_ = 0;
   std::string clipboard_;
+  std::atomic<bool> woken_{false};
 };
 
 } // namespace xxx

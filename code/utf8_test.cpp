@@ -115,7 +115,7 @@ TEST_SUITE("width table") {
     CHECK(char_width(0x1160) == 1);
   }
 
-  TEST_CASE("newer Unicode than termbox tables") {
+  TEST_CASE("recent Unicode additions are wide") {
     CHECK(char_width(0x1f1ae) == 2); // emoji added in Unicode 15+
     CHECK(char_width(0x16ff2) == 2); // ideographic, Unicode 17
   }

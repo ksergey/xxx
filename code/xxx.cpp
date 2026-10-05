@@ -145,9 +145,9 @@ void init(std::unique_ptr<im_backend> backend) {
 }
 
 void init() {
-  // shutdown first: termbox can't be initialized twice
+  // shutdown first: terminal can't be owned by two backends
   shutdown();
-  init(make_termbox_backend());
+  init(make_ansi_backend());
 }
 
 void shutdown() {
@@ -157,6 +157,10 @@ void shutdown() {
 
 void process_input_events() {
   process_input_events(std::chrono::milliseconds(0));
+}
+
+void wake_up() {
+  g_ctx->backend->wake_up();
 }
 
 auto process_input_events(std::chrono::milliseconds timeout) -> bool {
@@ -319,6 +323,9 @@ void render() {
 
   check_id_collisions();
   g_ctx->renderer.render(*g_ctx->backend);
+  if (std::exchange(g_ctx->next_frame_requested, false)) {
+    g_ctx->backend->wake_up();
+  }
 }
 
 void set_clipboard(std::string_view text) {
@@ -390,7 +397,7 @@ void layout_row_begin(std::size_t columns) {
   // row_layout.rect.max.y == row_layout.rect.min.y -> layout height unset (dynamic)
 }
 
-void layout_row_push(float ratio_or_width) {
+void layout_row_push(im_width width_spec) {
 
   // offset position x since previous column
   int offset_min_x = 0;
@@ -415,14 +422,17 @@ void layout_row_push(float ratio_or_width) {
   row_layout.row.cursor_max_y = std::max(row_layout.row.cursor_max_y, g_ctx->layout.cursor.y);
 
   auto width = 0;
-  if (ratio_or_width < 0.0f) {
-    // fill(n): rest of the row minus n columns
-    auto const leave = int(-ratio_or_width) - 1;
-    width = std::max(0, row_layout.rect.max.x - offset_min_x + 1 - leave);
-  } else if (ratio_or_width > 1.0f) {
-    width = int(ratio_or_width);
-  } else {
-    width = int(std::ceil(ratio_or_width * row_layout.rect.width()));
+  switch (width_spec.kind) {
+  case im_width::unit::fill:
+    // rest of the row minus n columns
+    width = std::max(0, row_layout.rect.max.x - offset_min_x + 1 - int(width_spec.value));
+    break;
+  case im_width::unit::cells:
+    width = int(width_spec.value);
+    break;
+  case im_width::unit::ratio:
+    width = int(std::ceil(width_spec.value * float(row_layout.rect.width())));
+    break;
   }
   auto const offset_max_x = std::min<int>(offset_min_x + width - 1, row_layout.rect.max.x);
 
@@ -535,6 +545,7 @@ void view_begin(std::string_view name, int flags, im_key_id shortcut, int height
 
   if (is_key_pressed(shortcut) && !view.active && !popup_open) {
     view.force_next_id = view.current_id;
+    g_ctx->next_frame_requested = true;
   }
   // TODO: skip frame?
 
@@ -709,6 +720,7 @@ namespace {
 void close_popup_now() noexcept {
   auto& popup = g_ctx->popup;
   popup.open_id = im_id();
+  g_ctx->next_frame_requested = true; // popup may be drawn in this frame already
   popup.close_requested = false;
   g_ctx->widget.active_id = popup.saved_widget_id;
 }
@@ -726,6 +738,7 @@ void open_popup(std::string_view id) {
   }
   popup.open_id = pid;
   popup.close_requested = false;
+  g_ctx->next_frame_requested = true; // popup_begin may come earlier in this frame
   // first popup widget takes focus
   g_ctx->widget.active_id = im_id();
   // the key or click that opened the popup is used up: it must not press a popup button
@@ -831,6 +844,7 @@ void popup_end() {
     // height was unknown: don't show misplaced popup, next frame is centered
     g_ctx->renderer.clear_layer(1);
     g_ctx->renderer.clear_layer(2);
+    g_ctx->next_frame_requested = true;
   } else if (auto const visible = rect.intersection(screen); visible) {
     g_ctx->view_hits.push_back({.id = popup.current_id, .view_id = popup.current_id, .rect = visible});
   }
@@ -914,6 +928,7 @@ void common_focusable_behaviour(im_id widget_id, im_rect const& widget_rect) noe
       (std::exchange(widget.focus_next, false) || widget.focus_request_id == widget_id)) {
     widget.focus_request_id = im_id();
     widget.focus_target = {.id = widget_id, .view_id = view.current_id, .in_popup = g_ctx->popup.current_id != im_id()};
+    g_ctx->next_frame_requested = true;
   }
 
   // TODO:
@@ -955,8 +970,10 @@ void common_focusable_behaviour(im_id widget_id, im_rect const& widget_rect) noe
     auto const& viewport = view.current_viewport;
     if (widget_rect.min.y < viewport.min.y) {
       scroll.offset -= viewport.min.y - widget_rect.min.y;
+      g_ctx->next_frame_requested = true;
     } else if (widget_rect.max.y > viewport.max.y) {
       scroll.offset += widget_rect.max.y - viewport.max.y;
+      g_ctx->next_frame_requested = true;
     }
   }
 }
@@ -1449,15 +1466,24 @@ auto table_impl(std::string_view label, std::span<im_table_column const> columns
   auto const available = std::max(0, widget_rect.width() - (ncols - 1));
   auto used = 0, fills = 0;
   for (int c = 0; c < ncols; ++c) {
-    auto const w = columns[std::size_t(c)].width;
-    widths[c] = w < 0.0f ? 0 : w > 1.0f ? int(w) : int(std::ceil(w * float(available)));
-    fills += w < 0.0f ? 1 : 0;
+    auto const& w = columns[std::size_t(c)].width;
+    switch (w.kind) {
+    case im_width::unit::cells:
+      widths[c] = int(w.value);
+      break;
+    case im_width::unit::ratio:
+      widths[c] = int(std::ceil(w.value * float(available)));
+      break;
+    case im_width::unit::fill:
+      widths[c] = 0;
+      ++fills;
+      break;
+    }
     used += widths[c];
   }
   for (int c = 0, rest = std::max(0, available - used); c < ncols; ++c) {
-    if (columns[std::size_t(c)].width < 0.0f) {
-      auto const leave = int(-columns[std::size_t(c)].width) - 1;
-      widths[c] = std::max(0, rest / fills - leave);
+    if (auto const& w = columns[std::size_t(c)].width; w.kind == im_width::unit::fill) {
+      widths[c] = std::max(0, rest / fills - int(w.value));
     }
   }
 

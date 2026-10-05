@@ -113,7 +113,7 @@ void im_renderer::do_draw_text(im_backend& backend, render_cmd const& cmd) {
   }
   for (auto const ch : text) {
     backend.set_cell(pos_x, pos.y, ch, style);
-    // termbox2 skips cells covered by wide char on present
+    // backends skip the cell covered by a wide char on present
     pos_x += char_width(ch);
   }
   if (cmd.draw_text_data.pad_right) {

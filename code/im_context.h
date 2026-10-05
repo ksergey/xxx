@@ -143,6 +143,10 @@ struct im_context {
   bool show_id_collisions = true;
 #endif
 
+  // something was deferred to the next frame (popup measuring, view switch, focus, scroll):
+  // render() wakes the event loop, so it doesn't wait for user input to show it
+  bool next_frame_requested = false;
+
   // width for the next widget, 0 - widget default (see set_next_item_width)
   int next_item_width = 0;
 

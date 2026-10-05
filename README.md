@@ -1,15 +1,15 @@
 # xxx
 
-Immediate mode text ui library for C++23.
-Built on top of [termbox/termbox2](https://github.com/termbox/termbox2) (previously [nsf/termbox](https://github.com/nsf/termbox)).
+Immediate mode text ui library for C++23. No dependencies: it talks to the terminal directly.
+Earlier versions were built on [termbox/termbox2](https://github.com/termbox/termbox2), thanks to its authors.
 
 ![Game of Life example](docs/life.svg)
 
 ## Features
 
 - Immediate mode API: describe UI every frame, no widget objects to manage
-- Event driven: frames are built on input or timeout, idle app uses no CPU
-- Automatic layout: rows with ratio, fixed or `fill()` width columns, `same_line`
+- Event driven: frames are built on input, timeout or `wake_up()` from another thread; idle app uses no CPU
+- Automatic layout: rows of `cells(n)`, `ratio(r)` or `fill()` wide columns, `same_line`
 - Views with border, title and shortcut; fixed, fit-content or `fill()` height
 - Scrolling: PgUp / PgDn, mouse wheel, auto-scroll to focused widget
 - Widgets: label, button, checkbox, list, table, tabs, text input (password, readline keys), spinner, progress
@@ -59,6 +59,29 @@ play / pause, speed, patterns table, population chart, event log and help in tab
 cmake -B build && cmake --build build
 ./build/example/life
 ```
+
+[`example/mihomo.cpp`](example/mihomo.cpp) is a dashboard for [mihomo](https://github.com/MetaCubeX/mihomo)
+(Clash.Meta) through its RESTful API over http or https: traffic, proxy groups (select a proxy, test
+delays) and connections (close them). It shows how to combine the UI with network: background threads
+do the requests and call `xxx::wake_up()` when new data arrives, the UI thread sleeps in
+`process_input_events(wait_forever)` and never blocks on the network.
+
+```sh
+# needs libcurl and nlohmann_json (e.g. apt install libcurl4-openssl-dev nlohmann-json3-dev); cxxopts comes with CPM
+./build/example/mihomo -u https://127.0.0.1:9090 -s "$SECRET" --cacert controller.crt
+```
+
+## Terminal support
+
+The library talks to the terminal directly (no curses, no terminfo) and works with xterm compatible
+terminals: practically every modern one (xterm, GNOME Terminal, Konsole, iTerm2, kitty, WezTerm,
+Alacritty, Windows Terminal over ssh, tmux, screen). It uses bracketed paste (pasted newlines don't
+press Enter), synchronized output (no flicker) and restores the terminal even when the app is killed
+by a signal or crashes.
+
+Environment:
+
+- `ESCDELAY=ms`: how long a lone Esc waits for the rest of a key sequence (default 25, raise it for slow ssh links)
 
 ## Testing
 

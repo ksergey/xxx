@@ -74,7 +74,7 @@ TEST_SUITE("unicode") {
     CHECK(char_width(U'日') == 2);
     CHECK(char_width(U'Ａ') == 2); // fullwidth latin
     CHECK(char_width(U'\U0001F600') == 2);
-    // zero-width and control chars take one cell in termbox2
+    // zero-width and control chars take one cell when drawn alone
     CHECK(char_width(0x0301) == 1);
     CHECK(char_width('\t') == 1);
   }

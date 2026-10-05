@@ -48,7 +48,7 @@ void for_each_codepoint(std::string_view input, F&& f) {
 }
 
 // number of terminal cells occupied by codepoint: 2 for wide (CJK, emoji), 1 otherwise
-// matches termbox2 rendering, which draws zero-width and non-printable codepoints in one cell
+// zero-width and non-printable codepoints are drawn in one cell, like terminals do for a lone codepoint
 [[nodiscard]] auto char_width(std::uint32_t ch) noexcept -> int;
 
 // number of terminal cells occupied by text

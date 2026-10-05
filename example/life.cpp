@@ -58,8 +58,8 @@ constexpr auto speeds = std::to_array({1, 2, 5, 10, 20, 30, 60}); // generations
 
 constexpr auto pattern_columns = std::to_array<xxx::im_table_column>({
     {"pattern", xxx::fill()},
-    {"cells", 5, xxx::im_align::right},
-    {"kind", 7, xxx::im_align::right},
+    {"cells", xxx::cells(5), xxx::im_align::right},
+    {"kind", xxx::cells(7), xxx::im_align::right},
 });
 
 // row-major cells for the patterns table
@@ -302,7 +302,7 @@ int main() {
     xxx::new_frame();
 
     xxx::layout_row_begin(2);
-    xxx::layout_row_push(sidebar_width);
+    xxx::layout_row_push(xxx::cells(sidebar_width));
     {
       xxx::view_begin("controls", xxx::im_key_id::ctrl_o);
       if (xxx::button(running ? "pause##run" : "play##run")) {
@@ -393,7 +393,7 @@ int main() {
       }
       xxx::view_end();
     }
-    xxx::layout_row_push(1.0f);
+    xxx::layout_row_push(xxx::fill());
     {
       xxx::view_begin(std::format("life{}##world", running ? "" : " (paused)"), xxx::im_view_flags_default,
           xxx::im_key_id(), xxx::fill());

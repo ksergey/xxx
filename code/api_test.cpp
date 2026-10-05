@@ -368,3 +368,76 @@ TEST_SUITE("tabs") {
 }
 
 } // namespace xxx::testing
+
+namespace xxx::testing {
+
+TEST_SUITE("im_width") {
+
+  TEST_CASE("number form keeps old meaning") {
+    static_assert(im_width(1).kind == im_width::unit::ratio); // 1 is 100%, the old trap
+    static_assert(im_width(0.25).kind == im_width::unit::ratio);
+    static_assert(im_width(0.5f).value == 0.5f);
+    static_assert(im_width(3).kind == im_width::unit::cells);
+    static_assert(im_width(fill()).kind == im_width::unit::fill);
+    static_assert(im_width(fill(4)).value == 4.0f);
+    CHECK(true);
+  }
+
+  TEST_CASE("explicit helpers") {
+    static_assert(cells(1).kind == im_width::unit::cells && cells(1).value == 1.0f);
+    static_assert(cells(-3).value == 0.0f);
+    static_assert(ratio(1.5f).value == 1.0f);
+    static_assert(ratio(-1.0f).value == 0.0f);
+    CHECK(true);
+  }
+
+  TEST_CASE("int variable as column width compiles (no narrowing)") {
+    auto const w = 5;
+    auto const column = im_table_column{"a", w};
+    CHECK(column.width.kind == im_width::unit::cells);
+  }
+
+  TEST_CASE("table column of exactly one cell") {
+    headless_app app(im_vec2(12, 3));
+    auto const cols = std::to_array<im_table_column>({{"", cells(1)}, {"name", fill()}});
+    auto const data = std::to_array({"*"sv, "first"sv, ""sv, "second"sv});
+    int selected = -1;
+    app.frame([&] {
+      view_begin("v", 0);
+      table("t", cols, data, selected);
+      view_end();
+    });
+    CHECK(app.line(1) == "* first");
+    CHECK(app.line(2) == "  second");
+  }
+
+  TEST_CASE("legacy width 1 is still the whole table") {
+    headless_app app(im_vec2(12, 3));
+    auto const cols = std::to_array<im_table_column>({{"", 1}, {"name", fill()}});
+    auto const data = std::to_array({"*"sv, "first"sv});
+    int selected = -1;
+    app.frame([&] {
+      view_begin("v", 0);
+      table("t", cols, data, selected);
+      view_end();
+    });
+    CHECK(app.line(1) == "*");
+  }
+
+  TEST_CASE("layout column of one cell and ratio") {
+    headless_app app(im_vec2(20, 2));
+    app.frame([] {
+      layout_row_begin(3);
+      layout_row_push(cells(1));
+      label("ab"); // cut by the next column
+      layout_row_push(ratio(0.5f));
+      label("x");
+      layout_row_push(fill());
+      label("y");
+      layout_row_end();
+    });
+    CHECK(app.line(0) == "ax         y");
+  }
+}
+
+} // namespace xxx::testing

@@ -4,6 +4,7 @@
 #pragma once
 
 #include <chrono>
+#include <cstdint>
 #include <source_location>
 #include <span>
 #include <string>
@@ -99,7 +100,8 @@ enum class im_color_id {
   last
 };
 
-/// Init library
+/// Init library on the terminal (xterm compatible terminals).
+/// Environment: ESCDELAY=ms - how long a lone Esc waits for the rest of a key sequence (default 25)
 void init();
 
 /// Shutdown library
@@ -119,6 +121,10 @@ auto process_input_events(std::chrono::milliseconds timeout) -> bool;
 
 /// Timeout for process_input_events(...): wait until input arrives
 inline constexpr auto wait_forever = std::chrono::milliseconds(-1);
+
+/// Thread-safe: wake up process_input_events(...) waiting in another thread, e.g. when a background
+/// thread has new data to show. The woken call returns true. Call only between init() and shutdown().
+void wake_up();
 
 /// Start drawing new frame
 void new_frame();
@@ -151,9 +157,47 @@ void pop_color(std::size_t cnt = 1);
 /// @param columns is number of columns in row
 void layout_row_begin(std::size_t columns);
 
-/// Push column
-/// @param ratio_or_width is ratio of parent layout width (in case of value < 1.0) or width in chars
-void layout_row_push(float ratio_or_width);
+/// Size meaning "the rest of available space minus \c n":
+///   view_begin(...) height - up to the bottom, leaving n rows (e.g. for a footer)
+///   layout_row_push(...) - rest of the row, leaving n columns
+///   set_next_item_width(...) - rest of the line, leaving n cells
+[[nodiscard]] constexpr auto fill(int n = 0) noexcept -> int {
+  return -1 - (n > 0 ? n : 0);
+}
+
+/// Width of a layout column (layout_row_push) or a table column (im_table_column)
+struct im_width {
+  enum class unit : std::uint8_t {
+    cells, // fixed number of cells
+    ratio, // part of the available width, 0..1
+    fill   // the rest of the width, minus `value` cells
+  };
+  unit kind = unit::fill;
+  float value = 0.0f;
+
+  constexpr im_width() noexcept = default;
+  constexpr im_width(unit k, float v) noexcept : kind(k), value(v) {}
+
+  /// Number form, kept for compatibility: > 1 cells, (0, 1] ratio, fill(n) the rest minus n.
+  /// Note: 1 means 100% of the width, not one cell. Prefer cells(n) / ratio(r) / fill(n).
+  constexpr im_width(double v) noexcept
+      : kind(v < 0.0 ? unit::fill : v > 1.0 ? unit::cells : unit::ratio), value(float(v < 0.0 ? -v - 1.0 : v)) {}
+  constexpr im_width(float v) noexcept : im_width(double(v)) {}
+  constexpr im_width(int v) noexcept : im_width(double(v)) {}
+};
+
+/// Width of exactly n cells
+[[nodiscard]] constexpr auto cells(int n) noexcept -> im_width {
+  return im_width(im_width::unit::cells, float(n > 0 ? n : 0));
+}
+
+/// Width as a part of the available width, 0..1
+[[nodiscard]] constexpr auto ratio(float r) noexcept -> im_width {
+  return im_width(im_width::unit::ratio, r < 0.0f ? 0.0f : r > 1.0f ? 1.0f : r);
+}
+
+/// Push column of the given width: cells(n), ratio(r), fill(n)
+void layout_row_push(im_width width);
 
 /// End row layout
 void layout_row_end();
@@ -204,13 +248,6 @@ constexpr auto im_view_flag_border = int(1 << 0);
 constexpr auto im_view_flag_title = int(1 << 1);
 constexpr auto im_view_flags_default = im_view_flag_border | im_view_flag_title;
 
-/// Size meaning "the rest of available space minus \c n":
-///   view_begin(...) height - up to the bottom, leaving n rows (e.g. for a footer)
-///   layout_row_push(...) - rest of the row, leaving n columns
-///   set_next_item_width(...) - rest of the line, leaving n cells
-[[nodiscard]] constexpr auto fill(int n = 0) noexcept -> int {
-  return -1 - (n > 0 ? n : 0);
-}
 
 /// Begin view
 /// flags:
@@ -341,7 +378,7 @@ enum class im_align { left, center, right };
 /// Table column
 struct im_table_column {
   std::string_view title;
-  float width = -1.0f; // like layout_row_push: > 1 cells, (0..1] ratio of table width, fill(n) - the rest
+  im_width width = fill(); // cells(n), ratio(r) of table width, fill(n): the rest, shared by fill columns
   im_align align = im_align::left;
 };
 

@@ -46,10 +46,13 @@ public:
 
   /// Put utf8 text into system clipboard (best effort, may be unsupported)
   virtual void set_clipboard([[maybe_unused]] std::string_view text) {}
+
+  /// Thread-safe: make a waiting poll_events() return (it reports an event)
+  virtual void wake_up() = 0;
 };
 
-/// Backend on top of termbox2 (real terminal)
-[[nodiscard]] auto make_termbox_backend() -> std::unique_ptr<im_backend>;
+/// Terminal backend for xterm compatible terminals
+[[nodiscard]] auto make_ansi_backend() -> std::unique_ptr<im_backend>;
 
 /// Init library with custom backend
 void init(std::unique_ptr<im_backend> backend);

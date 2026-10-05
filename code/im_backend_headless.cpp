@@ -22,6 +22,9 @@ auto im_backend_headless::now() const -> im_clock::time_point {
 }
 
 auto im_backend_headless::poll_events(im_input& input, std::chrono::milliseconds timeout) -> bool {
+  if (woken_.exchange(false) && events_.empty()) {
+    return true; // woken up by another thread: the wait ends right away
+  }
   if (events_.empty()) {
     if (timeout.count() > 0) {
       now_ += timeout;
@@ -69,6 +72,10 @@ void im_backend_headless::set_cell(int x, int y, std::uint32_t ch, im_style cons
 void im_backend_headless::present() {
   front_ = back_;
   ++frames_;
+}
+
+void im_backend_headless::wake_up() {
+  woken_ = true;
 }
 
 void im_backend_headless::set_clipboard(std::string_view text) {
