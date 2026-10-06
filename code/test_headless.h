@@ -26,16 +26,15 @@ public:
     backend_ = backend.get();
     xxx::init(std::move(backend));
 
-    for (auto const id : {im_color_id::view_active_border, im_color_id::view_active_title,
-             im_color_id::button_active_text, im_color_id::button_active_fx, im_color_id::input_active_text,
-             im_color_id::input_active_prompt}) {
-      xxx::set_default_color(id, test_active);
+    for (auto const role : {im_role::border_focused, im_role::title_focused, im_role::accent, im_role::input_focused}) {
+      xxx::set_style(role, {.fg = test_active, .bg = {}, .attrs = 0});
     }
-    for (auto const id : {im_color_id::view_inactive_border, im_color_id::view_inactive_title,
-             im_color_id::button_inactive_text, im_color_id::button_inactive_fx, im_color_id::input_inactive_text,
-             im_color_id::input_inactive_prompt}) {
-      xxx::set_default_color(id, test_inactive);
+    for (auto const role : {im_role::border, im_role::title, im_role::muted, im_role::input}) {
+      xxx::set_style(role, {.fg = test_inactive, .bg = {}, .attrs = 0});
     }
+    // keep the attributes of the default theme: reverse means focus, underline means selection
+    xxx::set_style(im_role::focus, {.fg = test_active, .bg = {}, .attrs = im_attr_reverse});
+    xxx::set_style(im_role::selection, {.fg = test_inactive, .bg = {}, .attrs = im_attr_underline});
   }
 
   ~headless_app() {
@@ -71,7 +70,31 @@ public:
     return im_color(backend_->cell(x, y).style.fg);
   }
 
-  /// Cells drawn with reverse attribute (text cursor, focused placeholder)
+  /// Is any cell of row y reversed (focused widget there)
+  [[nodiscard]] auto reversed_in_row(int y) const -> bool {
+    for (auto const p : reversed_cells()) {
+      if (p.y == y) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Cells drawn with underline attribute (selection of an unfocused list / table / tabs)
+  [[nodiscard]] auto underlined_cells() const -> std::vector<im_vec2> {
+    auto result = std::vector<im_vec2>();
+    auto const size = backend_->size();
+    for (int y = 0; y < size.y; ++y) {
+      for (int x = 0; x < size.x; ++x) {
+        if (backend_->cell(x, y).style.attrs & im_attr_underline) {
+          result.emplace_back(x, y);
+        }
+      }
+    }
+    return result;
+  }
+
+  /// Cells drawn with reverse attribute: where the keys go (focused widget, text cursor)
   [[nodiscard]] auto reversed_cells() const -> std::vector<im_vec2> {
     auto result = std::vector<im_vec2>();
     auto const size = backend_->size();

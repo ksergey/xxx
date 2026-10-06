@@ -89,6 +89,12 @@ public:
         [&](im_input_event const& e) { return e.ch == 0 && e.key == id && e.mods == mods; });
   }
 
+  /// Typed character, without Alt
+  [[nodiscard]] auto is_char_pressed(std::uint32_t ch) const noexcept -> bool {
+    return std::any_of(keyboard_.input_events.begin(), keyboard_.input_events.end(),
+        [&](im_input_event const& e) { return e.ch == ch && !(e.mods & im_mod_alt); });
+  }
+
   /// Alt + character: not typed text
   [[nodiscard]] auto is_alt_pressed(std::uint32_t ch) const noexcept -> bool {
     return std::any_of(keyboard_.input_events.begin(), keyboard_.input_events.end(),
@@ -170,5 +176,28 @@ public:
     mouse_.wheel = 0;
   }
 };
+
+/// Feed one terminal event into the frame input state
+inline void apply_event(im_event const& e, im_input& input) noexcept {
+  switch (e.kind) {
+  case im_event::type::key:
+    input.add_key_event(e.key, e.mods);
+    break;
+  case im_event::type::text:
+    input.add_character(e.ch, e.mods);
+    break;
+  case im_event::type::mouse_move:
+    input.add_mouse_pos_event(e.pos);
+    break;
+  case im_event::type::mouse_press:
+    input.add_mouse_button_event(e.button, e.pos);
+    break;
+  case im_event::type::mouse_wheel:
+    input.add_mouse_wheel_event(e.wheel, e.pos);
+    break;
+  case im_event::type::resize:
+    break; // size comes from the backend
+  }
+}
 
 } // namespace xxx

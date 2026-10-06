@@ -222,8 +222,10 @@ TEST_SUITE("list") {
       list("l", fruits, selected, 2);
       view_end();
     });
-    REQUIRE(app.reversed_cells().size() == 12);
-    CHECK(app.reversed_cells().front().y == 2);
+    // reverse means focus: the unfocused list underlines its selection instead
+    CHECK_FALSE(app.reversed_in_row(2));
+    REQUIRE(app.underlined_cells().size() == 12);
+    CHECK(app.underlined_cells().front().y == 2);
     CHECK(app.fg(0, 2) == test_inactive);
   }
 }

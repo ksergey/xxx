@@ -172,6 +172,17 @@ TEST_SUITE("modifiers: widgets") {
     CHECK(pressed == 1);
   }
 
+  TEST_CASE("is_char_pressed: typed letters, not alt shortcuts") {
+    headless_app app(im_vec2(10, 1));
+    auto typed = false, alt = false;
+    app.backend().push_text("r");
+    app.frame([&] { typed = is_char_pressed('r'); });
+    app.backend().push_alt('r');
+    app.frame([&] { alt = is_char_pressed('r'); });
+    CHECK(typed);
+    CHECK_FALSE(alt);
+  }
+
   TEST_CASE("alt + ? doesn't open help") {
     headless_app app(im_vec2(30, 3));
     auto const ui = [] {

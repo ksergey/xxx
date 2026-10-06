@@ -232,7 +232,7 @@ TEST_SUITE("mouse: text_input") {
 
   TEST_CASE("click focuses input and places cursor") {
     input_app app("hello");
-    REQUIRE(app.reversed_cells().empty());
+    REQUIRE_FALSE(app.reversed_in_row(1)); // the button has focus, the input shows no cursor
     app.click(2 + 2); // on first 'l'
     CHECK(app.cursor() == 2);
     app.backend().push_text("X");

@@ -65,8 +65,9 @@ void im_renderer::do_fill_rect(im_backend& backend, render_cmd const& cmd) {
   auto const& rect = cmd.fill_rect_data.rect;
   auto const& ch = cmd.fill_rect_data.ch;
 
-  for (int pos_x : std::views::iota(rect.min.x, rect.max.x + 1)) {
-    for (int pos_y : std::views::iota(rect.min.y, rect.max.y + 1)) {
+  // plain loops: std::views::iota(begin, end) with begin > end doesn't stop (degenerate rects)
+  for (int pos_y = rect.min.y; pos_y <= rect.max.y; ++pos_y) {
+    for (int pos_x = rect.min.x; pos_x <= rect.max.x; ++pos_x) {
       backend.set_cell(pos_x, pos_y, ch, style);
     }
   }
@@ -76,21 +77,14 @@ void im_renderer::do_draw_rect(im_backend& backend, render_cmd const& cmd) {
   auto const& style = cmd.style;
   auto const& rect = cmd.draw_rect_data.rect;
 
-  for (auto const& [pos_x, pos_y, ch] : std::views::zip(std::views::iota(rect.min.x + 1, rect.max.x),
-           std::views::repeat(rect.min.y), std::views::repeat(border_style[5]))) {
-    backend.set_cell(pos_x, pos_y, ch, style);
+  // plain loops: a rect one row / column high has no sides, and must not loop forever
+  for (int pos_x = rect.min.x + 1; pos_x < rect.max.x; ++pos_x) {
+    backend.set_cell(pos_x, rect.min.y, border_style[5], style);
+    backend.set_cell(pos_x, rect.max.y, border_style[5], style);
   }
-  for (auto const& [pos_x, pos_y, ch] : std::views::zip(std::views::iota(rect.min.x + 1, rect.max.x),
-           std::views::repeat(rect.max.y), std::views::repeat(border_style[5]))) {
-    backend.set_cell(pos_x, pos_y, ch, style);
-  }
-  for (auto const& [pos_x, pos_y, ch] : std::views::zip(std::views::repeat(rect.min.x),
-           std::views::iota(rect.min.y + 1, rect.max.y), std::views::repeat(border_style[4]))) {
-    backend.set_cell(pos_x, pos_y, ch, style);
-  }
-  for (auto const& [pos_x, pos_y, ch] : std::views::zip(std::views::repeat(rect.max.x),
-           std::views::iota(rect.min.y + 1, rect.max.y), std::views::repeat(border_style[4]))) {
-    backend.set_cell(pos_x, pos_y, ch, style);
+  for (int pos_y = rect.min.y + 1; pos_y < rect.max.y; ++pos_y) {
+    backend.set_cell(rect.min.x, pos_y, border_style[4], style);
+    backend.set_cell(rect.max.x, pos_y, border_style[4], style);
   }
   auto const& top_left = rect.top_left();
   backend.set_cell(top_left.x, top_left.y, border_style[0], style);

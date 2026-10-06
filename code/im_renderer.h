@@ -36,20 +36,12 @@ namespace xxx {
 
 class im_backend;
 
-// text attributes, combined with |
-constexpr auto im_attr_bold = std::uint32_t(1 << 0);
-constexpr auto im_attr_dim = std::uint32_t(1 << 1);
-constexpr auto im_attr_italic = std::uint32_t(1 << 2);
-constexpr auto im_attr_underline = std::uint32_t(1 << 3);
-constexpr auto im_attr_blink = std::uint32_t(1 << 4);
-constexpr auto im_attr_reverse = std::uint32_t(1 << 5);
-constexpr auto im_attr_strikeout = std::uint32_t(1 << 6);
 
 /// Cell style: 24-bit colors (0 - terminal default) and attributes.
 /// Backend independent: each backend translates it to its own representation.
 struct im_style {
-  std::uint32_t fg = 0;
-  std::uint32_t bg = 0;
+  std::uint32_t fg = im_color::default_tag; // im_color value
+  std::uint32_t bg = im_color::default_tag;
   std::uint32_t attrs = 0;
 
   constexpr im_style() = default;

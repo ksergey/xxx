@@ -186,3 +186,45 @@ TEST_SUITE("ansi screen") {
 }
 
 } // namespace xxx::testing
+
+namespace xxx::testing {
+
+TEST_SUITE("ansi screen: colors") {
+
+  auto one_cell = [](ansi_screen::color_mode mode, im_style const& style) {
+    ansi_screen s;
+    s.set_color_mode(mode);
+    s.resize(im_vec2(1, 1));
+    s.clear(style);
+    auto out = std::string();
+    s.present(out);
+    return out;
+  };
+  using mode = ansi_screen::color_mode;
+
+  TEST_CASE("palette colors use the short classic codes") {
+    CHECK(one_cell(mode::truecolor, im_style(ansi::red)) == "\x1b[?2026h\x1b[1;1H\x1b[0;31m \x1b[?2026l");
+    CHECK(one_cell(mode::truecolor, im_style(ansi::bright_cyan, ansi::blue)).find("\x1b[0;96;44m") != std::string::npos);
+    CHECK(one_cell(mode::truecolor, im_style(im_color::indexed(200))).find(";38;5;200m") != std::string::npos);
+  }
+
+  TEST_CASE("black is black, not the terminal default") {
+    CHECK(one_cell(mode::truecolor, im_style(im_color(0x000000u))).find(";38;2;0;0;0m") != std::string::npos);
+  }
+
+  TEST_CASE("24-bit colors are mapped to what the terminal shows") {
+    auto const red = im_style(im_color(0xff0000u));
+    CHECK(one_cell(mode::truecolor, red).find(";38;2;255;0;0m") != std::string::npos);
+    CHECK(one_cell(mode::palette256, red).find(";38;5;196m") != std::string::npos);
+    CHECK(one_cell(mode::ansi16, red).find("\x1b[0;91m") != std::string::npos);
+    // palette above 15 in a 16 color terminal
+    CHECK(one_cell(mode::ansi16, im_style(im_color::indexed(196))).find("\x1b[0;91m") != std::string::npos);
+  }
+
+  TEST_CASE("NO_COLOR mode: attributes only") {
+    auto const out = one_cell(mode::none, im_style(ansi::red, ansi::blue, im_attr_reverse));
+    CHECK(out == "\x1b[?2026h\x1b[1;1H\x1b[0;7m \x1b[?2026l");
+  }
+}
+
+} // namespace xxx::testing

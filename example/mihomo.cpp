@@ -37,6 +37,7 @@
 #include <nlohmann/json.hpp>
 
 #include <xxx.h>
+#include "theme_file.h"
 
 namespace {
 
@@ -50,6 +51,7 @@ using json = nlohmann::json;
 
 struct options {
   std::string url = "http://127.0.0.1:9090";
+  std::string theme; // JSON theme file
   std::string secret;
   std::string cacert;
   std::string delay_url = "https://www.gstatic.com/generate_204";
@@ -79,6 +81,7 @@ struct parsed_options {
           cxxopts::value<std::string>(), "FILE")
       ("delay-url", "what mihomo fetches through a proxy to measure delay",
           cxxopts::value<std::string>()->default_value(opts.delay_url))
+      ("theme", "colors from a JSON theme file (see example/theme_file.h)", cxxopts::value<std::string>(), "FILE")
       ("h,help", "print this help");
   // clang-format on
 
@@ -103,6 +106,9 @@ struct parsed_options {
       opts.cacert = args["cacert"].as<std::string>();
     }
     opts.delay_url = args["delay-url"].as<std::string>();
+    if (args.count("theme")) {
+      opts.theme = args["theme"].as<std::string>();
+    }
   } catch (cxxopts::exceptions::exception const& e) {
     std::fprintf(stderr, "mihomo: %s\n\n%s", e.what(), cli.help().c_str());
     return {.opts = std::nullopt, .exit_code = 2};
@@ -561,29 +567,23 @@ void header(mihomo_api const& api, snapshot const& s, int& tab) {
   xxx::view_begin(std::format("mihomo {}##header", api.url()), xxx::im_view_flags_default, xxx::im_key_id::ctrl_t);
   if (s.connected) {
     auto const last = s.traffic.empty() ? traffic_sample() : s.traffic.back();
-    xxx::push_color(xxx::im_color_id::text, 0x8ec07c_c);
-    xxx::label(std::format("● {}", s.version));
-    xxx::pop_color();
+    xxx::label(std::format("● {}", s.version), xxx::im_role::success);
     xxx::same_line();
     xxx::label(std::format("  ↑ {}/s  ↓ {}/s   total ↑ {} ↓ {}   {} connections", human(last.up), human(last.down),
         human(s.upload_total), human(s.download_total), s.connections.size()));
   } else {
-    xxx::push_color(xxx::im_color_id::text, 0xfb4934_c);
-    xxx::label(std::format("✕ {}", s.error.empty() ? "connecting..." : s.error));
-    xxx::pop_color();
+    xxx::label(std::format("✕ {}", s.error.empty() ? "connecting..." : s.error), xxx::im_role::error);
   }
   if (s.connected && !s.error.empty()) {
-    xxx::push_color(xxx::im_color_id::text, 0xfabd2f_c);
-    xxx::label(s.error); // e.g. a failed command
-    xxx::pop_color();
+    xxx::label(s.error, xxx::im_role::warning); // e.g. a failed command
   }
   auto const cells = std::max(1, xxx::get_screen_rect().width() - 4);
   xxx::label("↓");
   xxx::same_line();
-  sparkline(s.traffic, &traffic_sample::down, cells, 0x83a598_c);
+  sparkline(s.traffic, &traffic_sample::down, cells, xxx::ansi::cyan);
   xxx::label("↑");
   xxx::same_line();
-  sparkline(s.traffic, &traffic_sample::up, cells, 0xd3869b_c);
+  sparkline(s.traffic, &traffic_sample::up, cells, xxx::ansi::magenta);
   xxx::tabs("tabs", tabs, tab);
   xxx::view_end();
 }
@@ -683,6 +683,13 @@ int main(int argc, char** argv) {
   auto const& opts = parsed.opts;
   ::curl_global_init(CURL_GLOBAL_DEFAULT);
   xxx::init();
+  if (!opts->theme.empty()) {
+    if (auto const error = theme_file::load_theme_file(opts->theme); !error.empty()) {
+      xxx::shutdown();
+      std::fprintf(stderr, "mihomo: %s\n", error.c_str());
+      return 2;
+    }
+  }
   {
     // background threads start here and are joined before xxx::shutdown(): they call xxx::wake_up()
     auto api = mihomo_api(*opts);

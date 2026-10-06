@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstdint>
 #include <source_location>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -86,31 +87,74 @@ enum class im_key_id {
 /// Mouse button id
 enum class im_mouse_button_id { left, middle, right, last };
 
-/// Color id
-enum class im_color_id {
-  text,
-  background,
-  border,
-  view_inactive_border,
-  view_inactive_title,
-  view_active_border,
-  view_active_title,
-  button_inactive_background,
-  button_inactive_text,
-  button_inactive_fx,
-  button_active_background,
-  button_active_text,
-  button_active_fx,
-  input_inactive_background,
-  input_inactive_text,
-  input_inactive_prompt,
-  input_active_background,
-  input_active_text,
-  input_active_prompt,
-  input_placeholder,
+/// Terminal input event (see terminal.h): what the terminal reported, in order
+struct im_event {
+  enum class type : std::uint8_t {
+    key,         // key, mods; Space is reported as text ' ' followed by key space
+    text,        // ch (one codepoint), mods (im_mod_alt: a shortcut, not text)
+    mouse_move,  // pos
+    mouse_press, // button, pos
+    mouse_wheel, // wheel (> 0 down), pos
+    resize       // pos: new size in cells
+  };
+  type kind = type::key;
+  im_key_id key = im_key_id();
+  std::uint32_t ch = 0;
+  std::uint8_t mods = 0;
+  im_mouse_button_id button = im_mouse_button_id::left;
+  im_vec2 pos = im_vec2();
+  int wheel = 0;
+};
 
+/// Text attributes, combined with |
+constexpr auto im_attr_bold = std::uint32_t(1 << 0);
+constexpr auto im_attr_dim = std::uint32_t(1 << 1);
+constexpr auto im_attr_italic = std::uint32_t(1 << 2);
+constexpr auto im_attr_underline = std::uint32_t(1 << 3);
+constexpr auto im_attr_blink = std::uint32_t(1 << 4);
+constexpr auto im_attr_reverse = std::uint32_t(1 << 5);
+constexpr auto im_attr_strikeout = std::uint32_t(1 << 6);
+
+/// Theme roles: what a style means, not which widget draws it
+enum class im_role : std::uint8_t {
+  text,         // regular text and the background of everything
+  muted,        // secondary: unfocused buttons and tabs, hints
+  accent,       // highlight: focused button brackets and prompt, spinner, progress
+  border,       // view border, button brackets
+  border_focused,
+  title,        // view title
+  title_focused,
+  focus,        // focused item: button label, checkbox box, list row, tab, text cursor
+  selection,    // selected item of an unfocused list / table / tabs
+  header,       // table header
+  input,        // text input
+  input_focused,
+  placeholder,  // text input placeholder
+  error,        // for applications: label("...", im_role::error)
+  warning,
+  success,
   last
 };
+
+/// Style of a role. Unset colors are taken from im_role::text (so a theme background applies everywhere)
+struct im_role_style {
+  std::optional<im_color> fg;
+  std::optional<im_color> bg;
+  std::uint32_t attrs = 0;
+};
+
+/// Built-in themes
+enum class im_theme_preset {
+  terminal, // default: 16 colors of the user's terminal scheme, works on light and dark backgrounds
+  classic   // fixed 24-bit palette for dark backgrounds
+};
+
+class terminal;
+
+/// Init library on a terminal owned by the application (terminal.h): the application waits on its
+/// descriptors in its own event loop; process_input_events() then never waits, it takes queued events.
+/// The terminal must outlive shutdown().
+void init(terminal& term);
 
 /// Init library on the terminal (xterm compatible terminals).
 /// Environment: ESCDELAY=ms - how long a lone Esc waits for the rest of a key sequence (default 25)
@@ -165,18 +209,46 @@ void debug();
 /// is_key_pressed(id) is true for any modifiers.
 [[nodiscard]] auto is_key_pressed(im_key_id id, int mods) -> bool;
 
+/// True if the character was typed (without Alt) this frame. Shortcuts with plain letters
+/// are safe when no text input has focus: check wants_text_input() first.
+[[nodiscard]] auto is_char_pressed(char32_t ch) -> bool;
+
 /// True if Alt + character was pressed (e.g. 'x'; Alt+Shift+x gives 'X').
 /// Such presses never reach text inputs: safe shortcuts even while typing.
 [[nodiscard]] auto is_alt_pressed(char32_t ch) -> bool;
 
-/// Set default color
-void set_default_color(im_color_id id, im_color color);
+/// Replace the whole theme with a built-in one
+void use_theme(im_theme_preset preset);
 
-/// Save current color and set new
-void push_color(im_color_id id, im_color color);
+/// Set style of a role in the theme
+void set_style(im_role role, im_role_style const& style);
 
-/// Pop color state
-void pop_color(std::size_t cnt = 1);
+/// Current style of a role (overrides from push_style applied), unset colors resolved
+[[nodiscard]] auto get_style(im_role role) -> im_role_style;
+
+/// Style of a role as set in the theme: unset colors stay unset (they follow im_role::text).
+/// Use it to change a part of a style and set it back without freezing the inherited colors.
+[[nodiscard]] auto get_theme_style(im_role role) -> im_role_style;
+
+/// Override style of a role for the widgets that follow, until pop_style
+void push_style(im_role role, im_role_style const& style);
+
+/// Undo the last \c count push_style calls
+void pop_style(std::size_t count = 1);
+
+/// push_style for a scope: the style is restored when the object goes away
+///   { auto const s = xxx::scoped_style(xxx::im_role::text, {.fg = xxx::ansi::red}); xxx::label("lost"); }
+class [[nodiscard]] scoped_style {
+public:
+  scoped_style(im_role role, im_role_style const& style) {
+    push_style(role, style);
+  }
+  ~scoped_style() {
+    pop_style();
+  }
+  scoped_style(scoped_style const&) = delete;
+  scoped_style& operator=(scoped_style const&) = delete;
+};
 
 /// Begin row layout
 /// @param columns is number of columns in row
@@ -269,6 +341,10 @@ void key_hint(std::string_view keys, std::string_view action);
 /// Built-in help popup: application keys (key_hint), view shortcuts and navigation keys. On by default
 void enable_help(bool enabled);
 
+/// Esc goes back to the previously active view (when no popup is open). On by default;
+/// turn off if the application uses Esc itself. Esc is consumed only when it went back.
+void enable_esc_back(bool enabled);
+
 /// Widget: one line of keys for the focused widget (e.g. at the bottom of the screen), \c extra is appended
 void key_hints(std::string_view extra = {});
 
@@ -352,6 +428,12 @@ void close_popup();
 /// theme:
 ///   text - label color
 void label(std::string_view text);
+
+/// Label drawn in the style of a role, e.g. label("connection lost", im_role::error)
+void label(std::string_view text, im_role role);
+
+/// Label with its own style, e.g. label("12 ms", {.fg = ansi::green}); unset colors come from im_role::text
+void label(std::string_view text, im_role_style const& style);
 
 /// Widget: button
 /// @param label is widget label

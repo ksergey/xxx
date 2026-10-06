@@ -360,3 +360,36 @@ TEST_SUITE("view scroll focus") {
 }
 
 } // namespace xxx::testing
+
+namespace xxx::testing {
+
+// regression: a bordered view squeezed to one row hung render() (iota with begin > end)
+TEST_SUITE("degenerate views") {
+
+  TEST_CASE("bordered view of one row does not hang") {
+    headless_app app(im_vec2(20, 6));
+    app.frame([] {
+      view_begin("v", im_view_flags_default, {}, 1);
+      label("x");
+      view_end();
+      label("after");
+    });
+    CHECK(app.screen().find("after") != std::string::npos);
+  }
+
+  TEST_CASE("fill() with no room left does not hang") {
+    headless_app app(im_vec2(20, 4));
+    app.frame([] {
+      label("1");
+      label("2");
+      label("3");
+      view_begin("squeezed", im_view_flags_default, {}, fill(1));
+      label("x");
+      view_end();
+      label("hints");
+    });
+    CHECK(app.backend().frames() == 1);
+  }
+}
+
+} // namespace xxx::testing

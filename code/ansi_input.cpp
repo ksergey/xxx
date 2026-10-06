@@ -11,6 +11,30 @@
 
 namespace xxx {
 
+// collects events: same method names as im_input, so the parsing code reads the same
+struct ansi_input_parser::sink {
+  std::vector<im_event>& out;
+
+  void add_key_event(im_key_id id, std::uint8_t mods = 0) {
+    out.push_back({.kind = im_event::type::key, .key = id, .mods = mods});
+  }
+  void add_character(std::uint32_t ch, std::uint8_t mods = 0) {
+    out.push_back({.kind = im_event::type::text, .ch = ch, .mods = mods});
+  }
+  void add_mouse_pos_event(im_vec2 pos) {
+    out.push_back({.kind = im_event::type::mouse_move, .pos = pos});
+  }
+  void add_mouse_button_event(im_mouse_button_id button, im_vec2 pos) {
+    out.push_back({.kind = im_event::type::mouse_press, .button = button, .pos = pos});
+  }
+  void add_mouse_wheel_event(int delta, im_vec2 pos) {
+    out.push_back({.kind = im_event::type::mouse_wheel, .pos = pos, .wheel = delta});
+  }
+  [[nodiscard]] auto size() const noexcept -> std::size_t {
+    return out.size();
+  }
+};
+
 namespace {
 
 constexpr auto esc = '\x1b';
@@ -25,7 +49,8 @@ constexpr auto max_sequence = std::size_t(64);
   return value;
 }
 
-void add_control(unsigned char b, im_input& input, std::uint8_t mods) {
+template <typename Sink>
+void add_control(unsigned char b, Sink& input, std::uint8_t mods) {
   switch (b) {
   case 0x08:
     return input.add_key_event(im_key_id::backspace, mods);
@@ -55,7 +80,8 @@ void add_control(unsigned char b, im_input& input, std::uint8_t mods) {
 
 } // namespace
 
-auto ansi_input_parser::feed(std::string_view bytes, im_input& input) -> bool {
+auto ansi_input_parser::feed(std::string_view bytes, std::vector<im_event>& out) -> bool {
+  auto input = sink{out};
   produced_ = false;
   buffer_.append(bytes);
 
@@ -93,7 +119,8 @@ auto ansi_input_parser::feed(std::string_view bytes, im_input& input) -> bool {
   return produced_;
 }
 
-auto ansi_input_parser::flush(im_input& input) -> bool {
+auto ansi_input_parser::flush(std::vector<im_event>& out) -> bool {
+  auto input = sink{out};
   produced_ = false;
   if (in_paste_) {
     return false; // paste continues, its terminator will come
@@ -107,7 +134,7 @@ auto ansi_input_parser::flush(im_input& input) -> bool {
   return produced_;
 }
 
-void ansi_input_parser::handle_paste_bytes(std::string_view bytes, im_input& input) {
+void ansi_input_parser::handle_paste_bytes(std::string_view bytes, sink& input) {
   auto used = std::size_t(0);
   while (used < bytes.size()) {
     std::uint32_t ch = 0;
@@ -131,7 +158,7 @@ void ansi_input_parser::handle_paste_bytes(std::string_view bytes, im_input& inp
   buffer_.erase(0, used);
 }
 
-auto ansi_input_parser::parse_one(im_input& input) -> result {
+auto ansi_input_parser::parse_one(sink& input) -> result {
   auto const b = static_cast<unsigned char>(buffer_[0]);
 
   if (b == esc) {
@@ -193,9 +220,9 @@ auto ansi_input_parser::parse_one(im_input& input) -> result {
   }
 
   if (b < 0x20 || b == 0x7f) {
-    auto const before = input.get_input_events().size();
+    auto const before = input.size();
     add_control(b, input, std::exchange(alt_next_, false) ? std::uint8_t(im_mod_alt) : std::uint8_t(0));
-    produced_ = produced_ || input.get_input_events().size() != before;
+    produced_ = produced_ || input.size() != before;
     consumed_ = 1;
     return result::done;
   }
@@ -215,7 +242,7 @@ auto ansi_input_parser::parse_one(im_input& input) -> result {
   return result::done;
 }
 
-auto ansi_input_parser::parse_csi(im_input& input) -> result {
+auto ansi_input_parser::parse_csi(sink& input) -> result {
   // ESC [ params (0x30-0x3f)* intermediates (0x20-0x2f)* final (0x40-0x7e)
   auto i = std::size_t(2);
   while (i < buffer_.size()) {

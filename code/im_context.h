@@ -63,6 +63,11 @@ struct im_context {
     int current_focusable = 0; // focusable widgets in current view so far
 
     std::unordered_map<im_id, view_scroll> scroll;
+
+    // focus history: Esc goes back; returning to a view restores its focused widget
+    std::vector<im_id> history;
+    std::unordered_map<im_id, im_id> last_widget;
+    bool esc_back = true;
   } view;
 
   struct {

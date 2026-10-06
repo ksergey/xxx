@@ -44,8 +44,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     std::string string_value_3 = "";
 
     xxx::init();
-    xxx::set_default_color(xxx::im_color_id::text, {});
-    xxx::set_default_color(xxx::im_color_id::background, {});
+    xxx::set_style(xxx::im_role::text, {.fg = xxx::im_color(), .bg = xxx::im_color(), .attrs = 0});
 
     while (true) {
       xxx::process_input_events();
@@ -59,7 +58,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
 
       xxx::spinner("first spinner");
 
-      xxx::push_color(xxx::im_color_id::background, 0x4444ee_c);
+      xxx::push_style(xxx::im_role::text, {.fg = {}, .bg = 0x4444ee_c, .attrs = 0});
       if (xxx::canvas_begin(xxx::im_vec2{32, 32})) {
         for (float angle = 0.0; angle < 360.0; angle += 0.1) {
           auto const arg = angle * std::numbers::pi_v<float> / 180.0;
@@ -69,44 +68,44 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
         }
         xxx::canvas_end();
       }
-      xxx::pop_color();
+      xxx::pop_style();
 
       xxx::view_begin("view1");
       xxx::label(string_value_1);
       xxx::label(string_value_2);
       xxx::layout_row_begin(3);
       xxx::layout_row_push(0.2);
-      xxx::push_color(xxx::im_color_id::background, 0x111111_c);
+      xxx::push_style(xxx::im_role::text, {.fg = {}, .bg = 0x111111_c, .attrs = 0});
       xxx::label("row 1 column 1");
-      xxx::pop_color();
+      xxx::pop_style();
       xxx::layout_row_push(0.4);
-      xxx::push_color(xxx::im_color_id::background, 0x222222_c);
+      xxx::push_style(xxx::im_role::text, {.fg = {}, .bg = 0x222222_c, .attrs = 0});
       xxx::label("row 1 column 2");
-      xxx::pop_color();
+      xxx::pop_style();
       xxx::layout_row_push(0.99);
-      xxx::push_color(xxx::im_color_id::background, 0x333333_c);
+      xxx::push_style(xxx::im_role::text, {.fg = {}, .bg = 0x333333_c, .attrs = 0});
       xxx::label("row 1 column 3 line 1");
       xxx::label("row 1 column 3 line 2");
       xxx::label("row 1 column 3 line 3");
-      xxx::pop_color();
+      xxx::pop_style();
       xxx::layout_row_end();
       xxx::view_end();
 
       xxx::view_begin("view2", xxx::im_key_id::ctrl_f);
       xxx::layout_row_begin(3);
       xxx::layout_row_push(0.4);
-      xxx::push_color(xxx::im_color_id::background, 0x444444_c);
+      xxx::push_style(xxx::im_role::text, {.fg = {}, .bg = 0x444444_c, .attrs = 0});
       xxx::label("row 2 column 1 line 1");
       xxx::label("row 2 column 1 line 2");
-      xxx::pop_color();
+      xxx::pop_style();
       xxx::layout_row_push(0.2);
-      xxx::push_color(xxx::im_color_id::background, 0x555555_c);
+      xxx::push_style(xxx::im_role::text, {.fg = {}, .bg = 0x555555_c, .attrs = 0});
       xxx::label("row 2 column 2");
-      xxx::pop_color();
+      xxx::pop_style();
       xxx::layout_row_push(0.4);
-      xxx::push_color(xxx::im_color_id::background, 0x666666_c);
+      xxx::push_style(xxx::im_role::text, {.fg = {}, .bg = 0x666666_c, .attrs = 0});
       xxx::label("row 2 column 3 line 1");
-      xxx::pop_color();
+      xxx::pop_style();
       xxx::layout_row_end();
 
       xxx::layout_row_begin(2);
@@ -142,17 +141,17 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       xxx::view_begin("view3", xxx::im_key_id::ctrl_g);
       xxx::layout_row_begin(2);
       xxx::layout_row_push(0.3);
-      xxx::push_color(xxx::im_color_id::background, 0x777777_c);
+      xxx::push_style(xxx::im_role::text, {.fg = {}, .bg = 0x777777_c, .attrs = 0});
       xxx::label("row 3 column 1 line 1");
       xxx::label("row 3 column 1 line 2");
-      xxx::pop_color();
+      xxx::pop_style();
       xxx::layout_row_push(0.7);
-      xxx::push_color(xxx::im_color_id::background, 0x888888_c);
+      xxx::push_style(xxx::im_role::text, {.fg = {}, .bg = 0x888888_c, .attrs = 0});
       xxx::label("row 3 column 2 line 1");
       xxx::label("row 3 column 2 line 2");
       xxx::label("row 3 column 2 line 3");
       xxx::label("row 3 column 2 line 4");
-      xxx::pop_color();
+      xxx::pop_style();
       xxx::layout_row_end();
       xxx::layout_row_begin(2);
       xxx::layout_row_push(0.4);
@@ -167,9 +166,9 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       xxx::layout_row_end();
       xxx::view_end();
 
-      xxx::push_color(xxx::im_color_id::background, 0xaa3333_c);
+      xxx::push_style(xxx::im_role::text, {.fg = {}, .bg = 0xaa3333_c, .attrs = 0});
       xxx::label("end of layouts");
-      xxx::pop_color();
+      xxx::pop_style();
 
       xxx::layout_row_begin(2);
       xxx::layout_row_push(0.4);
@@ -183,11 +182,11 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
       xxx::layout_row_end();
       xxx::view_end();
       xxx::layout_row_push(0.6);
-      xxx::push_color(xxx::im_color_id::background, 0x667755_c);
+      xxx::push_style(xxx::im_role::text, {.fg = {}, .bg = 0x667755_c, .attrs = 0});
       xxx::view_begin("view5", xxx::im_view_flag_title);
       xxx::label("final layout");
       xxx::view_end();
-      xxx::pop_color();
+      xxx::pop_style();
       xxx::layout_row_end();
 
       xxx::layout_row_begin(2);

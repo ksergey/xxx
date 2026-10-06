@@ -1,7 +1,6 @@
 // Copyright (c) Sergey Kovalevich <inndie@gmail.com>
 // SPDX-License-Identifier: MIT
 
-#include "im_renderer.h"
 #include "im_theme.h"
 #include "test_utils.h"
 
@@ -9,68 +8,74 @@ namespace xxx::testing {
 
 TEST_SUITE("im_theme") {
 
-  TEST_CASE("set default color") {
+  TEST_CASE("default theme uses only the terminal palette and attributes") {
     im_theme t;
-    t.set_default_color(im_color_id::text, 0x112233_c);
-    CHECK(t.get_color(im_color_id::text) == 0x112233_c);
-  }
-
-  TEST_CASE("push / pop restores previous color") {
-    im_theme t;
-    t.set_default_color(im_color_id::text, 0x111111_c);
-    t.push_color(im_color_id::text, 0x222222_c);
-    CHECK(t.get_color(im_color_id::text) == 0x222222_c);
-    t.pop_color();
-    CHECK(t.get_color(im_color_id::text) == 0x111111_c);
-  }
-
-  TEST_CASE("nested push of same id unwinds in order") {
-    im_theme t;
-    t.set_default_color(im_color_id::border, 0x000001_c);
-    t.push_color(im_color_id::border, 0x000002_c);
-    t.push_color(im_color_id::border, 0x000003_c);
-    t.pop_color();
-    CHECK(t.get_color(im_color_id::border) == 0x000002_c);
-    t.pop_color();
-    CHECK(t.get_color(im_color_id::border) == 0x000001_c);
-  }
-
-  TEST_CASE("pop with count") {
-    im_theme t;
-    t.set_default_color(im_color_id::text, 0x000001_c);
-    t.set_default_color(im_color_id::background, 0x000002_c);
-    t.push_color(im_color_id::text, 0xaaaaaa_c);
-    t.push_color(im_color_id::background, 0xbbbbbb_c);
-    t.pop_color(2);
-    CHECK(t.get_color(im_color_id::text) == 0x000001_c);
-    CHECK(t.get_color(im_color_id::background) == 0x000002_c);
-  }
-
-  TEST_CASE("pop more than pushed is safe") {
-    im_theme t;
-    t.set_default_color(im_color_id::text, 0x000001_c);
-    t.push_color(im_color_id::text, 0xaaaaaa_c);
-    t.pop_color(10);
-    CHECK(t.get_color(im_color_id::text) == 0x000001_c);
-  }
-
-  TEST_CASE("reset unwinds everything") {
-    im_theme t;
-    t.set_default_color(im_color_id::text, 0x000001_c);
-    for (int i = 0; i < 5; ++i) {
-      t.push_color(im_color_id::text, im_color(std::uint32_t(i + 100)));
+    for (int r = 0; r < int(im_role::last); ++r) {
+      auto const s = t.resolved(im_role(r));
+      CAPTURE(r);
+      CHECK_FALSE(s.fg->is_rgb()); // no fixed colors: adapts to light and dark schemes
+      CHECK_FALSE(s.bg->is_rgb());
     }
-    t.reset();
-    CHECK(t.get_color(im_color_id::text) == 0x000001_c);
+    CHECK(t.get(im_role::focus).attrs == im_attr_reverse);
+    CHECK(t.get(im_role::selection).attrs == im_attr_underline);
   }
 
-  TEST_CASE("get_style combines fg and bg") {
+  TEST_CASE("unset colors come from text") {
     im_theme t;
-    t.set_default_color(im_color_id::text, 0x123456_c);
-    t.set_default_color(im_color_id::background, 0x654321_c);
-    auto const s = t.get_style(im_color_id::text, im_color_id::background);
-    CHECK(s.fg == 0x123456u);
-    CHECK(s.bg == 0x654321u);
+    t.set(im_role::text, {.fg = im_color(0x111111u), .bg = im_color(0x222222u), .attrs = 0});
+    t.set(im_role::error, {.fg = ansi::red, .bg = {}, .attrs = im_attr_bold});
+    auto const s = t.style(im_role::error);
+    CHECK(s.fg == ansi::red.value);
+    CHECK(s.bg == 0x222222u); // theme background applies everywhere
+    CHECK(s.attrs == im_attr_bold);
+  }
+
+  TEST_CASE("custom style resolves the same way") {
+    im_theme t;
+    t.set(im_role::text, {.fg = im_color(0x111111u), .bg = im_color(0x222222u), .attrs = 0});
+    auto const s = t.style(im_role_style{.fg = ansi::green, .bg = {}, .attrs = 0});
+    CHECK(s.fg == ansi::green.value);
+    CHECK(s.bg == 0x222222u);
+  }
+
+  TEST_CASE("push / pop restore, nested") {
+    im_theme t;
+    auto const before = t.style(im_role::text);
+    t.push(im_role::text, {.fg = ansi::red, .bg = {}, .attrs = 0});
+    t.push(im_role::text, {.fg = ansi::blue, .bg = {}, .attrs = 0});
+    CHECK(t.style(im_role::text).fg == ansi::blue.value);
+    t.pop();
+    CHECK(t.style(im_role::text).fg == ansi::red.value);
+    t.pop();
+    CHECK(t.style(im_role::text) == before);
+  }
+
+  TEST_CASE("pop more than pushed is safe, reset drops overrides") {
+    im_theme t;
+    auto const before = t.style(im_role::accent);
+    t.push(im_role::accent, {.fg = ansi::red, .bg = {}, .attrs = 0});
+    t.pop(10);
+    CHECK(t.style(im_role::accent) == before);
+    t.push(im_role::accent, {.fg = ansi::red, .bg = {}, .attrs = 0});
+    t.push(im_role::muted, {.fg = ansi::red, .bg = {}, .attrs = 0});
+    t.reset();
+    CHECK(t.style(im_role::accent) == before);
+  }
+
+  TEST_CASE("presets") {
+    im_theme t;
+    t.use(im_theme_preset::classic);
+    CHECK(t.get(im_role::accent).fg == im_color(0xdcf763u));
+    t.use(im_theme_preset::terminal);
+    CHECK(t.get(im_role::accent).fg == ansi::cyan);
+  }
+
+  TEST_CASE("use drops overrides") {
+    im_theme t;
+    t.push(im_role::accent, {.fg = ansi::red, .bg = {}, .attrs = 0});
+    t.use(im_theme_preset::terminal);
+    t.pop(); // nothing left to pop
+    CHECK(t.get(im_role::accent).fg == ansi::cyan);
   }
 }
 

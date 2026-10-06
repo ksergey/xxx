@@ -51,8 +51,13 @@ public:
   virtual void wake_up() = 0;
 };
 
-/// Terminal backend for xterm compatible terminals
+class terminal;
+
+/// Terminal backend for xterm compatible terminals: owns the terminal, waits for events itself
 [[nodiscard]] auto make_ansi_backend() -> std::unique_ptr<im_backend>;
+
+/// Backend on an external terminal: never waits, takes the events queued in it
+[[nodiscard]] auto make_terminal_backend(terminal& external) -> std::unique_ptr<im_backend>;
 
 /// Init library with custom backend
 void init(std::unique_ptr<im_backend> backend);

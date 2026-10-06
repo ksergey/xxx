@@ -347,15 +347,12 @@ TEST_SUITE("focus") {
       b2 = button("two");
       view_end();
     };
+    // reverse shows focus: the input's cursor or the focused button
     auto const focused = [&] {
-      if (!app.reversed_cells().empty()) {
-        return 0; // text cursor is shown
-      }
-      if (app.fg(3, 1) == test_active) {
-        return 1;
-      }
-      if (app.fg(3, 2) == test_active) {
-        return 2;
+      for (int row = 0; row < 3; ++row) {
+        if (app.reversed_in_row(row)) {
+          return row;
+        }
       }
       return -1;
     };

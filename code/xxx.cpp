@@ -146,12 +146,9 @@ auto to_utf8(std::span<std::uint32_t const> input, OutputIt first) -> OutputIt {
   return ch == U' ' || ch == U'\t';
 }
 
-[[nodiscard]] auto get_style_bg(im_color_id bg_id) noexcept -> im_style {
-  return im_style(im_color(), g_ctx->theme.get_color(bg_id));
-}
-
-[[nodiscard]] auto get_style(im_color_id fg_id, im_color_id bg_id) noexcept -> im_style {
-  return g_ctx->theme.get_style(fg_id, bg_id);
+// ready to draw style of a theme role (push_style overrides applied)
+[[nodiscard]] auto style_of(im_role role) noexcept -> im_style {
+  return g_ctx->theme.style(role);
 }
 
 } // namespace
@@ -167,6 +164,11 @@ void init(std::unique_ptr<im_backend> backend) {
   ctx->backend = std::move(backend);
   ctx->last_frame_time = ctx->backend->now();
   g_ctx = ctx.release();
+}
+
+void init(terminal& term) {
+  shutdown();
+  init(make_terminal_backend(term));
 }
 
 void init() {
@@ -189,6 +191,47 @@ namespace internal {
 
 void handle_help_keys();
 void build_help_popup();
+
+// make a view active and focus a widget there. Without a widget: the one focused there last time
+// (or the first one). Leaving a view remembers it for Esc unless we are going back.
+void activate_view(im_id view_id, im_id widget_id, bool to_history = true) {
+  auto& view = g_ctx->view;
+  auto& widget = g_ctx->widget;
+  if (view.active_id != view_id) {
+    if (to_history && view.active_id != im_id()) {
+      view.history.push_back(view.active_id);
+      if (view.history.size() > 32) {
+        view.history.erase(view.history.begin());
+      }
+    }
+    view.active_id = view_id;
+    if (widget_id == im_id()) {
+      auto const it = view.last_widget.find(view_id);
+      widget_id = (it != view.last_widget.end()) ? it->second : im_id();
+    }
+    widget.active_id = widget_id; // none: the first widget takes focus
+  } else if (widget_id != im_id()) {
+    widget.active_id = widget_id;
+  }
+}
+
+// Esc: back to the previously active view that is still on screen
+void handle_esc_back() {
+  auto& view = g_ctx->view;
+  if (!view.esc_back || g_ctx->popup.open_id != im_id() || !g_ctx->input.is_key_pressed(im_key_id::esc, 0)) {
+    return;
+  }
+  auto const& views = g_ctx->view_hits; // drawn on previous frame
+  while (!view.history.empty()) {
+    auto const id = view.history.back();
+    view.history.pop_back();
+    if (id != view.active_id && std::any_of(views.begin(), views.end(), [id](auto const& v) { return v.id == id; })) {
+      activate_view(id, im_id(), false);
+      g_ctx->input.consume_key(im_key_id::esc);
+      return;
+    }
+  }
+}
 
 // arrows the focused widget doesn't use move focus to the nearest item in that direction (previous frame layout)
 void navigate_with_arrows() {
@@ -252,9 +295,10 @@ void navigate_with_arrows() {
       if (!best) {
         break;
       }
-      widget.active_id = (best->id == best->view_id) ? im_id() : best->id;
       if (popup == im_id()) {
-        view.active_id = best->view_id;
+        activate_view(best->view_id, (best->id == best->view_id) ? im_id() : best->id);
+      } else {
+        widget.active_id = best->id;
       }
       moved = true;
     }
@@ -298,18 +342,13 @@ auto process_input_events(std::chrono::milliseconds timeout) -> bool {
   }
 
   if (view.force_next_id != im_id()) {
-    if (view.active_id != view.force_next_id) {
-      view.active_id = view.force_next_id;
-      // reset active widget_id on active_id changed
-      widget.active_id = im_id();
-    }
+    internal::activate_view(view.force_next_id, im_id());
   }
 
   // focus requested on previous frame
   if (auto const target = std::exchange(widget.focus_target, {}); target.id != im_id()) {
     if (g_ctx->popup.open_id == im_id()) {
-      view.active_id = target.view_id;
-      widget.active_id = target.id;
+      internal::activate_view(target.view_id, target.id);
     } else if (target.in_popup) {
       // modal: only popup widgets can be focused
       widget.active_id = target.id;
@@ -317,6 +356,7 @@ auto process_input_events(std::chrono::milliseconds timeout) -> bool {
   }
 
   internal::handle_help_keys();
+  internal::handle_esc_back();
   internal::navigate_with_arrows();
 
   // mouse click: activate view and focus widget under cursor
@@ -330,9 +370,8 @@ auto process_input_events(std::chrono::milliseconds timeout) -> bool {
     auto const& views = g_ctx->view_hits;
     auto const view_hit = [&](auto const& item) { return (popup_id == im_id() || item.id == popup_id) && hit(item); };
     if (auto const v = std::find_if(views.rbegin(), views.rend(), view_hit); v != views.rend()) {
-      if (view.active_id != v->id) {
-        view.active_id = v->id;
-        widget.active_id = im_id();
+      if (popup_id == im_id()) {
+        internal::activate_view(v->id, im_id());
       }
       auto const& widgets = g_ctx->widget_hits;
       auto const w = std::find_if(widgets.rbegin(), widgets.rend(),
@@ -392,7 +431,7 @@ void new_frame() {
   g_ctx->elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - g_ctx->last_frame_time).count() * 0.001f;
   g_ctx->last_frame_time = now;
 
-  g_ctx->renderer.set_clear_color(g_ctx->theme.get_style(im_color_id::text, im_color_id::background));
+  g_ctx->renderer.set_clear_color(style_of(im_role::text));
   g_ctx->renderer.start_new_frame(screen_rect);
 }
 
@@ -487,20 +526,36 @@ auto is_key_pressed(im_key_id id, int mods) -> bool {
   return g_ctx->input.is_key_pressed(id, std::uint8_t(mods));
 }
 
+auto is_char_pressed(char32_t ch) -> bool {
+  return g_ctx->input.is_char_pressed(std::uint32_t(ch));
+}
+
 auto is_alt_pressed(char32_t ch) -> bool {
   return g_ctx->input.is_alt_pressed(std::uint32_t(ch));
 }
 
-void set_default_color(im_color_id id, im_color color) {
-  g_ctx->theme.set_default_color(id, color);
+void use_theme(im_theme_preset preset) {
+  g_ctx->theme.use(preset);
 }
 
-void push_color(im_color_id id, im_color color) {
-  g_ctx->theme.push_color(id, color);
+void set_style(im_role role, im_role_style const& style) {
+  g_ctx->theme.set(role, style);
 }
 
-void pop_color(std::size_t cnt) {
-  g_ctx->theme.pop_color(cnt);
+auto get_style(im_role role) -> im_role_style {
+  return g_ctx->theme.resolved(role);
+}
+
+auto get_theme_style(im_role role) -> im_role_style {
+  return g_ctx->theme.get(role);
+}
+
+void push_style(im_role role, im_role_style const& style) {
+  g_ctx->theme.push(role, style);
+}
+
+void pop_style(std::size_t count) {
+  g_ctx->theme.pop(count);
 }
 
 void layout_row_begin(std::size_t columns) {
@@ -672,9 +727,16 @@ void view_begin(std::string_view name, int flags, im_key_id shortcut, int height
   auto const popup_open = g_ctx->popup.open_id != im_id();
   view.active = (view.active_id == view.current_id) && !popup_open;
 
-  if (is_key_pressed(shortcut) && !view.active && !popup_open) {
-    view.force_next_id = view.current_id;
-    g_ctx->next_frame_requested = true;
+  // shortcut: to the view (where the focus was last time); pressed again: to its top
+  auto to_top = false;
+  if (is_key_pressed(shortcut) && !popup_open) {
+    if (!view.active) {
+      view.force_next_id = view.current_id;
+      g_ctx->next_frame_requested = true;
+    } else {
+      g_ctx->widget.active_id = im_id(); // the first widget of this view takes focus right away
+      to_top = true;
+    }
   }
   // TODO: skip frame?
 
@@ -697,8 +759,10 @@ void view_begin(std::string_view name, int flags, im_key_id shortcut, int height
       view.current_bottom = top + height - 1;
     } else if (height < 0) {
       // fill(n) == -1 - n
-      view.current_bottom = std::max(top, available_bottom - (-height - 1));
+      view.current_bottom = available_bottom - (-height - 1);
     }
+    // a bordered view keeps both borders, even when squeezed
+    view.current_bottom = std::max(view.current_bottom, top + 2 * border - 1);
 
     layout.type = im_layout_type::container;
     layout.rect.min = g_ctx->layout.cursor + im_vec2(border, border);
@@ -714,8 +778,8 @@ void view_begin(std::string_view name, int flags, im_key_id shortcut, int height
     if (!do_render_border && do_render_title) {
       auto const title_rect = g_ctx->layout.reserve_layout_lines(1);
       auto const style = view.active
-                             ? g_ctx->theme.get_style(im_color_id::view_active_title, im_color_id::background)
-                             : g_ctx->theme.get_style(im_color_id::view_inactive_title, im_color_id::background);
+                             ? style_of(im_role::title_focused)
+                             : style_of(im_role::title);
       g_ctx->renderer.cmd_fill_rect(title_rect, ' ', style);
       g_ctx->renderer.cmd_draw_text_in_rect(
           title_rect, to_unicode(view.current_title), style, im_halign::center, im_valign::top);
@@ -749,6 +813,9 @@ void view_begin(std::string_view name, int flags, im_key_id shortcut, int height
           constexpr auto wheel_step = int(3);
           scroll.offset += wheel * wheel_step;
         }
+      }
+      if (to_top) {
+        scroll.offset = 0;
       }
       // content height is known from previous frame only
       scroll.offset = std::clamp(scroll.offset, 0, std::max(0, scroll.content_height - viewport_height));
@@ -797,16 +864,16 @@ void view_end() {
     }
 
     auto const border_style = view.active
-                                  ? g_ctx->theme.get_style(im_color_id::view_active_border, im_color_id::background)
-                                  : g_ctx->theme.get_style(im_color_id::view_inactive_border, im_color_id::background);
+                                  ? style_of(im_role::border_focused)
+                                  : style_of(im_role::border);
 
     if (do_render_border) {
       g_ctx->renderer.cmd_draw_rect(panel_rect, border_style);
 
       if (do_render_title) {
         auto const style = view.active
-                               ? g_ctx->theme.get_style(im_color_id::view_active_title, im_color_id::background)
-                               : g_ctx->theme.get_style(im_color_id::view_inactive_title, im_color_id::background);
+                               ? style_of(im_role::title_focused)
+                               : style_of(im_role::title);
         g_ctx->renderer.cmd_draw_text_in_rect(
             panel_rect, to_unicode(view.current_title), style, im_halign::center, im_valign::top);
       }
@@ -918,6 +985,10 @@ void enable_help(bool enabled) {
   g_ctx->help.enabled = enabled;
 }
 
+void enable_esc_back(bool enabled) {
+  g_ctx->view.esc_back = enabled;
+}
+
 namespace {
 
 constexpr auto help_popup = std::string_view("##xxx-help");
@@ -962,7 +1033,8 @@ void build_help_popup() {
       {"Tab S-Tab", "next / previous widget"},
       {"Enter Space", "press, select"},
       {"PgUp PgDn", "scroll view"},
-      {"Esc", "close popup"},
+      {"Esc", "close popup, or back to the previous view"},
+      {"view key again", "to the top of the view"},
       {"F1 ?", "this help"},
   };
   auto cells_text = std::vector<std::string>();
@@ -1024,11 +1096,14 @@ void key_hints(std::string_view extra) {
     break;
   }
   add(is_popup_open() ? "Esc close" : "arrows move");
+  if (!is_popup_open() && g_ctx->view.esc_back && !g_ctx->view.history.empty()) {
+    add("Esc back");
+  }
   if (g_ctx->help.enabled) {
     add(wants_text_input() ? "F1 help" : "F1 ? help");
   }
   add(extra);
-  label(text);
+  label(text, im_role::muted);
 }
 
 auto popup_begin(std::string_view id, std::string_view title, int width) -> bool {
@@ -1105,10 +1180,10 @@ void popup_end() {
   auto const screen = get_screen_rect();
   g_ctx->renderer.set_layer(1);
   g_ctx->renderer.push_clip_rect(screen, false);
-  g_ctx->renderer.cmd_fill_rect(rect, ' ', get_style_bg(im_color_id::background));
-  g_ctx->renderer.cmd_draw_rect(rect, get_style(im_color_id::view_active_border, im_color_id::background));
+  g_ctx->renderer.cmd_fill_rect(rect, ' ', style_of(im_role::text));
+  g_ctx->renderer.cmd_draw_rect(rect, style_of(im_role::border_focused));
   g_ctx->renderer.cmd_draw_text_in_rect(rect, to_unicode(popup.current_title),
-      get_style(im_color_id::view_active_title, im_color_id::background), im_halign::center, im_valign::top);
+      style_of(im_role::title_focused), im_halign::center, im_valign::top);
   g_ctx->renderer.pop_clip_rect();
   g_ctx->renderer.set_layer(popup.saved_layer);
 
@@ -1166,7 +1241,7 @@ void panel_end() {
 
   g_ctx->layout.layout_state_stack.pop_back();
 
-  auto const style = g_ctx->theme.get_style(im_color_id::border, im_color_id::background);
+  auto const style = style_of(im_role::border);
   g_ctx->renderer.cmd_draw_rect(panel_rect, style);
 
   // restore cursor position at x
@@ -1174,15 +1249,30 @@ void panel_end() {
   g_ctx->layout.cursor = im_vec2(parent_layout.rect.min.x, g_ctx->layout.cursor.y + border);
 }
 
-void label(std::string_view text) {
+namespace {
+
+void label_with_style(std::string_view text, im_style const& style) {
   auto const unicode_text = to_unicode(text);
   auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(text_width(unicode_text), 1));
   if (!g_ctx->renderer.is_visible(widget_rect)) {
     return;
   }
-  auto const style = g_ctx->theme.get_style(im_color_id::text, im_color_id::background);
   g_ctx->renderer.cmd_fill_rect(widget_rect, ' ', style);
   g_ctx->renderer.cmd_draw_text_in_rect(widget_rect, unicode_text, style, im_halign::left, im_valign::top);
+}
+
+} // namespace
+
+void label(std::string_view text) {
+  label_with_style(text, style_of(im_role::text));
+}
+
+void label(std::string_view text, im_role role) {
+  label_with_style(text, style_of(role));
+}
+
+void label(std::string_view text, im_role_style const& style) {
+  label_with_style(text, g_ctx->theme.style(style));
 }
 
 namespace internal {
@@ -1233,6 +1323,7 @@ void common_focusable_behaviour(
     widget.active = (widget.active_id == widget.current_id);
     if (widget.active) {
       g_ctx->focused_kind = kind;
+      view.last_widget[view.current_id] = widget.current_id;
       widget.next_id = im_id();
       // previous focusable in this view; none if active is first (wraps to last_id)
       widget.prev_id = widget.last_id;
@@ -1288,28 +1379,32 @@ auto button(std::string_view label) -> bool {
   if (g_ctx->renderer.is_visible(widget_rect)) {
     // fill background
     g_ctx->renderer.cmd_fill_rect(widget_rect, ' ',
-        widget.active ? get_style_bg(im_color_id::button_active_background)
-                      : get_style_bg(im_color_id::button_inactive_background));
+        widget.active ? style_of(im_role::text)
+                      : style_of(im_role::text));
 
     // label start pos (signed arithmetic: label may be wider than widget rect)
     auto const unicode_str_pos =
         widget_rect.min + im_vec2(std::max(0, (widget_rect.width() - unicode_str_width) / 2), 0);
 
-    // draw label
-    g_ctx->renderer.cmd_draw_text_at(unicode_str_pos, unicode_str,
-        widget.active ? get_style(im_color_id::button_active_text, im_color_id::button_active_background)
-                      : get_style(im_color_id::button_inactive_text, im_color_id::button_inactive_background));
+    // draw label; focus is shown by reverse (not only by color): " label " between the brackets
+    auto const label_style = style_of(widget.active ? im_role::focus : im_role::muted);
+    if (widget.active) {
+      g_ctx->renderer.cmd_fill_rect(im_rect(unicode_str_pos.x - 1, unicode_str_pos.y,
+                                        unicode_str_pos.x + unicode_str_width, unicode_str_pos.y),
+          ' ', label_style);
+    }
+    g_ctx->renderer.cmd_draw_text_at(unicode_str_pos, unicode_str, label_style);
 
     // draw left fx
     g_ctx->renderer.cmd_draw_text_at(unicode_str_pos - im_vec2(2, 0), std::span<std::uint32_t const>(&fx_left_ch, 1),
-        widget.active ? get_style(im_color_id::button_active_fx, im_color_id::button_active_background)
-                      : get_style(im_color_id::button_inactive_fx, im_color_id::button_inactive_background));
+        widget.active ? style_of(im_role::border_focused)
+                      : style_of(im_role::border));
 
     // draw right fx
     g_ctx->renderer.cmd_draw_text_at(unicode_str_pos + im_vec2(unicode_str_width + 1, 0),
         std::span<std::uint32_t const>(&fx_right_ch, 1),
-        widget.active ? get_style(im_color_id::button_active_fx, im_color_id::button_active_background)
-                      : get_style(im_color_id::button_inactive_fx, im_color_id::button_inactive_background));
+        widget.active ? style_of(im_role::border_focused)
+                      : style_of(im_role::border));
   }
 
   return widget.pressed;
@@ -1528,16 +1623,16 @@ auto text_input(std::string_view placeholder, std::string& input, int flags) -> 
 
     if (widget.active) {
       // fill background
-      g_ctx->renderer.cmd_fill_rect(rect, ' ', get_style_bg(im_color_id::input_active_background));
+      g_ctx->renderer.cmd_fill_rect(rect, ' ', style_of(im_role::text));
       // draw prompt
       g_ctx->renderer.cmd_draw_text_at(
-          rect.min, prompt, get_style(im_color_id::input_active_prompt, im_color_id::input_active_background));
+          rect.min, prompt, style_of(im_role::accent));
     } else {
       // fill background
-      g_ctx->renderer.cmd_fill_rect(rect, ' ', get_style_bg(im_color_id::input_inactive_background));
+      g_ctx->renderer.cmd_fill_rect(rect, ' ', style_of(im_role::text));
       // draw prompt
       g_ctx->renderer.cmd_draw_text_at(
-          rect.min, prompt, get_style(im_color_id::input_inactive_prompt, im_color_id::input_inactive_background));
+          rect.min, prompt, style_of(im_role::text));
     }
 
     rect.min += im_vec2(text_width(prompt), 0);
@@ -1554,20 +1649,20 @@ auto text_input(std::string_view placeholder, std::string& input, int flags) -> 
 
       if (widget.active) {
         auto const cursor_style =
-            get_style(im_color_id::input_active_text, im_color_id::input_active_background).with_reverse();
+            style_of(im_role::focus);
         if (!unicode_str.empty()) {
           g_ctx->renderer.cmd_draw_text_at(rect.min, substr(unicode_str, 0, 1), cursor_style);
           g_ctx->renderer.cmd_draw_text_at(rect.min + im_vec2(char_width(unicode_str[0]), 0), substr(unicode_str, 1),
-              get_style(im_color_id::input_placeholder, im_color_id::input_active_background));
+              style_of(im_role::placeholder));
         } else {
           g_ctx->renderer.cmd_draw_text_at(rect.min, space, cursor_style);
         }
       } else if (!unicode_str.empty()) {
         g_ctx->renderer.cmd_draw_text_at(
-            rect.min, unicode_str, get_style(im_color_id::input_placeholder, im_color_id::input_inactive_background));
+            rect.min, unicode_str, style_of(im_role::placeholder));
       }
     } else if (widget.active) {
-      auto const style = g_ctx->theme.get_style(im_color_id::input_active_text, im_color_id::input_active_background);
+      auto const style = style_of(im_role::input_focused);
       auto const cursor_style = style.with_reverse();
       g_ctx->renderer.cmd_fill_rect(rect, ' ', style);
 
@@ -1604,7 +1699,7 @@ auto text_input(std::string_view placeholder, std::string& input, int flags) -> 
           cursor_pos < content.size() ? content.subspan(cursor_pos, 1) : space, cursor_style);
     } else {
       auto const style =
-          g_ctx->theme.get_style(im_color_id::input_inactive_text, im_color_id::input_inactive_background);
+          style_of(im_role::input);
       g_ctx->renderer.cmd_fill_rect(rect, ' ', style);
       auto content = std::span<std::uint32_t const>(to_unicode(input));
       if (password) {
@@ -1639,19 +1734,20 @@ auto checkbox(std::string_view label, bool& value) -> bool {
   }
 
   if (g_ctx->renderer.is_visible(widget_rect)) {
-    auto const bg = widget.active ? im_color_id::button_active_background : im_color_id::button_inactive_background;
-    auto const fx_style = get_style(widget.active ? im_color_id::button_active_fx : im_color_id::button_inactive_fx, bg);
-    auto const text_style =
-        get_style(widget.active ? im_color_id::button_active_text : im_color_id::button_inactive_text, bg);
+    auto const fx_style = style_of(widget.active ? im_role::border_focused : im_role::border);
+    auto const text_style = style_of(widget.active ? im_role::accent : im_role::muted);
 
     static constexpr auto box = std::to_array<std::uint32_t>({'[', ' ', ']'});
     static constexpr auto mark = std::uint32_t('x');
 
-    g_ctx->renderer.cmd_fill_rect(widget_rect, ' ', get_style_bg(bg));
-    g_ctx->renderer.cmd_draw_text_at(widget_rect.min, box, fx_style);
+    // focus: the box is reversed (not only colored)
+    auto const box_style = widget.active ? style_of(im_role::focus) : fx_style;
+    auto const mark_style = widget.active ? style_of(im_role::focus) : text_style;
+    g_ctx->renderer.cmd_fill_rect(widget_rect, ' ', style_of(im_role::text));
+    g_ctx->renderer.cmd_draw_text_at(widget_rect.min, box, box_style);
     if (value) {
       g_ctx->renderer.cmd_draw_text_at(
-          widget_rect.min + im_vec2(1, 0), std::span<std::uint32_t const>(&mark, 1), text_style);
+          widget_rect.min + im_vec2(1, 0), std::span<std::uint32_t const>(&mark, 1), mark_style);
     }
     g_ctx->renderer.cmd_draw_text_at(widget_rect.min + im_vec2(4, 0), unicode_str, text_style);
   }
@@ -1720,10 +1816,9 @@ auto selection_behaviour(im_rect const& rows_rect, int rows, int count, int& sel
   return activated;
 }
 
+// selected row: reversed when the widget has focus (keys go there), underlined otherwise
 [[nodiscard]] auto selected_row_style() -> im_style {
-  return get_style(g_ctx->widget.active ? im_color_id::button_active_text : im_color_id::button_inactive_text,
-      im_color_id::background)
-      .with_reverse();
+  return style_of(g_ctx->widget.active ? im_role::focus : im_role::selection);
 }
 
 template <typename ItemAt>
@@ -1743,7 +1838,7 @@ auto list_impl(std::string_view label, int count, ItemAt&& item_at, int& selecte
   }
 
   if (g_ctx->renderer.is_visible(widget_rect)) {
-    auto const style = get_style(im_color_id::text, im_color_id::background);
+    auto const style = style_of(im_role::text);
     auto const selected_style = selected_row_style();
 
     g_ctx->renderer.cmd_fill_rect(widget_rect, ' ', style);
@@ -1842,9 +1937,9 @@ auto table_impl(std::string_view label, std::span<im_table_column const> columns
     }
   };
 
-  auto const style = get_style(im_color_id::text, im_color_id::background);
+  auto const style = style_of(im_role::text);
   auto const selected_style = selected_row_style();
-  auto const header_style = get_style(im_color_id::button_inactive_fx, im_color_id::background).with_underline();
+  auto const header_style = style_of(im_role::header);
 
   g_ctx->renderer.cmd_fill_rect(widget_rect, ' ', style);
   auto const header = im_rect(widget_rect.min.x, widget_rect.min.y, widget_rect.max.x, widget_rect.min.y);
@@ -1933,14 +2028,12 @@ auto tabs_impl(std::string_view label, int count, ItemAt&& item_at, int& selecte
   }
 
   if (g_ctx->renderer.is_visible(widget_rect)) {
-    auto const style = get_style(im_color_id::button_inactive_text, im_color_id::background);
-    auto const selected_style =
-        get_style(widget.active ? im_color_id::button_active_text : im_color_id::button_inactive_text,
-            im_color_id::background)
-            .with_reverse();
+    auto const style = style_of(im_role::muted);
+    // selected tab: reversed with focus, underlined without
+    auto const selected_style = selected_row_style();
     static constexpr auto space = std::uint32_t(' ');
 
-    g_ctx->renderer.cmd_fill_rect(widget_rect, ' ', get_style_bg(im_color_id::background));
+    g_ctx->renderer.cmd_fill_rect(widget_rect, ' ', style_of(im_role::text));
     for (int i = 0, x = widget_rect.min.x; i < count; ++i) {
       auto const w = text_width(names[i]) + 2;
       auto const& s = i == selected ? selected_style : style;
@@ -1991,7 +2084,7 @@ void spinner(std::string_view text, float& step) {
 
   auto const index = std::size_t(std::round(step / spinner_update_interval)) % spinner_glyphs.size();
 
-  auto const style = g_ctx->theme.get_style(im_color_id::text, im_color_id::background);
+  auto const style = style_of(im_role::text);
   g_ctx->renderer.cmd_fill_rect(widget_rect, ' ', style);
   g_ctx->renderer.cmd_draw_text_at(widget_rect.min, std::span<std::uint32_t const>(&spinner_glyphs[index], 1), style);
   // glyph, space, text: matches spinner_width
@@ -2017,7 +2110,7 @@ void progress(float const& value) {
   auto const text = std::span<std::uint32_t>(buffer, static_cast<std::size_t>(progress_total_length));
   std::fill(std::fill_n(text.begin(), progress_length, progress_glyph[0]), text.end(), L' ');
 
-  auto const style = g_ctx->theme.get_style(im_color_id::text, im_color_id::background);
+  auto const style = style_of(im_role::text);
   g_ctx->renderer.cmd_draw_text_at(widget_rect.min, text, style);
 }
 
@@ -2063,7 +2156,7 @@ auto canvas_begin(im_vec2 p_size) -> bool {
 
   g_ctx->renderer.push_clip_rect(canvas.rect);
 
-  auto const style = g_ctx->theme.get_style(im_color_id::text, im_color_id::background);
+  auto const style = style_of(im_role::text);
   if (!canvas.data.empty()) {
     // no background fill: canvas_end() draws every cell of the surface anyway
     std::fill(canvas.data.begin(), canvas.data.end(), im_cell{.ch = braille_offset, .style = style});

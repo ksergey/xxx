@@ -199,20 +199,21 @@ private:
 };
 
 // newborns are hot, old-timers cool down
+// colors of the terminal scheme: readable on light and dark backgrounds
 [[nodiscard]] auto age_color(std::uint16_t age) -> xxx::im_color {
   if (age <= 1) {
-    return 0xfff275_c;
+    return xxx::ansi::bright_yellow;
   }
   if (age <= 3) {
-    return 0xa6e22e_c;
+    return xxx::ansi::bright_green;
   }
   if (age <= 10) {
-    return 0x4fd6be_c;
+    return xxx::ansi::cyan;
   }
   if (age <= 40) {
-    return 0x5c9dff_c;
+    return xxx::ansi::blue;
   }
-  return 0xb48ead_c;
+  return xxx::ansi::magenta;
 }
 
 constexpr int sidebar_width = 28;
@@ -353,7 +354,7 @@ int main() {
         for (int x = 0; auto const value : history) {
           auto const h = std::clamp(value * 8 / peak, 1, 8);
           for (int y = 8 - h; y < 8; ++y) {
-            xxx::canvas_point(xxx::im_vec2(x, y), 0x5c9dff_c);
+            xxx::canvas_point(xxx::im_vec2(x, y), xxx::ansi::blue);
           }
           ++x;
         }
@@ -385,7 +386,7 @@ int main() {
         for (int y = 0; y < life.height(); ++y) {
           for (int x = 0; x < life.width(); ++x) {
             if (auto const age = life.at(x, y); age > 0) {
-              xxx::canvas_point(xxx::im_vec2(x, y), colorful ? age_color(age) : 0xe0e0e0_c);
+              xxx::canvas_point(xxx::im_vec2(x, y), colorful ? age_color(age) : xxx::im_color());
             }
           }
         }
