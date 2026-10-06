@@ -483,6 +483,14 @@ auto key_press_count(im_key_id id) -> int {
   return g_ctx->input.key_press_count(id);
 }
 
+auto is_key_pressed(im_key_id id, int mods) -> bool {
+  return g_ctx->input.is_key_pressed(id, std::uint8_t(mods));
+}
+
+auto is_alt_pressed(char32_t ch) -> bool {
+  return g_ctx->input.is_alt_pressed(std::uint32_t(ch));
+}
+
 void set_default_color(im_color_id id, im_color color) {
   g_ctx->theme.set_default_color(id, color);
 }
@@ -927,7 +935,7 @@ void handle_help_keys() {
   auto question = false;
   if (!wants_text_input()) {
     for (auto const& e : g_ctx->input.get_input_events()) {
-      question = question || e.ch == '?';
+      question = question || (e.ch == '?' && !(e.mods & im_mod_alt));
     }
   }
   if (!is_key_pressed(im_key_id::f1) && !question) {
@@ -1361,14 +1369,47 @@ auto text_input(std::string_view placeholder, std::string& input, int flags) -> 
       widget.pressed = true;
     }
 
+    // word motions (readline / most editors): ctrl or alt + left / right, alt+b / alt+f
+    auto const word_left = [&](int pos) {
+      while (pos > 0 && is_blank_codepoint(text_input.text[pos - 1])) {
+        --pos;
+      }
+      while (pos > 0 && !is_blank_codepoint(text_input.text[pos - 1])) {
+        --pos;
+      }
+      return pos;
+    };
+    auto const word_right = [&](int pos) {
+      auto const size = int(text_input.text.size());
+      while (pos < size && is_blank_codepoint(text_input.text[pos])) {
+        ++pos;
+      }
+      while (pos < size && !is_blank_codepoint(text_input.text[pos])) {
+        ++pos;
+      }
+      return pos;
+    };
+
     auto text_changed = false;
     for (auto const event : g_ctx->input.get_input_events()) {
-      if (event.ch > 0) {
+      auto const word = (event.mods & (im_mod_ctrl | im_mod_alt)) != 0;
+      if (event.ch > 0 && (event.mods & im_mod_alt)) {
+        // alt + char is a shortcut, never text
+        if (event.ch == 'b') {
+          text_input.cursor_pos = word_left(text_input.cursor_pos);
+        } else if (event.ch == 'f') {
+          text_input.cursor_pos = word_right(text_input.cursor_pos);
+        }
+      } else if (event.ch > 0) {
         text_input.text.insert(text_input.text.begin() + text_input.cursor_pos, event.ch);
         text_input.cursor_pos++;
         text_changed = true;
       } else {
-        switch (event.key) {
+        auto key = event.key;
+        if ((key == im_key_id::backspace || key == im_key_id::backspace2) && (event.mods & im_mod_alt)) {
+          key = im_key_id::ctrl_w; // alt+backspace: delete word back
+        }
+        switch (key) {
         case im_key_id::backspace:
         case im_key_id::backspace2: {
           if (text_input.cursor_pos > 0) {
@@ -1384,12 +1425,16 @@ auto text_input(std::string_view placeholder, std::string& input, int flags) -> 
           }
         } break;
         case im_key_id::arrow_left: {
-          if (text_input.cursor_pos > 0) {
+          if (word) {
+            text_input.cursor_pos = word_left(text_input.cursor_pos);
+          } else if (text_input.cursor_pos > 0) {
             text_input.cursor_pos--;
           }
         } break;
         case im_key_id::arrow_right: {
-          if (int const text_length = text_input.text.size(); text_input.cursor_pos < text_length) {
+          if (word) {
+            text_input.cursor_pos = word_right(text_input.cursor_pos);
+          } else if (int const text_length = text_input.text.size(); text_input.cursor_pos < text_length) {
             text_input.cursor_pos++;
           }
         } break;

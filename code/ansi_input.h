@@ -13,7 +13,8 @@ namespace xxx {
 /// Terminal input parser for xterm compatible terminals (no terminfo).
 /// Pure: bytes in, events into im_input out. Understands
 ///   UTF-8 text, control keys (ctrl-a..z, tab, enter, backspace),
-///   CSI / SS3 keys (arrows, home, end, page up/down, delete, shift-tab), modifiers are ignored,
+///   CSI / SS3 keys (arrows, home, end, page up/down, delete, shift-tab, F1-F12) with modifiers,
+///   Alt + character / control key (ESC prefix),
 ///   SGR mouse (1006): press, release, drag, wheel,
 ///   bracketed paste (2004): pasted text becomes characters, never keys (a newline doesn't press enter).
 /// A sequence split between feed() calls is kept until the rest arrives.
@@ -46,6 +47,7 @@ private:
   std::size_t consumed_ = 0;
   bool produced_ = false;
   bool in_paste_ = false;
+  bool alt_next_ = false; // ESC prefix: the next char or control key is pressed with Alt
 };
 
 } // namespace xxx

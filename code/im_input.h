@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cassert>
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <span>
@@ -19,6 +20,7 @@ namespace xxx {
 struct im_input_event {
   im_key_id key = im_key_id();
   std::uint32_t ch = 0;
+  std::uint8_t mods = 0; // im_mod_*: shift, alt, ctrl
 };
 
 class im_input {
@@ -74,10 +76,23 @@ public:
     return keyboard_.input_events;
   }
 
-  void add_key_event(im_key_id id) noexcept {
+  /// counted by is_key_pressed(id) whatever the modifiers are
+  void add_key_event(im_key_id id, std::uint8_t mods = 0) noexcept {
     assert(id < im_key_id::last);
     keyboard_.keys[static_cast<std::size_t>(id)].clicked++;
-    keyboard_.input_events.push_back(im_input_event{.key = id});
+    keyboard_.input_events.push_back(im_input_event{.key = id, .mods = mods});
+  }
+
+  /// Key pressed with exactly these modifiers
+  [[nodiscard]] auto is_key_pressed(im_key_id id, std::uint8_t mods) const noexcept -> bool {
+    return std::any_of(keyboard_.input_events.begin(), keyboard_.input_events.end(),
+        [&](im_input_event const& e) { return e.ch == 0 && e.key == id && e.mods == mods; });
+  }
+
+  /// Alt + character: not typed text
+  [[nodiscard]] auto is_alt_pressed(std::uint32_t ch) const noexcept -> bool {
+    return std::any_of(keyboard_.input_events.begin(), keyboard_.input_events.end(),
+        [&](im_input_event const& e) { return e.ch == ch && (e.mods & im_mod_alt); });
   }
 
   void add_mouse_pos_event(im_vec2 const& pos) noexcept {
@@ -121,8 +136,9 @@ public:
     return mouse_.wheel;
   }
 
-  void add_character(std::uint32_t ch) noexcept {
-    keyboard_.input_events.push_back(im_input_event{.ch = ch});
+  /// typed character; with im_mod_alt it is a shortcut, not text
+  void add_character(std::uint32_t ch, std::uint8_t mods = 0) noexcept {
+    keyboard_.input_events.push_back(im_input_event{.ch = ch, .mods = mods});
   }
 
   void add_characters_utf8(char const* str) noexcept {

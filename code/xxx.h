@@ -119,6 +119,11 @@ void init();
 /// Shutdown library
 void shutdown();
 
+/// Key modifiers, combined with | (bits as xterm encodes them)
+constexpr auto im_mod_shift = int(1 << 0);
+constexpr auto im_mod_alt = int(1 << 1);
+constexpr auto im_mod_ctrl = int(1 << 2);
+
 /// Update internal state: take pending input without waiting
 void process_input_events();
 
@@ -155,6 +160,14 @@ void debug();
 
 /// How many times key was pressed since last frame (auto-repeat, slow frame)
 [[nodiscard]] auto key_press_count(im_key_id id) -> int;
+
+/// True if key was pressed with exactly these modifiers (e.g. arrow_right, im_mod_ctrl).
+/// is_key_pressed(id) is true for any modifiers.
+[[nodiscard]] auto is_key_pressed(im_key_id id, int mods) -> bool;
+
+/// True if Alt + character was pressed (e.g. 'x'; Alt+Shift+x gives 'X').
+/// Such presses never reach text inputs: safe shortcuts even while typing.
+[[nodiscard]] auto is_alt_pressed(char32_t ch) -> bool;
 
 /// Set default color
 void set_default_color(im_color_id id, im_color color);

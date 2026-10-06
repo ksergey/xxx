@@ -5,6 +5,7 @@
 
 #include <charconv>
 #include <cstdint>
+#include <utility>
 
 #include "unicode.h"
 
@@ -24,18 +25,18 @@ constexpr auto max_sequence = std::size_t(64);
   return value;
 }
 
-void add_control(unsigned char b, im_input& input) {
+void add_control(unsigned char b, im_input& input, std::uint8_t mods) {
   switch (b) {
   case 0x08:
-    return input.add_key_event(im_key_id::backspace);
+    return input.add_key_event(im_key_id::backspace, mods);
   case 0x09:
-    return input.add_key_event(im_key_id::tab);
+    return input.add_key_event(im_key_id::tab, mods);
   case 0x0a:
-    return input.add_key_event(im_key_id::ctrl_j);
+    return input.add_key_event(im_key_id::ctrl_j, mods);
   case 0x0d:
-    return input.add_key_event(im_key_id::enter);
+    return input.add_key_event(im_key_id::enter, mods);
   case 0x7f:
-    return input.add_key_event(im_key_id::backspace2);
+    return input.add_key_event(im_key_id::backspace2, mods);
   default: {
     // explicit table: im_key_id has no ctrl_h / ctrl_i / ctrl_m (backspace, tab, enter) and no ctrl_l
     static constexpr im_key_id ctrl_keys[] = {
@@ -45,7 +46,7 @@ void add_control(unsigned char b, im_input& input) {
         im_key_id::ctrl_r, im_key_id::ctrl_s, im_key_id::ctrl_t, im_key_id::ctrl_u, im_key_id::ctrl_v,
         im_key_id::ctrl_w, im_key_id::ctrl_x, im_key_id::ctrl_y, im_key_id::ctrl_z};
     if (b >= 0x01 && b <= 0x1a && ctrl_keys[b - 0x01] != im_key_id()) {
-      input.add_key_event(ctrl_keys[b - 0x01]);
+      input.add_key_event(ctrl_keys[b - 0x01], mods);
     }
     break; // NUL (ctrl-space), ctrl-l, ctrl-\ ] ^ _: not supported
   }
@@ -102,6 +103,7 @@ auto ansi_input_parser::flush(im_input& input) -> bool {
     produced_ = true;
   }
   buffer_.clear();
+  alt_next_ = false;
   return produced_;
 }
 
@@ -183,7 +185,8 @@ auto ansi_input_parser::parse_one(im_input& input) -> result {
       consumed_ = 1;
       return result::done;
     default:
-      // Alt + char: modifier is not supported, keep the char
+      // Alt + char / control key: the next item gets the modifier
+      alt_next_ = true;
       consumed_ = 1;
       return result::done;
     }
@@ -191,7 +194,7 @@ auto ansi_input_parser::parse_one(im_input& input) -> result {
 
   if (b < 0x20 || b == 0x7f) {
     auto const before = input.get_input_events().size();
-    add_control(b, input);
+    add_control(b, input, std::exchange(alt_next_, false) ? std::uint8_t(im_mod_alt) : std::uint8_t(0));
     produced_ = produced_ || input.get_input_events().size() != before;
     consumed_ = 1;
     return result::done;
@@ -202,8 +205,9 @@ auto ansi_input_parser::parse_one(im_input& input) -> result {
   if (n == 0) {
     return result::incomplete; // truncated codepoint
   }
-  input.add_character(ch);
-  if (ch == ' ') {
+  auto const mods = std::exchange(alt_next_, false) ? std::uint8_t(im_mod_alt) : std::uint8_t(0);
+  input.add_character(ch, mods);
+  if (ch == ' ' && mods == 0) {
     input.add_key_event(im_key_id::space);
   }
   produced_ = true;
@@ -237,8 +241,15 @@ auto ansi_input_parser::parse_csi(im_input& input) -> result {
 
   auto const params = std::string_view(buffer_).substr(2, i - 2);
   auto const final = buffer_[i];
+  // xterm modifiers: second parameter is 1 + bits (shift 1, alt 2, ctrl 4), e.g. ESC [ 1 ; 5 C is ctrl+right
+  auto mods = std::uint8_t(0);
+  if (auto const semicolon = params.find(';'); semicolon != std::string_view::npos && params[0] != '<') {
+    if (auto const m = first_param(params.substr(semicolon + 1), 1); m >= 2) {
+      mods = std::uint8_t((m - 1) & 7);
+    }
+  }
   auto const key = [&](im_key_id id) {
-    input.add_key_event(id);
+    input.add_key_event(id, mods);
     produced_ = true;
   };
 

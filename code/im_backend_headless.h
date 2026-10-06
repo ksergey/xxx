@@ -30,7 +30,9 @@ public:
   void present() override;
 
   /// Input queued here is delivered on next process_input_events()
-  void push_key(im_key_id key);
+  void push_key(im_key_id key, int mods = 0);
+  /// Alt + character (a shortcut, not text)
+  void push_alt(std::uint32_t ch);
   /// Typed character (space also produces im_key_id::space, like a terminal does)
   void push_char(std::uint32_t ch);
   /// Typed utf8 text, one event per codepoint
@@ -76,6 +78,7 @@ private:
     im_mouse_button_id button = im_mouse_button_id::left;
     im_vec2 pos = im_vec2();
     int wheel = 0;
+    std::uint8_t mods = 0;
   };
 
   im_vec2 size_;

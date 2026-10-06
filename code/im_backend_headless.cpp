@@ -34,11 +34,11 @@ auto im_backend_headless::poll_events(im_input& input, std::chrono::milliseconds
   for (auto const& event : events_) {
     switch (event.type) {
     case pending_event::type::key:
-      input.add_key_event(event.key);
+      input.add_key_event(event.key, event.mods);
       break;
     case pending_event::type::character:
-      input.add_character(event.ch);
-      if (event.ch == ' ') {
+      input.add_character(event.ch, event.mods);
+      if (event.ch == ' ' && event.mods == 0) {
         input.add_key_event(im_key_id::space);
       }
       break;
@@ -82,8 +82,12 @@ void im_backend_headless::set_clipboard(std::string_view text) {
   clipboard_ = text;
 }
 
-void im_backend_headless::push_key(im_key_id key) {
-  events_.push_back({.type = pending_event::type::key, .key = key});
+void im_backend_headless::push_key(im_key_id key, int mods) {
+  events_.push_back({.type = pending_event::type::key, .key = key, .mods = std::uint8_t(mods)});
+}
+
+void im_backend_headless::push_alt(std::uint32_t ch) {
+  events_.push_back({.type = pending_event::type::character, .ch = ch, .mods = std::uint8_t(im_mod_alt)});
 }
 
 void im_backend_headless::push_char(std::uint32_t ch) {
