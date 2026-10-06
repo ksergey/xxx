@@ -163,8 +163,15 @@ auto ansi_input_parser::parse_one(im_input& input) -> result {
       case 'F':
         input.add_key_event(im_key_id::end), produced_ = true;
         break;
+      case 'P':
+      case 'Q':
+      case 'R':
+      case 'S':
+        // F1-F4 (xterm)
+        input.add_key_event(im_key_id(int(im_key_id::f1) + (buffer_[2] - 'P'))), produced_ = true;
+        break;
       default:
-        break; // F1-F4 and others: ignored
+        break;
       }
       consumed_ = 3;
       return result::done;
@@ -286,6 +293,12 @@ auto ansi_input_parser::parse_csi(im_input& input) -> result {
   case 'Z':
     key(im_key_id::back_tab);
     break;
+  case 'P':
+  case 'Q':
+  case 'R':
+  case 'S':
+    key(im_key_id(int(im_key_id::f1) + (final - 'P'))); // F1-F4 with modifiers: ESC [ 1 ; m P
+    break;
   case '~':
     switch (first_param(params, 0)) {
     case 1:
@@ -309,7 +322,19 @@ auto ansi_input_parser::parse_csi(im_input& input) -> result {
       in_paste_ = true;
       break;
     default:
-      break; // insert, function keys: ignored
+      // function keys: 11-15 F1-F5 (rxvt / linux console), 17-21 F6-F10, 23 F11, 24 F12; insert: ignored
+      static constexpr struct {
+        int code;
+        im_key_id key;
+      } function_keys[] = {{11, im_key_id::f1}, {12, im_key_id::f2}, {13, im_key_id::f3}, {14, im_key_id::f4},
+          {15, im_key_id::f5}, {17, im_key_id::f6}, {18, im_key_id::f7}, {19, im_key_id::f8}, {20, im_key_id::f9},
+          {21, im_key_id::f10}, {23, im_key_id::f11}, {24, im_key_id::f12}};
+      for (auto const code = first_param(params, 0); auto const& f : function_keys) {
+        if (f.code == code) {
+          key(f.key);
+        }
+      }
+      break;
     }
     break;
   default:

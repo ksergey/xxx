@@ -703,8 +703,11 @@ int main(int argc, char** argv) {
       } else {
         connections_tab(s, ui);
       }
-      xxx::label(ui.tab == 0 ? "arrows move · Enter select · c-c copy row · c-q quit"
-                             : "arrows move · Enter close connection · c-c copy row · c-q quit");
+      // keys for the built-in help (F1 / ?) and a context line for the focused widget
+      xxx::key_hint("c-q", "quit");
+      xxx::key_hint("Enter", ui.tab == 0 ? "select proxy" : "close connection");
+      xxx::key_hint("c-c", "copy row");
+      xxx::key_hints("c-q quit");
 
       if (xxx::popup_begin("close", "close connection?", 50)) {
         xxx::label(ui.closing.host);

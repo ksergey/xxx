@@ -41,6 +41,30 @@ namespace {
   using namespace std::string_view_literals;
 
   switch (shortcut) {
+  case im_key_id::f1:
+    return "F1"sv;
+  case im_key_id::f2:
+    return "F2"sv;
+  case im_key_id::f3:
+    return "F3"sv;
+  case im_key_id::f4:
+    return "F4"sv;
+  case im_key_id::f5:
+    return "F5"sv;
+  case im_key_id::f6:
+    return "F6"sv;
+  case im_key_id::f7:
+    return "F7"sv;
+  case im_key_id::f8:
+    return "F8"sv;
+  case im_key_id::f9:
+    return "F9"sv;
+  case im_key_id::f10:
+    return "F10"sv;
+  case im_key_id::f11:
+    return "F11"sv;
+  case im_key_id::f12:
+    return "F12"sv;
   case im_key_id::ctrl_a:
     return "c-a"sv;
   case im_key_id::ctrl_b:
@@ -162,6 +186,9 @@ namespace internal {
 [[nodiscard]] constexpr auto range_gap(int a0, int a1, int b0, int b1) noexcept -> int {
   return std::max(0, std::max(a0, b0) - std::min(a1, b1));
 }
+
+void handle_help_keys();
+void build_help_popup();
 
 // arrows the focused widget doesn't use move focus to the nearest item in that direction (previous frame layout)
 void navigate_with_arrows() {
@@ -289,6 +316,7 @@ auto process_input_events(std::chrono::milliseconds timeout) -> bool {
     }
   }
 
+  internal::handle_help_keys();
   internal::navigate_with_arrows();
 
   // mouse click: activate view and focus widget under cursor
@@ -328,6 +356,9 @@ void new_frame() {
   g_ctx->widget_hits.clear();
   g_ctx->frame_ids.clear();
   g_ctx->nav_items.clear();
+  g_ctx->help.app_keys.clear();
+  g_ctx->help.view_keys.clear();
+  g_ctx->last_focused_kind = std::exchange(g_ctx->focused_kind, im_context::widget_kind::none);
 
   // TODO: frame delta
 
@@ -409,6 +440,7 @@ void check_id_collisions() {
 void render() {
   assert(g_ctx);
 
+  internal::build_help_popup();
   check_id_collisions();
   g_ctx->renderer.render(*g_ctx->backend);
   if (std::exchange(g_ctx->next_frame_requested, false)) {
@@ -619,6 +651,7 @@ void view_begin(std::string_view name, int flags, im_key_id shortcut, int height
 
   if (shortcut != im_key_id()) {
     view.current_title = std::format(" {} <{}> ", str, get_shorcut_label(shortcut));
+    g_ctx->help.view_keys.emplace_back(get_shorcut_label(shortcut), std::format("go to {}", str));
   } else {
     view.current_title = std::format(" {} ", str);
   }
@@ -783,6 +816,9 @@ void view_end() {
             .rect = visible_panel,
             .visible = true,
             .keys = im_context::nav_vertical});
+        if (view.active && g_ctx->focused_kind == im_context::widget_kind::none) {
+          g_ctx->focused_kind = im_context::widget_kind::scroll;
+        }
       }
       // keep offset valid for next frame if content shrank
       scroll.offset = std::clamp(scroll.offset, 0, std::max(0, scroll.content_height - viewport_height));
@@ -859,6 +895,132 @@ void close_popup() {
 
 auto is_popup_open() -> bool {
   return g_ctx->popup.open_id != im_id();
+}
+
+auto wants_text_input() -> bool {
+  auto const kind = g_ctx->focused_kind != im_context::widget_kind::none ? g_ctx->focused_kind : g_ctx->last_focused_kind;
+  return kind == im_context::widget_kind::text_input || kind == im_context::widget_kind::password;
+}
+
+void key_hint(std::string_view keys, std::string_view action) {
+  g_ctx->help.app_keys.emplace_back(keys, action);
+}
+
+void enable_help(bool enabled) {
+  g_ctx->help.enabled = enabled;
+}
+
+namespace {
+
+constexpr auto help_popup = std::string_view("##xxx-help");
+
+} // namespace
+
+namespace internal {
+
+// F1 toggles the help, so does '?' unless it is typed into a text input
+void handle_help_keys() {
+  auto& popup = g_ctx->popup;
+  if (!g_ctx->help.enabled) {
+    return;
+  }
+  auto question = false;
+  if (!wants_text_input()) {
+    for (auto const& e : g_ctx->input.get_input_events()) {
+      question = question || e.ch == '?';
+    }
+  }
+  if (!is_key_pressed(im_key_id::f1) && !question) {
+    return;
+  }
+  if (popup.open_id == popup_id(help_popup)) {
+    close_popup_now();
+    g_ctx->input.consume_keyboard();
+  } else if (popup.open_id == im_id()) {
+    g_ctx->help.selected = 0;
+    open_popup(help_popup); // consumes the key
+  }
+  // another popup is open: leave it alone
+}
+
+void build_help_popup() {
+  auto& help = g_ctx->help;
+  if (!help.enabled || g_ctx->popup.open_id != popup_id(help_popup)) {
+    return;
+  }
+  static constexpr auto columns = std::to_array<im_table_column>({{"key", cells(14)}, {"action", fill()}});
+  static constexpr std::pair<std::string_view, std::string_view> navigation[] = {
+      {"arrows", "move focus, also to other views"},
+      {"Tab S-Tab", "next / previous widget"},
+      {"Enter Space", "press, select"},
+      {"PgUp PgDn", "scroll view"},
+      {"Esc", "close popup"},
+      {"F1 ?", "this help"},
+  };
+  auto cells_text = std::vector<std::string>();
+  for (auto const& [keys, action] : help.app_keys) {
+    cells_text.insert(cells_text.end(), {keys, action});
+  }
+  for (auto const& [keys, action] : help.view_keys) {
+    cells_text.insert(cells_text.end(), {keys, action});
+  }
+  for (auto const& [keys, action] : navigation) {
+    cells_text.insert(cells_text.end(), {std::string(keys), std::string(action)});
+  }
+  auto const screen = get_screen_rect();
+  auto const rows = std::max(1, std::min(int(cells_text.size() / 2), screen.height() - 6));
+  if (popup_begin(help_popup, "keys", std::min(64, screen.width() - 4))) {
+    table("##keys", columns, cells_text, help.selected, rows);
+    popup_end();
+  }
+}
+
+} // namespace internal
+
+void key_hints(std::string_view extra) {
+  using kind = im_context::widget_kind;
+  auto const focused = g_ctx->focused_kind != kind::none ? g_ctx->focused_kind : g_ctx->last_focused_kind;
+  auto text = std::string();
+  auto const add = [&](std::string_view part) {
+    if (!part.empty()) {
+      text += text.empty() ? "" : " · ";
+      text += part;
+    }
+  };
+  switch (focused) {
+  case kind::button:
+    add("Enter press");
+    break;
+  case kind::checkbox:
+    add("Space toggle");
+    break;
+  case kind::text_input:
+    add("^U ^K ^W cut · ^Y paste · ^C copy");
+    break;
+  case kind::password:
+    add("^U ^K ^W delete");
+    break;
+  case kind::list:
+    add("↑↓ select · Enter open · ^C copy");
+    break;
+  case kind::table:
+    add("↑↓ select · Enter open · ^C copy row");
+    break;
+  case kind::tabs:
+    add("←→ switch");
+    break;
+  case kind::scroll:
+    add("↑↓ PgUp PgDn scroll");
+    break;
+  case kind::none:
+    break;
+  }
+  add(is_popup_open() ? "Esc close" : "arrows move");
+  if (g_ctx->help.enabled) {
+    add(wants_text_input() ? "F1 help" : "F1 ? help");
+  }
+  add(extra);
+  label(text);
 }
 
 auto popup_begin(std::string_view id, std::string_view title, int width) -> bool {
@@ -1018,7 +1180,8 @@ void label(std::string_view text) {
 namespace internal {
 
 // update widget.* properties
-void common_focusable_behaviour(im_id widget_id, im_rect const& widget_rect, std::uint8_t nav_keys) noexcept {
+void common_focusable_behaviour(
+    im_id widget_id, im_rect const& widget_rect, std::uint8_t nav_keys, im_context::widget_kind kind) noexcept {
   auto& view = g_ctx->view;
   auto& widget = g_ctx->widget;
 
@@ -1061,6 +1224,7 @@ void common_focusable_behaviour(im_id widget_id, im_rect const& widget_rect, std
     }
     widget.active = (widget.active_id == widget.current_id);
     if (widget.active) {
+      g_ctx->focused_kind = kind;
       widget.next_id = im_id();
       // previous focusable in this view; none if active is first (wraps to last_id)
       widget.prev_id = widget.last_id;
@@ -1104,7 +1268,7 @@ auto button(std::string_view label) -> bool {
   auto const button_width = std::max<int>(button_min_width, unicode_str_width + 4);
   auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(button_width, 1));
 
-  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect, im_context::nav_none);
+  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect, im_context::nav_none, im_context::widget_kind::button);
 
   if (widget.active) {
     if (is_key_pressed(im_key_id::space) || is_key_pressed(im_key_id::enter) ||
@@ -1167,7 +1331,7 @@ auto text_input(std::string_view placeholder, std::string& input, int flags) -> 
   auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(internal::item_width(input_width), 1));
   auto const [str, widget_key] = g_ctx->hash_id.split_str_key(placeholder);
 
-  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect, im_context::nav_horizontal);
+  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect, im_context::nav_horizontal, password ? im_context::widget_kind::password : im_context::widget_kind::text_input);
 
   if (widget.active) {
     text_input.text.clear();
@@ -1420,7 +1584,7 @@ auto checkbox(std::string_view label, bool& value) -> bool {
   auto const unicode_str = to_unicode(str);
   auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(4 + text_width(unicode_str), 1));
 
-  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect, im_context::nav_none);
+  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect, im_context::nav_none, im_context::widget_kind::checkbox);
 
   auto toggled = false;
   if (widget.active && (is_key_pressed(im_key_id::space) || is_key_pressed(im_key_id::enter) ||
@@ -1525,7 +1689,7 @@ auto list_impl(std::string_view label, int count, ItemAt&& item_at, int& selecte
   auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(internal::item_width(fill()), rows));
 
   auto const [str, widget_key] = g_ctx->hash_id.split_str_key(label);
-  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect, im_context::nav_vertical);
+  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect, im_context::nav_vertical, im_context::widget_kind::list);
 
   auto& offset = g_ctx->list_scroll[widget.current_id];
   auto const activated = selection_behaviour(widget_rect, rows, count, selected, offset);
@@ -1567,7 +1731,7 @@ auto table_impl(std::string_view label, std::span<im_table_column const> columns
   auto const rows_rect = widget_rect.crop_top(1);
 
   auto const [str, widget_key] = g_ctx->hash_id.split_str_key(label);
-  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect, im_context::nav_vertical);
+  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect, im_context::nav_vertical, im_context::widget_kind::table);
 
   auto& offset = g_ctx->list_scroll[widget.current_id];
   auto const activated = selection_behaviour(rows_rect, rows, count, selected, offset);
@@ -1706,7 +1870,7 @@ auto tabs_impl(std::string_view label, int count, ItemAt&& item_at, int& selecte
   auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(std::max(total_width, 1), 1));
 
   auto const [str, widget_key] = g_ctx->hash_id.split_str_key(label);
-  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect, im_context::nav_horizontal);
+  internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect, im_context::nav_horizontal, im_context::widget_kind::tabs);
 
   auto const previous = selected = count > 0 ? std::clamp(selected, 0, count - 1) : -1;
   if (widget.active && count > 0) {

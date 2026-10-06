@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 
@@ -171,6 +172,19 @@ struct im_context {
 
   // width for the next widget, 0 - widget default (see set_next_item_width)
   int next_item_width = 0;
+
+  // kind of the widget with keyboard focus: drives key_hints() and wants_text_input()
+  enum class widget_kind : std::uint8_t { none, button, checkbox, text_input, password, list, table, tabs, scroll };
+  widget_kind focused_kind = widget_kind::none;      // this frame, so far
+  widget_kind last_focused_kind = widget_kind::none; // previous frame
+
+  // built-in help
+  struct {
+    bool enabled = true;
+    std::vector<std::pair<std::string, std::string>> app_keys;  // key_hint() this frame
+    std::vector<std::pair<std::string, std::string>> view_keys; // view shortcuts this frame
+    int selected = 0;
+  } help;
 
   // persistent first visible row per list widget
   std::unordered_map<im_id, int> list_scroll;

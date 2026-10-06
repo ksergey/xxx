@@ -3,7 +3,7 @@
 
 // Conway's Game of Life on a braille canvas: every terminal cell shows 2x4 cells of the world.
 //
-// Keys are listed in the "keys" tab of the info panel.
+// Keys: F1 or ? shows them all, the bottom line shows keys of the focused widget.
 
 #include <algorithm>
 #include <array>
@@ -77,7 +77,7 @@ constexpr auto pattern_columns = std::to_array<xxx::im_table_column>({
   return cells;
 }
 
-constexpr auto info_tabs = std::to_array({"events"sv, "rules"sv, "keys"sv});
+constexpr auto info_tabs = std::to_array({"events"sv, "rules"sv});
 
 constexpr auto rules_text = std::to_array({
     "every cell has 8 neighbours"sv,
@@ -92,19 +92,6 @@ constexpr auto rules_text = std::to_array({
     "  newborn -> old-timer"sv,
 });
 
-constexpr auto keys_text = std::to_array({
-    "arrows        move focus"sv,
-    "Tab / S-Tab   next / prev"sv,
-    "Enter / Space press"sv,
-    "Up / Down     pick pattern"sv,
-    "Left / Right  switch tab"sv,
-    "PgUp / PgDn   scroll"sv,
-    "C-o C-p C-e   panels"sv,
-    "C-q           quit"sv,
-    ""sv,
-    "Esc           close dialog"sv,
-    "mouse: click, wheel"sv,
-});
 
 class world {
 public:
@@ -280,7 +267,8 @@ int main() {
 
     // world takes the right part of the screen, inside a border
     auto const screen = xxx::get_screen_rect();
-    auto const canvas_cells = xxx::im_vec2(std::max(1, screen.width() - sidebar_width - 2), std::max(1, screen.height() - 2));
+    // border around the world and the key hints line below
+    auto const canvas_cells = xxx::im_vec2(std::max(1, screen.width() - sidebar_width - 2), std::max(1, screen.height() - 3));
     life.resize(canvas_cells.x * 2, canvas_cells.y * 4);
     if (first_frame) {
       life.randomize(rng);
@@ -373,7 +361,7 @@ int main() {
       }
       xxx::view_end();
 
-      xxx::view_begin("info", xxx::im_view_flags_default, xxx::im_key_id::ctrl_e, xxx::fill());
+      xxx::view_begin("info", xxx::im_view_flags_default, xxx::im_key_id::ctrl_e, xxx::fill(1));
       xxx::tabs("info", info_tabs, info_tab);
       switch (info_tab) {
       case 0:
@@ -381,13 +369,8 @@ int main() {
           xxx::label(e);
         }
         break;
-      case 1:
-        for (auto const line : rules_text) {
-          xxx::label(line.empty() ? " "sv : line);
-        }
-        break;
       default:
-        for (auto const line : keys_text) {
+        for (auto const line : rules_text) {
           xxx::label(line.empty() ? " "sv : line);
         }
         break;
@@ -397,7 +380,7 @@ int main() {
     xxx::layout_row_push(xxx::fill());
     {
       xxx::view_begin(std::format("life{}##world", running ? "" : " (paused)"), xxx::im_view_flags_default,
-          xxx::im_key_id(), xxx::fill());
+          xxx::im_key_id(), xxx::fill(1));
       if (xxx::canvas_begin(xxx::im_vec2(life.width(), life.height()))) {
         for (int y = 0; y < life.height(); ++y) {
           for (int x = 0; x < life.width(); ++x) {
@@ -411,6 +394,9 @@ int main() {
       xxx::view_end();
     }
     xxx::layout_row_end();
+    xxx::key_hint("c-q", "quit");
+    xxx::key_hint("Enter", "on a pattern: stamp it at a random place");
+    xxx::key_hints("c-q quit");
 
     if (xxx::popup_begin("clear", "clear the world?", 34)) {
       xxx::label(std::format("{} cells after {} generations", life.population(), life.generation()));

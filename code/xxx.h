@@ -68,6 +68,18 @@ enum class im_key_id {
   page_up,
   page_down,
   back_tab, // shift-tab
+  f1,
+  f2,
+  f3,
+  f4,
+  f5,
+  f6,
+  f7,
+  f8,
+  f9,
+  f10,
+  f11,
+  f12,
   last
 };
 
@@ -232,6 +244,20 @@ void set_clipboard(std::string_view text);
 
 /// Mark colliding widgets with red '!' on screen. Default: on in debug builds (no NDEBUG).
 void show_id_collisions(bool show);
+
+/// True when a text input has keyboard focus: typed characters go there.
+/// Otherwise an application can safely use plain letters and digits as shortcuts.
+[[nodiscard]] auto wants_text_input() -> bool;
+
+/// Describe an application key for the built-in help (F1, or ? when no text input is focused).
+/// Call every frame, e.g. key_hint("c-q", "quit")
+void key_hint(std::string_view keys, std::string_view action);
+
+/// Built-in help popup: application keys (key_hint), view shortcuts and navigation keys. On by default
+void enable_help(bool enabled);
+
+/// Widget: one line of keys for the focused widget (e.g. at the bottom of the screen), \c extra is appended
+void key_hints(std::string_view extra = {});
 
 /// Push id scope: same labels inside different scopes don't collide (e.g. widgets built in a loop)
 void push_id(std::string_view id);

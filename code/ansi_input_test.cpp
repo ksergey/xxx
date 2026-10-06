@@ -99,7 +99,18 @@ TEST_SUITE("ansi input: keys") {
   }
 
   TEST_CASE("unknown sequences are swallowed") {
-    CHECK(parse("\x1b[15~x\x1b[?1;2cy\x1bOPz") == std::vector<std::string>{"c:x", "c:y", "c:z"}); // F5, DA reply, F1
+    // insert, device attributes reply, keypad enter in application mode
+    CHECK(parse("\x1b[2~x\x1b[?1;2cy\x1bOMz") == std::vector<std::string>{"c:x", "c:y", "c:z"});
+  }
+
+  TEST_CASE("function keys") {
+    CHECK(parse("\x1bOP\x1bOQ\x1bOR\x1bOS") == std::vector<std::string>{key(im_key_id::f1), key(im_key_id::f2),
+                                                       key(im_key_id::f3), key(im_key_id::f4)});
+    CHECK(parse("\x1b[1;2P\x1b[1;5S") == std::vector<std::string>{key(im_key_id::f1), key(im_key_id::f4)}); // modifiers
+    CHECK(parse("\x1b[11~\x1b[15~\x1b[17~\x1b[21~\x1b[23~\x1b[24~") ==
+          std::vector<std::string>{key(im_key_id::f1), key(im_key_id::f5), key(im_key_id::f6), key(im_key_id::f10),
+              key(im_key_id::f11), key(im_key_id::f12)});
+    CHECK(parse("\x1b[15;2~") == std::vector<std::string>{key(im_key_id::f5)});
   }
 }
 
