@@ -41,6 +41,7 @@ constexpr auto default_services = std::to_array<std::string_view>({
     "https://ifconfig.co/ip",
     "https://ip.sb",
     "https://ip.tyk.nu",
+    "http://2ip.ru", // plain text for curl's User-Agent; documented as plain http
 });
 
 struct options {
