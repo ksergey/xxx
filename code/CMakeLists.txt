@@ -12,7 +12,9 @@ add_library(xxx::xxx ALIAS ${TargetName})
 
 if (xxx_BUILD_TESTS)
     file(GLOB Tests "${CMAKE_CURRENT_SOURCE_DIR}/*_test.cpp")
-    set(TestLibs doctest::doctest_with_main xxx::xxx)
+    # some tests start threads (wake_up from another thread)
+    find_package(Threads REQUIRED)
+    set(TestLibs doctest::doctest_with_main xxx::xxx Threads::Threads)
     XxxAddTestsFromSourceList(Tests
         PREFIX xxx
         COMPILE_OPTIONS -Wall -Wextra -g

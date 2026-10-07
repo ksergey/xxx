@@ -5,6 +5,10 @@ project(xxx)
 # no C++ modules here: skip dependency scanning (with clang it would need clang-scan-deps)
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
+# threads (tests and examples only, the library starts none): -pthread rather than a bare -lpthread.
+# glibc before 2.34 keeps pthread_create in a separate libpthread
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+
 # Default build type
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Choose the type of build" FORCE)

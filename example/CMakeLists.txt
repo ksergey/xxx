@@ -7,7 +7,7 @@ target_link_libraries(${TargetName} PRIVATE xxx::xxx)
 # mihomo dashboard: libcurl (https) from the system, nlohmann_json and cxxopts with CPM.
 # They are fetched only when the example is built at all
 find_package(CURL QUIET)
-find_package(Threads)
+find_package(Threads REQUIRED)
 if (CURL_FOUND)
     # release archive (headers + CMake, ~110 KB) instead of the huge git repository
     CPMAddPackage(
