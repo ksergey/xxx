@@ -868,14 +868,22 @@ void view_end() {
                                   : style_of(im_role::border);
 
     if (do_render_border) {
-      g_ctx->renderer.cmd_draw_rect(panel_rect, border_style);
+      g_ctx->renderer.cmd_draw_rect(panel_rect, border_style, view.active ? view.border_active : view.border_inactive);
 
       if (do_render_title) {
         auto const style = view.active
                                ? style_of(im_role::title_focused)
                                : style_of(im_role::title);
+        // left / right titles keep the corner: one cell in
+        auto const title_rect = panel_rect.width() > 2
+                                    ? im_rect(panel_rect.min.x + 1, panel_rect.min.y, panel_rect.max.x - 1, panel_rect.max.y)
+                                    : panel_rect;
+        auto const halign = view.title_align == im_align::left    ? im_halign::left
+                            : view.title_align == im_align::right ? im_halign::right
+                                                                   : im_halign::center;
         g_ctx->renderer.cmd_draw_text_in_rect(
-            panel_rect, to_unicode(view.current_title), style, im_halign::center, im_valign::top);
+            view.title_align == im_align::center ? panel_rect : title_rect, to_unicode(view.current_title), style, halign,
+            im_valign::top);
       }
     }
 
@@ -987,6 +995,16 @@ void enable_help(bool enabled) {
 
 void enable_esc_back(bool enabled) {
   g_ctx->view.esc_back = enabled;
+}
+
+void set_view_style(im_border inactive, im_border active, im_align title_align) {
+  g_ctx->view.border_inactive = inactive;
+  g_ctx->view.border_active = active;
+  g_ctx->view.title_align = title_align;
+}
+
+void enable_vim_keys(bool enabled) {
+  g_ctx->vim_keys = enabled;
 }
 
 namespace {
@@ -1181,7 +1199,7 @@ void popup_end() {
   g_ctx->renderer.set_layer(1);
   g_ctx->renderer.push_clip_rect(screen, false);
   g_ctx->renderer.cmd_fill_rect(rect, ' ', style_of(im_role::text));
-  g_ctx->renderer.cmd_draw_rect(rect, style_of(im_role::border_focused));
+  g_ctx->renderer.cmd_draw_rect(rect, style_of(im_role::border_focused), g_ctx->view.border_active);
   g_ctx->renderer.cmd_draw_text_in_rect(rect, to_unicode(popup.current_title),
       style_of(im_role::title_focused), im_halign::center, im_valign::top);
   g_ctx->renderer.pop_clip_rect();
@@ -1273,6 +1291,39 @@ void label(std::string_view text, im_role role) {
 
 void label(std::string_view text, im_role_style const& style) {
   label_with_style(text, g_ctx->theme.style(style));
+}
+
+void label(std::span<im_text const> parts, im_align align) {
+  auto total = 0;
+  for (auto const& part : parts) {
+    total += text_width(to_unicode(part.text));
+  }
+  // left: as wide as the text; center / right: the whole width
+  auto const width = align == im_align::left ? total : internal::item_width(fill());
+  auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(width, 1));
+  if (!g_ctx->renderer.is_visible(widget_rect)) {
+    return;
+  }
+  g_ctx->renderer.cmd_fill_rect(widget_rect, ' ', style_of(im_role::text));
+  auto x = widget_rect.min.x;
+  if (align == im_align::center) {
+    x += std::max(0, (widget_rect.width() - total) / 2);
+  } else if (align == im_align::right) {
+    x += std::max(0, widget_rect.width() - total);
+  }
+  g_ctx->renderer.push_clip_rect(widget_rect);
+  for (auto const& part : parts) {
+    auto const text = to_unicode(part.text);
+    auto style = style_of(part.role);
+    style.attrs |= part.attrs;
+    g_ctx->renderer.cmd_draw_text_at(im_vec2(x, widget_rect.min.y), text, style);
+    x += text_width(text);
+  }
+  g_ctx->renderer.pop_clip_rect();
+}
+
+void label(std::initializer_list<im_text> parts, im_align align) {
+  label(std::span<im_text const>(parts.begin(), parts.size()), align);
 }
 
 namespace internal {
@@ -1788,8 +1839,17 @@ auto selection_behaviour(im_rect const& rows_rect, int rows, int count, int& sel
         activated = true;
       }
     }
-    if (auto const delta = key_press_count(im_key_id::arrow_down) - key_press_count(im_key_id::arrow_up);
-        delta != 0) {
+    auto delta = key_press_count(im_key_id::arrow_down) - key_press_count(im_key_id::arrow_up);
+    if (g_ctx->vim_keys) {
+      delta += int(is_char_pressed('j')) - int(is_char_pressed('k'));
+      if (is_char_pressed('g')) {
+        selected = 0;
+      }
+      if (is_char_pressed('G')) {
+        selected = count - 1;
+      }
+    }
+    if (delta != 0) {
       selected = std::clamp(selected < 0 ? (delta > 0 ? delta - 1 : 0) : selected + delta, 0, count - 1);
     }
     if (is_key_pressed(im_key_id::home)) {
@@ -1862,13 +1922,14 @@ auto list_impl(std::string_view label, int count, ItemAt&& item_at, int& selecte
 
 template <typename CellAt>
 auto table_impl(std::string_view label, std::span<im_table_column const> columns, int count, CellAt&& cell_at,
-    int& selected, int height) -> bool {
+    int& selected, int height, im_table_options const& options = {}) -> bool {
   auto& widget = g_ctx->widget;
   auto const ncols = int(columns.size());
 
+  auto const header_rows = options.header_gap ? 2 : 1;
   auto const rows = std::max(1, height > 0 ? height : count);
-  auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(internal::item_width(fill()), rows + 1));
-  auto const rows_rect = widget_rect.crop_top(1);
+  auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(internal::item_width(fill()), rows + header_rows));
+  auto const rows_rect = widget_rect.crop_top(header_rows);
 
   auto const [str, widget_key] = g_ctx->hash_id.split_str_key(label);
   internal::common_focusable_behaviour(g_ctx->hash_id.make(widget_key), widget_rect, im_context::nav_vertical, im_context::widget_kind::table);
@@ -1952,7 +2013,9 @@ auto table_impl(std::string_view label, std::span<im_table_column const> columns
     if (!g_ctx->renderer.is_visible(im_rect(widget_rect.min.x, y, widget_rect.max.x, y))) {
       continue;
     }
-    auto const& row_style = index == selected ? selected_style : style;
+    auto const row_role =
+        std::size_t(index) < options.row_roles.size() ? options.row_roles[std::size_t(index)] : im_role::text;
+    auto const row_style = index == selected ? selected_style : (row_role == im_role::text ? style : style_of(row_role));
     if (index == selected) {
       g_ctx->renderer.cmd_fill_rect(im_rect(widget_rect.min.x, y, widget_rect.max.x, y), ' ', row_style);
     }
@@ -1979,6 +2042,23 @@ auto table(std::string_view label, std::span<im_table_column const> columns, std
       label, columns, int(cells.size() / ncols),
       [&](int r, int c) { return std::string_view(cells[std::size_t(r) * ncols + std::size_t(c)]); }, selected,
       height);
+}
+
+auto table(std::string_view label, std::span<im_table_column const> columns, std::span<std::string_view const> cells,
+    int& selected, int height, im_table_options const& options) -> bool {
+  auto const ncols = std::max<std::size_t>(1, columns.size());
+  return table_impl(
+      label, columns, int(cells.size() / ncols),
+      [&](int r, int c) { return cells[std::size_t(r) * ncols + std::size_t(c)]; }, selected, height, options);
+}
+
+auto table(std::string_view label, std::span<im_table_column const> columns, std::span<std::string const> cells,
+    int& selected, int height, im_table_options const& options) -> bool {
+  auto const ncols = std::max<std::size_t>(1, columns.size());
+  return table_impl(
+      label, columns, int(cells.size() / ncols),
+      [&](int r, int c) { return std::string_view(cells[std::size_t(r) * ncols + std::size_t(c)]); }, selected,
+      height, options);
 }
 
 auto list(std::string_view label, std::span<std::string_view const> items, int& selected, int height) -> bool {

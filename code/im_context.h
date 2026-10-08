@@ -68,6 +68,11 @@ struct im_context {
     std::vector<im_id> history;
     std::unordered_map<im_id, im_id> last_widget;
     bool esc_back = true;
+
+    // look: frames of inactive / active views (and popups), title placement
+    im_border border_inactive = im_border::rounded;
+    im_border border_active = im_border::rounded;
+    im_align title_align = im_align::center;
   } view;
 
   struct {
@@ -190,6 +195,8 @@ struct im_context {
     std::vector<std::pair<std::string, std::string>> view_keys; // view shortcuts this frame
     int selected = 0;
   } help;
+
+  bool vim_keys = false; // j / k / g / G in lists and tables
 
   // persistent first visible row per list widget
   std::unordered_map<im_id, int> list_scroll;

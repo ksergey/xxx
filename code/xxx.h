@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstdint>
 #include <source_location>
+#include <initializer_list>
 #include <optional>
 #include <span>
 #include <string>
@@ -493,8 +494,34 @@ auto list(std::string_view label, std::span<std::string_view const> items, int& 
 /// @overload
 auto list(std::string_view label, std::span<std::string const> items, int& selected, int height = 0) -> bool;
 
-/// Text alignment inside table column
+/// Text alignment (table column, label, view title)
 enum class im_align { left, center, right };
+
+/// Frame of views and popups
+enum class im_border : std::uint8_t {
+  rounded, // ╭─╮ (default)
+  plain,   // ┌─┐
+  thick,   // ┏━┓
+  double_line // ╔═╗
+};
+
+/// How views look: frame of inactive views, frame of the active view (and popups), where titles go
+void set_view_style(im_border inactive, im_border active, im_align title_align = im_align::center);
+
+/// Part of a label with its own style, e.g. a key in bold in a help line
+struct im_text {
+  std::string_view text;
+  im_role role = im_role::text;
+  std::uint32_t attrs = 0; // added to the role's attributes, e.g. im_attr_bold
+};
+
+/// Label made of parts; with center / right alignment it takes the whole width
+void label(std::span<im_text const> parts, im_align align = im_align::left);
+/// @overload
+void label(std::initializer_list<im_text> parts, im_align align = im_align::left);
+
+/// j / k move the selection in lists and tables, g / G go to the first / last row (vim style). Off by default
+void enable_vim_keys(bool enabled);
 
 /// Table column
 struct im_table_column {
@@ -514,6 +541,22 @@ auto table(std::string_view label, std::span<im_table_column const> columns, std
 /// @overload
 auto table(std::string_view label, std::span<im_table_column const> columns, std::span<std::string const> cells,
     int& selected, int height = 0) -> bool;
+
+/// More table options
+struct im_table_options {
+  /// role of each row (text when empty or shorter), e.g. muted for unavailable items; the selected row
+  /// keeps the focus / selection style
+  std::span<im_role const> row_roles = {};
+  /// blank line between the header and the rows
+  bool header_gap = false;
+};
+
+/// @overload
+auto table(std::string_view label, std::span<im_table_column const> columns, std::span<std::string const> cells,
+    int& selected, int height, im_table_options const& options) -> bool;
+/// @overload
+auto table(std::string_view label, std::span<im_table_column const> columns, std::span<std::string_view const> cells,
+    int& selected, int height, im_table_options const& options) -> bool;
 
 /// Widget: spinner
 /// @param text is optional spinner text

@@ -77,7 +77,13 @@ enum class im_valign { top, center, bottom };
 class im_renderer {
 private:
   static constexpr auto render_cmd_text_max_size = std::size_t(32);
-  static constexpr auto border_style = std::to_array<std::uint32_t>({L'╭', L'╮', L'╰', L'╯', L'│', L'─'});
+  // corners (top left, top right, bottom left, bottom right), vertical, horizontal; by im_border
+  static constexpr std::uint32_t border_glyphs[4][6] = {
+      {L'╭', L'╮', L'╰', L'╯', L'│', L'─'},
+      {L'┌', L'┐', L'└', L'┘', L'│', L'─'},
+      {L'┏', L'┓', L'┗', L'┛', L'┃', L'━'},
+      {L'╔', L'╗', L'╚', L'╝', L'║', L'═'},
+  };
 
   enum class render_cmd_type { none, fill_rect, draw_rect, draw_text, draw_surface };
 
@@ -90,6 +96,7 @@ private:
 
   struct render_cmd_draw_rect_data {
     im_rect rect;
+    im_border border;
   };
 
   struct render_cmd_draw_text_data {
@@ -204,7 +211,7 @@ public:
   }
 
   /// Append command to draw rect
-  void cmd_draw_rect(im_rect const& rect, im_style const& style) {
+  void cmd_draw_rect(im_rect const& rect, im_style const& style, im_border border = im_border::rounded) {
     auto const a_rect = this->adjust(rect);
     auto const c_rect = clip_rect_.intersection(a_rect);
     if (!c_rect) {
@@ -212,8 +219,9 @@ public:
     }
     if (c_rect == a_rect) {
       // nothing to clip
-      return this->append_cmd_draw_rect(a_rect, style);
+      return this->append_cmd_draw_rect(a_rect, style, border);
     }
+    auto const& border_style = border_glyphs[static_cast<std::size_t>(border)];
 
     auto const top_left = a_rect.top_left();
     auto const top_right = a_rect.top_right();
@@ -347,11 +355,11 @@ private:
     cmd.fill_rect_data = render_cmd_fill_rect_data{.rect = rect, .ch = ch};
   }
 
-  void append_cmd_draw_rect(im_rect const& rect, im_style const& style) {
+  void append_cmd_draw_rect(im_rect const& rect, im_style const& style, im_border border) {
     auto& cmd = commands_[std::size_t(layer_)].emplace_back();
     cmd.type = render_cmd_type::draw_rect;
     cmd.style = style;
-    cmd.draw_rect_data = render_cmd_draw_rect_data{.rect = rect};
+    cmd.draw_rect_data = render_cmd_draw_rect_data{.rect = rect, .border = border};
   }
 
   // clip single line text (in screen coords) to clip rect by terminal columns and append command

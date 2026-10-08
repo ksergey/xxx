@@ -25,6 +25,9 @@ Earlier versions were built on [termbox/termbox2](https://github.com/termbox/ter
   widgets; 16 / 256 / 24-bit colors as the terminal supports (`COLORTERM`), `NO_COLOR` respected.
   Loading themes from JSON files is shown in the mihomo example (`example/theme_file.h`), the library stays
   dependency free
+- View frames (rounded, plain, thick, double) for inactive / active views, titles left, center or right
+  (`set_view_style`); labels made of styled parts (`label({{"q", im_role::text, im_attr_bold}, {" quit"}})`);
+  table rows with their own role and a gap under the header (`im_table_options`); optional j / k / g / G
 - Headless backend for testing UI without a terminal
 - Debug builds mark widgets with colliding ids (same label twice) with a red `!`
 

@@ -76,6 +76,7 @@ void im_renderer::do_fill_rect(im_backend& backend, render_cmd const& cmd) {
 void im_renderer::do_draw_rect(im_backend& backend, render_cmd const& cmd) {
   auto const& style = cmd.style;
   auto const& rect = cmd.draw_rect_data.rect;
+  auto const& border_style = border_glyphs[static_cast<std::size_t>(cmd.draw_rect_data.border)];
 
   // plain loops: a rect one row / column high has no sides, and must not loop forever
   for (int pos_x = rect.min.x + 1; pos_x < rect.max.x; ++pos_x) {
