@@ -1,8 +1,9 @@
 ---
 Language: Cpp
 Standard: c++20
+IndentWidth: 4
 ColumnLimit: 120
-AccessModifierOffset: -2
+AccessModifierOffset: -4
 DerivePointerAlignment: false
 PointerAlignment: Left
 SortIncludes: true
@@ -11,4 +12,6 @@ AllowShortFunctionsOnASingleLine: Empty
 AllowShortLambdasOnASingleLine: Empty
 AllowShortBlocksOnASingleLine: Empty
 AlignAfterOpenBracket: DontAlign
+AllowShortCaseLabelsOnASingleLine: true
+EmptyLineBeforeAccessModifier: LogicalBlock
 ...

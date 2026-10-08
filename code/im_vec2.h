@@ -9,45 +9,45 @@ namespace xxx {
 
 /// helper: 2d vector
 struct im_vec2 {
-  int x = 0;
-  int y = 0;
+    int x = 0;
+    int y = 0;
 
-  constexpr im_vec2() = default;
-  constexpr im_vec2(int x0, int y0) noexcept : x(x0), y(y0) {}
+    constexpr im_vec2() = default;
+    constexpr im_vec2(int x0, int y0) noexcept : x(x0), y(y0) {}
 
-  [[nodiscard]] friend constexpr auto operator+(im_vec2 const& a, im_vec2 const& b) noexcept -> im_vec2 {
-    return im_vec2(a.x + b.x, a.y + b.y);
-  }
-  [[nodiscard]] friend constexpr auto operator-(im_vec2 const& a, im_vec2 const& b) noexcept -> im_vec2 {
-    return im_vec2(a.x - b.x, a.y - b.y);
-  }
-  [[nodiscard]] constexpr auto operator-() const noexcept -> im_vec2 {
-    return im_vec2(-x, -y);
-  }
-  constexpr auto operator+=(im_vec2 const& a) noexcept -> im_vec2& {
-    x += a.x;
-    y += a.y;
-    return *this;
-  }
-  constexpr auto operator-=(im_vec2 const& a) noexcept -> im_vec2& {
-    x -= a.x;
-    y -= a.y;
-    return *this;
-  }
+    [[nodiscard]] friend constexpr auto operator+(im_vec2 const& a, im_vec2 const& b) noexcept -> im_vec2 {
+        return im_vec2(a.x + b.x, a.y + b.y);
+    }
+    [[nodiscard]] friend constexpr auto operator-(im_vec2 const& a, im_vec2 const& b) noexcept -> im_vec2 {
+        return im_vec2(a.x - b.x, a.y - b.y);
+    }
+    [[nodiscard]] constexpr auto operator-() const noexcept -> im_vec2 {
+        return im_vec2(-x, -y);
+    }
+    constexpr auto operator+=(im_vec2 const& a) noexcept -> im_vec2& {
+        x += a.x;
+        y += a.y;
+        return *this;
+    }
+    constexpr auto operator-=(im_vec2 const& a) noexcept -> im_vec2& {
+        x -= a.x;
+        y -= a.y;
+        return *this;
+    }
 
-  constexpr auto operator<=>(im_vec2 const&) const noexcept = default;
+    constexpr auto operator<=>(im_vec2 const&) const noexcept = default;
 };
 
 } // namespace xxx
 
 template <>
 struct std::formatter<xxx::im_vec2> {
-  constexpr auto parse(std::format_parse_context& ctx) {
-    return ctx.begin();
-  }
-  // templated on the context: std::formattable checks it with an unspecified output iterator (libc++)
-  template <typename FormatContext>
-  auto format(xxx::im_vec2 const& v, FormatContext& ctx) const {
-    return std::format_to(ctx.out(), "im_vec2({}, {})", v.x, v.y);
-  }
+    constexpr auto parse(std::format_parse_context& ctx) {
+        return ctx.begin();
+    }
+    // templated on the context: std::formattable checks it with an unspecified output iterator (libc++)
+    template <typename FormatContext>
+    auto format(xxx::im_vec2 const& v, FormatContext& ctx) const {
+        return std::format_to(ctx.out(), "im_vec2({}, {})", v.x, v.y);
+    }
 };

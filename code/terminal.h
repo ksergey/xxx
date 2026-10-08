@@ -33,72 +33,72 @@ namespace xxx {
 /// One terminal at a time. Call from one thread; wake_up() from any.
 class terminal {
 public:
-  struct options {
-    /// Terminal descriptor to use (not closed by terminal); -1: open /dev/tty
-    int tty_fd = -1;
-    /// Install a SIGWINCH handler. false: the application handles it (e.g. signalfd) and calls notify_resize()
-    bool handle_resize_signal = true;
-    /// Asynchronous output. Set: each frame's bytes are handed here and must stay unchanged until
-    /// write_done(). While a write is in flight frames are not sent, the latest one goes after it.
-    /// Not set: frames are written synchronously.
-    /// A finished write needs no new frame (write_done() hands a held one itself): building a frame on
-    /// every write completion turns into a busy loop as soon as frames differ.
-    std::function<void(std::string_view bytes)> write = {};
-  };
+    struct options {
+        /// Terminal descriptor to use (not closed by terminal); -1: open /dev/tty
+        int tty_fd = -1;
+        /// Install a SIGWINCH handler. false: the application handles it (e.g. signalfd) and calls notify_resize()
+        bool handle_resize_signal = true;
+        /// Asynchronous output. Set: each frame's bytes are handed here and must stay unchanged until
+        /// write_done(). While a write is in flight frames are not sent, the latest one goes after it.
+        /// Not set: frames are written synchronously.
+        /// A finished write needs no new frame (write_done() hands a held one itself): building a frame on
+        /// every write completion turns into a busy loop as soon as frames differ.
+        std::function<void(std::string_view bytes)> write = {};
+    };
 
-  terminal();
-  explicit terminal(options opts);
-  ~terminal();
+    terminal();
+    explicit terminal(options opts);
+    ~terminal();
 
-  terminal(terminal const&) = delete;
-  terminal& operator=(terminal const&) = delete;
+    terminal(terminal const&) = delete;
+    terminal& operator=(terminal const&) = delete;
 
-  /// Readable when the terminal sent input
-  [[nodiscard]] auto input_fd() const noexcept -> int;
+    /// Readable when the terminal sent input
+    [[nodiscard]] auto input_fd() const noexcept -> int;
 
-  /// Readable when the window was resized or wake_up() was called
-  [[nodiscard]] auto notify_fd() const noexcept -> int;
+    /// Readable when the window was resized or wake_up() was called
+    [[nodiscard]] auto notify_fd() const noexcept -> int;
 
-  /// Milliseconds until check_timeout() must be called (a lone Esc waits for the rest of a key
-  /// sequence, see ESCDELAY), -1 when there is no deadline. Ready to pass to poll().
-  [[nodiscard]] auto timeout_ms() const noexcept -> int;
+    /// Milliseconds until check_timeout() must be called (a lone Esc waits for the rest of a key
+    /// sequence, see ESCDELAY), -1 when there is no deadline. Ready to pass to poll().
+    [[nodiscard]] auto timeout_ms() const noexcept -> int;
 
-  /// Read what is ready on both descriptors without blocking, queue the events
-  /// @return true if events were queued or a notification (resize, wake_up) came
-  auto read_available() -> bool;
+    /// Read what is ready on both descriptors without blocking, queue the events
+    /// @return true if events were queued or a notification (resize, wake_up) came
+    auto read_available() -> bool;
 
-  /// Completion model: parse bytes the application read from input_fd() itself (instead of read_available)
-  void feed(std::string_view bytes);
+    /// Completion model: parse bytes the application read from input_fd() itself (instead of read_available)
+    void feed(std::string_view bytes);
 
-  /// Take only the notifications (resize, wake_up) from notify_fd(), leave input_fd() alone
-  /// @return true if a notification came
-  auto read_notifications() -> bool;
+    /// Take only the notifications (resize, wake_up) from notify_fd(), leave input_fd() alone
+    /// @return true if a notification came
+    auto read_notifications() -> bool;
 
-  /// The window may have changed size (when the application handles SIGWINCH itself)
-  void notify_resize();
+    /// The window may have changed size (when the application handles SIGWINCH itself)
+    void notify_resize();
 
-  /// options::write finished: \c written bytes of the handed ones went out. Fewer than handed: the rest is
-  /// handed again. All of them: the latest frame, if one was held back, is handed next.
-  void write_done(std::size_t written);
+    /// options::write finished: \c written bytes of the handed ones went out. Fewer than handed: the rest is
+    /// handed again. All of them: the latest frame, if one was held back, is handed next.
+    void write_done(std::size_t written);
 
-  /// Resolve a lone Esc whose deadline passed
-  /// @return true if events were queued
-  auto check_timeout() -> bool;
+    /// Resolve a lone Esc whose deadline passed
+    /// @return true if events were queued
+    auto check_timeout() -> bool;
 
-  /// Take the next queued event
-  [[nodiscard]] auto next_event(im_event& event) -> bool;
+    /// Take the next queued event
+    [[nodiscard]] auto next_event(im_event& event) -> bool;
 
-  /// Screen size in cells
-  [[nodiscard]] auto size() const noexcept -> im_vec2;
+    /// Screen size in cells
+    [[nodiscard]] auto size() const noexcept -> im_vec2;
 
-  /// Thread-safe: make notify_fd() readable (e.g. new data for the ui from another thread)
-  void wake_up() noexcept;
+    /// Thread-safe: make notify_fd() readable (e.g. new data for the ui from another thread)
+    void wake_up() noexcept;
 
-  struct impl;
+    struct impl;
 
 private:
-  friend struct terminal_access;
-  std::unique_ptr<impl> impl_;
+    friend struct terminal_access;
+    std::unique_ptr<impl> impl_;
 };
 
 } // namespace xxx

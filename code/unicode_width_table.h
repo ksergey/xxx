@@ -12,8 +12,8 @@
 namespace xxx::detail {
 
 struct width_range {
-  std::uint32_t first;
-  std::uint32_t last;
+    std::uint32_t first;
+    std::uint32_t last;
 };
 
 // codepoints taking two cells, sorted, non-overlapping (128 ranges)

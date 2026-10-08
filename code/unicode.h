@@ -40,11 +40,11 @@ inline constexpr auto replacement_char = std::uint32_t(0xfffd);
 /// Call f(codepoint) for every codepoint of \c input (see utf8_decode for stop rules)
 template <typename F>
 void for_each_codepoint(std::string_view input, F&& f) {
-  std::uint32_t ch;
-  while (auto const n = utf8_decode(input, ch)) {
-    f(ch);
-    input.remove_prefix(n);
-  }
+    std::uint32_t ch;
+    while (auto const n = utf8_decode(input, ch)) {
+        f(ch);
+        input.remove_prefix(n);
+    }
 }
 
 // number of terminal cells occupied by codepoint: 2 for wide (CJK, emoji), 1 otherwise
@@ -57,16 +57,16 @@ void for_each_codepoint(std::string_view input, F&& f) {
 // part of text visible in a window of terminal columns
 // wide char cut by the window edge is replaced with a single space (pad_left / pad_right)
 struct text_slice {
-  std::span<std::uint32_t const> text;
-  int pad_left = 0;
-  int pad_right = 0;
+    std::span<std::uint32_t const> text;
+    int pad_left = 0;
+    int pad_right = 0;
 
-  [[nodiscard]] auto width() const noexcept -> int {
-    return pad_left + text_width(text) + pad_right;
-  }
-  [[nodiscard]] auto empty() const noexcept -> bool {
-    return text.empty() && pad_left == 0 && pad_right == 0;
-  }
+    [[nodiscard]] auto width() const noexcept -> int {
+        return pad_left + text_width(text) + pad_right;
+    }
+    [[nodiscard]] auto empty() const noexcept -> bool {
+        return text.empty() && pad_left == 0 && pad_right == 0;
+    }
 };
 
 // slice text to columns [skip, skip + max_width)

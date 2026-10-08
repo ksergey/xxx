@@ -11,50 +11,50 @@ namespace xxx {
 /// or 24-bit RGB. Encoded in 32 bits: 0x00RRGGBB is RGB (so 0x000000 is black), the high byte tags
 /// the other kinds.
 struct im_color {
-  static constexpr std::uint32_t default_tag = 0x01000000u;
-  static constexpr std::uint32_t indexed_tag = 0x02000000u;
+    static constexpr std::uint32_t default_tag = 0x01000000u;
+    static constexpr std::uint32_t indexed_tag = 0x02000000u;
 
-  std::uint32_t value = default_tag;
+    std::uint32_t value = default_tag;
 
-  /// Terminal default color
-  constexpr im_color() noexcept = default;
+    /// Terminal default color
+    constexpr im_color() noexcept = default;
 
-  /// RGB, e.g. im_color(0xdcf763)
-  constexpr im_color(std::uint32_t v) noexcept : value(v) {}
+    /// RGB, e.g. im_color(0xdcf763)
+    constexpr im_color(std::uint32_t v) noexcept : value(v) {}
 
-  /// RGB from 0..1 components
-  constexpr im_color(float r, float g, float b) noexcept
-      : value((std::uint32_t(std::uint8_t(r * 255)) << 16) | std::uint32_t(std::uint8_t(g * 255)) << 8 |
-              std::uint32_t(std::uint8_t(b * 255))) {}
+    /// RGB from 0..1 components
+    constexpr im_color(float r, float g, float b) noexcept
+        : value((std::uint32_t(std::uint8_t(r * 255)) << 16) | std::uint32_t(std::uint8_t(g * 255)) << 8 |
+                std::uint32_t(std::uint8_t(b * 255))) {}
 
-  [[nodiscard]] static constexpr auto terminal_default() noexcept -> im_color {
-    return im_color();
-  }
-  /// Palette color: 0-7 ANSI, 8-15 bright ANSI, 16-231 color cube, 232-255 grays
-  [[nodiscard]] static constexpr auto indexed(std::uint8_t index) noexcept -> im_color {
-    return im_color(indexed_tag | index);
-  }
-  [[nodiscard]] static constexpr auto rgb(std::uint8_t r, std::uint8_t g, std::uint8_t b) noexcept -> im_color {
-    return im_color((std::uint32_t(r) << 16) | (std::uint32_t(g) << 8) | b);
-  }
+    [[nodiscard]] static constexpr auto terminal_default() noexcept -> im_color {
+        return im_color();
+    }
+    /// Palette color: 0-7 ANSI, 8-15 bright ANSI, 16-231 color cube, 232-255 grays
+    [[nodiscard]] static constexpr auto indexed(std::uint8_t index) noexcept -> im_color {
+        return im_color(indexed_tag | index);
+    }
+    [[nodiscard]] static constexpr auto rgb(std::uint8_t r, std::uint8_t g, std::uint8_t b) noexcept -> im_color {
+        return im_color((std::uint32_t(r) << 16) | (std::uint32_t(g) << 8) | b);
+    }
 
-  [[nodiscard]] constexpr auto is_default() const noexcept -> bool {
-    return value == default_tag;
-  }
-  [[nodiscard]] constexpr auto is_indexed() const noexcept -> bool {
-    return (value & 0xff000000u) == indexed_tag;
-  }
-  [[nodiscard]] constexpr auto is_rgb() const noexcept -> bool {
-    return (value & 0xff000000u) == 0;
-  }
-  [[nodiscard]] constexpr auto index() const noexcept -> std::uint8_t {
-    return std::uint8_t(value & 0xff);
-  }
+    [[nodiscard]] constexpr auto is_default() const noexcept -> bool {
+        return value == default_tag;
+    }
+    [[nodiscard]] constexpr auto is_indexed() const noexcept -> bool {
+        return (value & 0xff000000u) == indexed_tag;
+    }
+    [[nodiscard]] constexpr auto is_rgb() const noexcept -> bool {
+        return (value & 0xff000000u) == 0;
+    }
+    [[nodiscard]] constexpr auto index() const noexcept -> std::uint8_t {
+        return std::uint8_t(value & 0xff);
+    }
 
-  constexpr operator std::uint32_t() const noexcept {
-    return value;
-  }
-  constexpr auto operator<=>(im_color const&) const noexcept = default;
+    constexpr operator std::uint32_t() const noexcept {
+        return value;
+    }
+    constexpr auto operator<=>(im_color const&) const noexcept = default;
 };
 
 /// The 16 colors of the user's terminal scheme: adapt to light and dark backgrounds
@@ -81,7 +81,7 @@ inline namespace literals {
 
 /// RGB literal: 0xdcf763_c
 [[nodiscard]] constexpr auto operator""_c(unsigned long long int value) noexcept -> im_color {
-  return im_color(std::uint32_t(value & 0xffffff));
+    return im_color(std::uint32_t(value & 0xffffff));
 }
 
 } // namespace literals

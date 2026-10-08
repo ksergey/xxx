@@ -5,9 +5,9 @@
 
 #include <chrono>
 #include <cstdint>
-#include <source_location>
 #include <initializer_list>
 #include <optional>
+#include <source_location>
 #include <span>
 #include <string>
 #include <string_view>
@@ -21,68 +21,68 @@ namespace detail {
 
 template <typename T, typename Tag = void>
 [[nodiscard]] auto storage_for() noexcept -> T& {
-  static T value = T();
-  return value;
+    static T value = T();
+    return value;
 }
 
 } // namespace detail
 
 /// Keyboard key ids
 enum class im_key_id {
-  backspace = 1, // ctrl-h
-  backspace2,
-  del,
-  tab,   // ctrl-i
-  enter, // ctrl-m
-  space,
-  esc,
-  home,
-  end,
-  arrow_up,
-  arrow_down,
-  arrow_left,
-  arrow_right,
-  ctrl_a,
-  ctrl_b,
-  ctrl_c,
-  ctrl_d,
-  ctrl_e,
-  ctrl_f,
-  ctrl_g,
-  // ctrl_h,
-  // ctrl_i,
-  ctrl_j,
-  ctrl_k,
-  // ctrl_m,
-  ctrl_n,
-  ctrl_o,
-  ctrl_p,
-  ctrl_q,
-  ctrl_r,
-  ctrl_s,
-  ctrl_t,
-  ctrl_u,
-  ctrl_v,
-  ctrl_w,
-  ctrl_x,
-  ctrl_y,
-  ctrl_z,
-  page_up,
-  page_down,
-  back_tab, // shift-tab
-  f1,
-  f2,
-  f3,
-  f4,
-  f5,
-  f6,
-  f7,
-  f8,
-  f9,
-  f10,
-  f11,
-  f12,
-  last
+    backspace = 1, // ctrl-h
+    backspace2,
+    del,
+    tab,   // ctrl-i
+    enter, // ctrl-m
+    space,
+    esc,
+    home,
+    end,
+    arrow_up,
+    arrow_down,
+    arrow_left,
+    arrow_right,
+    ctrl_a,
+    ctrl_b,
+    ctrl_c,
+    ctrl_d,
+    ctrl_e,
+    ctrl_f,
+    ctrl_g,
+    // ctrl_h,
+    // ctrl_i,
+    ctrl_j,
+    ctrl_k,
+    // ctrl_m,
+    ctrl_n,
+    ctrl_o,
+    ctrl_p,
+    ctrl_q,
+    ctrl_r,
+    ctrl_s,
+    ctrl_t,
+    ctrl_u,
+    ctrl_v,
+    ctrl_w,
+    ctrl_x,
+    ctrl_y,
+    ctrl_z,
+    page_up,
+    page_down,
+    back_tab, // shift-tab
+    f1,
+    f2,
+    f3,
+    f4,
+    f5,
+    f6,
+    f7,
+    f8,
+    f9,
+    f10,
+    f11,
+    f12,
+    last
 };
 
 /// Mouse button id
@@ -90,21 +90,21 @@ enum class im_mouse_button_id { left, middle, right, last };
 
 /// Terminal input event (see terminal.h): what the terminal reported, in order
 struct im_event {
-  enum class type : std::uint8_t {
-    key,         // key, mods; Space is reported as text ' ' followed by key space
-    text,        // ch (one codepoint), mods (im_mod_alt: a shortcut, not text)
-    mouse_move,  // pos
-    mouse_press, // button, pos
-    mouse_wheel, // wheel (> 0 down), pos
-    resize       // pos: new size in cells
-  };
-  type kind = type::key;
-  im_key_id key = im_key_id();
-  std::uint32_t ch = 0;
-  std::uint8_t mods = 0;
-  im_mouse_button_id button = im_mouse_button_id::left;
-  im_vec2 pos = im_vec2();
-  int wheel = 0;
+    enum class type : std::uint8_t {
+        key,         // key, mods; Space is reported as text ' ' followed by key space
+        text,        // ch (one codepoint), mods (im_mod_alt: a shortcut, not text)
+        mouse_move,  // pos
+        mouse_press, // button, pos
+        mouse_wheel, // wheel (> 0 down), pos
+        resize       // pos: new size in cells
+    };
+    type kind = type::key;
+    im_key_id key = im_key_id();
+    std::uint32_t ch = 0;
+    std::uint8_t mods = 0;
+    im_mouse_button_id button = im_mouse_button_id::left;
+    im_vec2 pos = im_vec2();
+    int wheel = 0;
 };
 
 /// Text attributes, combined with |
@@ -118,36 +118,36 @@ constexpr auto im_attr_strikeout = std::uint32_t(1 << 6);
 
 /// Theme roles: what a style means, not which widget draws it
 enum class im_role : std::uint8_t {
-  text,         // regular text and the background of everything
-  muted,        // secondary: unfocused buttons and tabs, hints
-  accent,       // highlight: focused button brackets and prompt, spinner, progress
-  border,       // view border, button brackets
-  border_focused,
-  title,        // view title
-  title_focused,
-  focus,        // focused item: button label, checkbox box, list row, tab, text cursor
-  selection,    // selected item of an unfocused list / table / tabs
-  header,       // table header
-  input,        // text input
-  input_focused,
-  placeholder,  // text input placeholder
-  error,        // for applications: label("...", im_role::error)
-  warning,
-  success,
-  last
+    text,   // regular text and the background of everything
+    muted,  // secondary: unfocused buttons and tabs, hints
+    accent, // highlight: focused button brackets and prompt, spinner, progress
+    border, // view border, button brackets
+    border_focused,
+    title, // view title
+    title_focused,
+    focus,     // focused item: button label, checkbox box, list row, tab, text cursor
+    selection, // selected item of an unfocused list / table / tabs
+    header,    // table header
+    input,     // text input
+    input_focused,
+    placeholder, // text input placeholder
+    error,       // for applications: label("...", im_role::error)
+    warning,
+    success,
+    last
 };
 
 /// Style of a role. Unset colors are taken from im_role::text (so a theme background applies everywhere)
 struct im_role_style {
-  std::optional<im_color> fg;
-  std::optional<im_color> bg;
-  std::uint32_t attrs = 0;
+    std::optional<im_color> fg;
+    std::optional<im_color> bg;
+    std::uint32_t attrs = 0;
 };
 
 /// Built-in themes
 enum class im_theme_preset {
-  terminal, // default: 16 colors of the user's terminal scheme, works on light and dark backgrounds
-  classic   // fixed 24-bit palette for dark backgrounds
+    terminal, // default: 16 colors of the user's terminal scheme, works on light and dark backgrounds
+    classic   // fixed 24-bit palette for dark backgrounds
 };
 
 class terminal;
@@ -241,14 +241,14 @@ void pop_style(std::size_t count = 1);
 ///   { auto const s = xxx::scoped_style(xxx::im_role::text, {.fg = xxx::ansi::red}); xxx::label("lost"); }
 class [[nodiscard]] scoped_style {
 public:
-  scoped_style(im_role role, im_role_style const& style) {
-    push_style(role, style);
-  }
-  ~scoped_style() {
-    pop_style();
-  }
-  scoped_style(scoped_style const&) = delete;
-  scoped_style& operator=(scoped_style const&) = delete;
+    scoped_style(im_role role, im_role_style const& style) {
+        push_style(role, style);
+    }
+    ~scoped_style() {
+        pop_style();
+    }
+    scoped_style(scoped_style const&) = delete;
+    scoped_style& operator=(scoped_style const&) = delete;
 };
 
 /// Begin row layout
@@ -260,38 +260,41 @@ void layout_row_begin(std::size_t columns);
 ///   layout_row_push(...) - rest of the row, leaving n columns
 ///   set_next_item_width(...) - rest of the line, leaving n cells
 [[nodiscard]] constexpr auto fill(int n = 0) noexcept -> int {
-  return -1 - (n > 0 ? n : 0);
+    return -1 - (n > 0 ? n : 0);
 }
 
 /// Width of a layout column (layout_row_push) or a table column (im_table_column)
 struct im_width {
-  enum class unit : std::uint8_t {
-    cells, // fixed number of cells
-    ratio, // part of the available width, 0..1
-    fill   // the rest of the width, minus `value` cells
-  };
-  unit kind = unit::fill;
-  float value = 0.0f;
+    enum class unit : std::uint8_t {
+        cells, // fixed number of cells
+        ratio, // part of the available width, 0..1
+        fill   // the rest of the width, minus `value` cells
+    };
+    unit kind = unit::fill;
+    float value = 0.0f;
 
-  constexpr im_width() noexcept = default;
-  constexpr im_width(unit k, float v) noexcept : kind(k), value(v) {}
+    constexpr im_width() noexcept = default;
+    constexpr im_width(unit k, float v) noexcept : kind(k), value(v) {}
 
-  /// Number form, kept for compatibility: > 1 cells, (0, 1] ratio, fill(n) the rest minus n.
-  /// Note: 1 means 100% of the width, not one cell. Prefer cells(n) / ratio(r) / fill(n).
-  constexpr im_width(double v) noexcept
-      : kind(v < 0.0 ? unit::fill : v > 1.0 ? unit::cells : unit::ratio), value(float(v < 0.0 ? -v - 1.0 : v)) {}
-  constexpr im_width(float v) noexcept : im_width(double(v)) {}
-  constexpr im_width(int v) noexcept : im_width(double(v)) {}
+    /// Number form, kept for compatibility: > 1 cells, (0, 1] ratio, fill(n) the rest minus n.
+    /// Note: 1 means 100% of the width, not one cell. Prefer cells(n) / ratio(r) / fill(n).
+    constexpr im_width(double v) noexcept
+        : kind(v < 0.0   ? unit::fill
+               : v > 1.0 ? unit::cells
+                         : unit::ratio),
+          value(float(v < 0.0 ? -v - 1.0 : v)) {}
+    constexpr im_width(float v) noexcept : im_width(double(v)) {}
+    constexpr im_width(int v) noexcept : im_width(double(v)) {}
 };
 
 /// Width of exactly n cells
 [[nodiscard]] constexpr auto cells(int n) noexcept -> im_width {
-  return im_width(im_width::unit::cells, float(n > 0 ? n : 0));
+    return im_width(im_width::unit::cells, float(n > 0 ? n : 0));
 }
 
 /// Width as a part of the available width, 0..1
 [[nodiscard]] constexpr auto ratio(float r) noexcept -> im_width {
-  return im_width(im_width::unit::ratio, r < 0.0f ? 0.0f : r > 1.0f ? 1.0f : r);
+    return im_width(im_width::unit::ratio, r < 0.0f ? 0.0f : r > 1.0f ? 1.0f : r);
 }
 
 /// Push column of the given width: cells(n), ratio(r), fill(n)
@@ -364,7 +367,6 @@ constexpr auto im_view_flag_border = int(1 << 0);
 constexpr auto im_view_flag_title = int(1 << 1);
 constexpr auto im_view_flags_default = im_view_flag_border | im_view_flag_title;
 
-
 /// Begin view
 /// flags:
 ///   im_view_flag_border - draw border around view
@@ -385,7 +387,7 @@ void view_begin(std::string_view name, int flags, im_key_id shortcut = im_key_id
 
 /// @overload
 inline void view_begin(std::string_view name, im_key_id shortcut = im_key_id()) {
-  return view_begin(name, im_view_flag_border | im_view_flag_title, shortcut);
+    return view_begin(name, im_view_flag_border | im_view_flag_title, shortcut);
 }
 
 /// End view
@@ -499,10 +501,10 @@ enum class im_align { left, center, right };
 
 /// Frame of views and popups
 enum class im_border : std::uint8_t {
-  rounded, // ╭─╮ (default)
-  plain,   // ┌─┐
-  thick,   // ┏━┓
-  double_line // ╔═╗
+    rounded,    // ╭─╮ (default)
+    plain,      // ┌─┐
+    thick,      // ┏━┓
+    double_line // ╔═╗
 };
 
 /// How views look: frame of inactive views, frame of the active view (and popups), where titles go
@@ -510,9 +512,9 @@ void set_view_style(im_border inactive, im_border active, im_align title_align =
 
 /// Part of a label with its own style, e.g. a key in bold in a help line
 struct im_text {
-  std::string_view text;
-  im_role role = im_role::text;
-  std::uint32_t attrs = 0; // added to the role's attributes, e.g. im_attr_bold
+    std::string_view text;
+    im_role role = im_role::text;
+    std::uint32_t attrs = 0; // added to the role's attributes, e.g. im_attr_bold
 };
 
 /// Label made of parts; with center / right alignment it takes the whole width
@@ -525,9 +527,9 @@ void enable_vim_keys(bool enabled);
 
 /// Table column
 struct im_table_column {
-  std::string_view title;
-  im_width width = fill(); // cells(n), ratio(r) of table width, fill(n): the rest, shared by fill columns
-  im_align align = im_align::left;
+    std::string_view title;
+    im_width width = fill(); // cells(n), ratio(r) of table width, fill(n): the rest, shared by fill columns
+    im_align align = im_align::left;
 };
 
 /// Widget: table with underlined header; rows are selectable like in list(...)
@@ -544,11 +546,11 @@ auto table(std::string_view label, std::span<im_table_column const> columns, std
 
 /// More table options
 struct im_table_options {
-  /// role of each row (text when empty or shorter), e.g. muted for unavailable items; the selected row
-  /// keeps the focus / selection style
-  std::span<im_role const> row_roles = {};
-  /// blank line between the header and the rows
-  bool header_gap = false;
+    /// role of each row (text when empty or shorter), e.g. muted for unavailable items; the selected row
+    /// keeps the focus / selection style
+    std::span<im_role const> row_roles = {};
+    /// blank line between the header and the rows
+    bool header_gap = false;
 };
 
 /// @overload
@@ -567,7 +569,7 @@ void spinner(std::string_view text, float& step);
 /// @tparam Tag is tag for step storage
 template <typename Tag = struct SpinnerDefaultTag>
 void spinner(std::string_view text = {}) {
-  spinner(text, detail::storage_for<float, Tag>());
+    spinner(text, detail::storage_for<float, Tag>());
 }
 
 /// Widget: progress
