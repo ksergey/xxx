@@ -41,6 +41,13 @@ else()
     message(STATUS "example 'mihomo' skipped: needs libcurl (e.g. libcurl4-openssl-dev)")
 endif()
 
+# a chat UI in the style of opencode: panel looks, overlays, popup backdrop
+set(TargetName opencode)
+add_executable(${TargetName} opencode.cpp)
+target_compile_features(${TargetName} PRIVATE cxx_std_23)
+target_compile_options(${TargetName} PRIVATE -Wall -Wextra -g)
+target_link_libraries(${TargetName} PRIVATE xxx::xxx)
+
 set(TargetName poll_loop)
 add_executable(${TargetName} poll_loop.cpp)
 target_compile_features(${TargetName} PRIVATE cxx_std_23)

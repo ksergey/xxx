@@ -3,7 +3,9 @@
 
 #include <chrono>
 #include <cmath>
+#include <exception>
 #include <print>
+#include <string>
 #include <thread>
 
 #include <xxx.h>

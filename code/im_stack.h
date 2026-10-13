@@ -5,7 +5,10 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstddef>
 #include <memory>
+#include <new>
+#include <type_traits>
 #include <utility>
 
 namespace xxx {

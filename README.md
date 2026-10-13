@@ -87,6 +87,17 @@ do the requests and call `xxx::wake_up()` when new data arrives, the UI thread s
 ./build/example/mihomo -u https://127.0.0.1:9090 -s "$SECRET" --cacert controller.crt
 ```
 
+[`example/opencode.cpp`](example/opencode.cpp) is a chat UI in the style of
+[opencode](https://github.com/sst/opencode) with a fake assistant that streams a canned answer. It shows the
+look pieces together: frameless panels with a bar (`im_view_look`), a sidebar and toasts as overlays, a command
+palette (`Ctrl+P`) in a popup over a darkened screen, a status bar of styled label parts.
+
+![opencode-like example](docs/opencode.png)
+
+```sh
+./build/example/opencode
+```
+
 ## Your own event loop
 
 By default `process_input_events(timeout)` waits for input itself. An application with its own event loop

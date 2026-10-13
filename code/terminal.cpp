@@ -212,7 +212,7 @@ struct terminal::impl {
         g_tty.resize_pipe_write = notify_pipe[1];
         g_tty.active = true;
 
-        struct sigaction action{};
+        struct sigaction action {};
         sigemptyset(&action.sa_mask);
         action.sa_handler = on_fatal_signal;
         for (std::size_t i = 0; i < std::size(fatal_signals); ++i) {
@@ -449,7 +449,11 @@ namespace {
 class terminal_backend final : public im_backend {
 public:
     explicit terminal_backend(std::unique_ptr<terminal> owned)
-        : owned_(std::move(owned)), term_(*owned_), waits_(true) {}
+        : owned_(std::move(owned)), term_(*owned_), waits_(true) {
+        // the first process_input_events(wait_forever) returns at once: the first frame is drawn
+        // without waiting for a key
+        terminal_access::get(term_).notified = true;
+    }
     explicit terminal_backend(terminal& external) : term_(external), waits_(false) {}
 
     [[nodiscard]] auto size() const -> im_vec2 override {
@@ -460,7 +464,9 @@ public:
         auto& t = terminal_access::get(term_);
         if (waits_) {
             // block only before the first event, then drain what is already there
-            for (auto first = true;; first = false) {
+            // something is already there (the first frame, events queued earlier): don't block
+            auto const ready = t.notified || !t.queue.empty();
+            for (auto first = !ready;; first = false) {
                 auto wait = first ? int(std::clamp<std::int64_t>(timeout.count(), -1, INT32_MAX)) : 0;
                 if (auto const esc = t.timeout_ms(); esc >= 0) {
                     wait = (wait < 0) ? esc : std::min(wait, esc);

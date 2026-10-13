@@ -15,6 +15,7 @@
 // process_input_events(wait_forever) and redraws only when there is something new.
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -30,6 +31,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include <curl/curl.h>

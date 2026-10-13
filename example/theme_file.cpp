@@ -5,8 +5,11 @@
 
 #include <array>
 #include <charconv>
+#include <cstddef>
+#include <cstdint>
 #include <format>
 #include <fstream>
+#include <ios>
 #include <optional>
 #include <sstream>
 #include <utility>

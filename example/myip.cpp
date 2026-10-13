@@ -8,6 +8,7 @@
 //   myip [-4 | -6] [-t SECONDS] [-u URL]...
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cstdio>
@@ -18,6 +19,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include <arpa/inet.h>

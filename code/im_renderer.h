@@ -4,6 +4,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <ranges>
 #include <span>
 #include <type_traits>
