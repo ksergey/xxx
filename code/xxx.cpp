@@ -394,6 +394,8 @@ void new_frame() {
     g_ctx->view.current_flags = 0;
     g_ctx->view.force_next_id = im_id();
     g_ctx->view.active = false;
+    g_ctx->view.next_look.reset();
+    g_ctx->view.current_style_pushed = false;
 
     g_ctx->widget.current_id = im_id();
     g_ctx->widget.first_id = im_id();
@@ -431,7 +433,7 @@ void check_id_collisions() {
     auto& renderer = g_ctx->renderer;
     auto const saved_layer = renderer.layer();
     if (g_ctx->show_id_collisions) {
-        renderer.set_layer(2);
+        renderer.set_layer(im_renderer::layer_popup);
         renderer.push_clip_rect(get_screen_rect(), false);
     }
 
@@ -684,6 +686,70 @@ namespace internal {
     return std::max(1, layout.rect.max.x - x + 1 - (-width - 1));
 }
 
+// look of the view / popup being started: set_next_view_look(...) or the default
+[[nodiscard]] auto take_look(bool popup) -> im_view_look {
+    auto& view = g_ctx->view;
+    if (view.next_look) {
+        return *std::exchange(view.next_look, std::nullopt);
+    }
+    return popup ? view.popup_look : view.look;
+}
+
+// panel background: widgets inside inherit it; a view reserves the fill now, its height is known at the end
+void begin_panel_look(bool reserve_fill) {
+    auto& view = g_ctx->view;
+    view.current_style_pushed = false;
+    if (!view.current_look.bg) {
+        return;
+    }
+    if (reserve_fill) {
+        view.current_fill = g_ctx->renderer.cmd_reserve();
+    }
+    auto text = g_ctx->theme.get(im_role::text);
+    text.bg = view.current_look.bg;
+    push_style(im_role::text, text);
+    view.current_style_pushed = true;
+}
+
+// side bars of a frameless panel
+void draw_panel_bars(im_rect const& panel, bool active) {
+    auto const& view = g_ctx->view;
+    auto const& look = view.current_look;
+    if (view.current_border != im_border::none || (look.bars_active_only && !active)) {
+        return;
+    }
+    static constexpr auto bar_ch = std::uint32_t(L'┃');
+    auto const style = style_of(active ? im_role::border_focused : im_role::border);
+    if (look.bar_left) {
+        g_ctx->renderer.cmd_fill_rect(im_rect(panel.min.x, panel.min.y, panel.min.x, panel.max.y), bar_ch, style);
+    }
+    if (look.bar_right) {
+        g_ctx->renderer.cmd_fill_rect(im_rect(panel.max.x, panel.min.y, panel.max.x, panel.max.y), bar_ch, style);
+    }
+}
+
+void end_panel_look() {
+    auto& view = g_ctx->view;
+    if (std::exchange(view.current_style_pushed, false)) {
+        pop_style();
+    }
+}
+
+// title line inside a frameless view or popup; popups show "esc" on the right
+void draw_inner_title(im_rect const& rect, std::string_view title, bool active, bool esc_hint) {
+    auto const style = style_of(active ? im_role::title_focused : im_role::title);
+    auto const halign = esc_hint                                     ? im_halign::left
+                        : g_ctx->view.title_align == im_align::left  ? im_halign::left
+                        : g_ctx->view.title_align == im_align::right ? im_halign::right
+                                                                     : im_halign::center;
+    g_ctx->renderer.cmd_fill_rect(rect, ' ', style_of(im_role::text));
+    g_ctx->renderer.cmd_draw_text_in_rect(rect, to_unicode(title), style, halign, im_valign::top);
+    if (esc_hint) {
+        g_ctx->renderer.cmd_draw_text_in_rect(
+            rect, to_unicode("esc"), style_of(im_role::muted), im_halign::right, im_valign::top);
+    }
+}
+
 } // namespace internal
 
 void view_begin(std::string_view name, int flags, im_key_id shortcut, int height) {
@@ -696,10 +762,10 @@ void view_begin(std::string_view name, int flags, im_key_id shortcut, int height
     auto const [str, view_key] = g_ctx->hash_id.split_str_key(name);
 
     if (shortcut != im_key_id()) {
-        view.current_title = std::format(" {} <{}> ", str, get_shorcut_label(shortcut));
+        view.current_title = std::format("{} <{}>", str, get_shorcut_label(shortcut));
         g_ctx->help.view_keys.emplace_back(get_shorcut_label(shortcut), std::format("go to {}", str));
     } else {
-        view.current_title = std::format(" {} ", str);
+        view.current_title = std::string(str);
     }
     view.current_id = g_ctx->hash_id.push_id(view_key);
     view.current_flags = flags;
@@ -729,14 +795,28 @@ void view_begin(std::string_view name, int flags, im_key_id shortcut, int height
         auto const available_bottom = g_ctx->layout.available_bottom();
         auto& layout = g_ctx->layout.layout_state_stack.emplace_back();
 
+        view.current_look = internal::take_look(false);
+        auto const& look = view.current_look;
         auto const do_render_border = (im_view_flag_border == (flags & im_view_flag_border));
         auto const do_render_title = (im_view_flag_title == (flags & im_view_flag_title));
-        auto const border = do_render_border ? 1 : 0;
+        view.current_border = !do_render_border ? im_border::none
+                              : look.border     ? *look.border
+                              : view.active     ? view.border_active
+                                                : view.border_inactive;
+        auto const framed = view.current_border != im_border::none;
+        auto const pad_x = std::max(0, look.pad_x);
+        auto const pad_y = std::max(0, look.pad_y);
+        auto const inset_left = (framed || look.bar_left ? 1 : 0) + pad_x;
+        auto const inset_right = (framed || look.bar_right ? 1 : 0) + pad_x;
+        auto const inset_y = (framed ? 1 : 0) + pad_y;
+        view.current_inset_bottom = inset_y;
+        view.current_inset_right = inset_right;
 
         // reset cursor to start of container layout
         g_ctx->layout.cursor.x = parent_layout.rect.min.x;
 
         auto const top = g_ctx->layout.cursor.y;
+        view.current_outer = im_rect(parent_layout.rect.min.x, top, parent_layout.rect.max.x, top);
         view.current_bounded = (height != 0);
         if (height > 0) {
             view.current_bottom = top + height - 1;
@@ -745,25 +825,27 @@ void view_begin(std::string_view name, int flags, im_key_id shortcut, int height
             view.current_bottom = available_bottom - (-height - 1);
         }
         // a bordered view keeps both borders, even when squeezed
-        view.current_bottom = std::max(view.current_bottom, top + 2 * border - 1);
+        view.current_bottom = std::max(view.current_bottom, top + 2 * inset_y - 1);
 
         layout.type = im_layout_type::container;
-        layout.rect.min = g_ctx->layout.cursor + im_vec2(border, border);
-        layout.rect.max = im_vec2(parent_layout.rect.max.x - border, g_ctx->layout.cursor.y);
-        layout.container = im_layout_data_container{.border = border, .fixed_height = view.current_bounded};
+        layout.rect.min = g_ctx->layout.cursor + im_vec2(inset_left, inset_y);
+        layout.rect.max = im_vec2(parent_layout.rect.max.x - inset_right, g_ctx->layout.cursor.y);
+        layout.container = im_layout_data_container{.border = framed ? 1 : 0, .fixed_height = view.current_bounded};
         if (view.current_bounded) {
-            layout.rect.max.y = view.current_bottom - border;
+            layout.rect.max.y = view.current_bottom - inset_y;
         }
 
         g_ctx->layout.cursor = layout.rect.min;
         g_ctx->layout.last_cursor_y = g_ctx->layout.cursor.y;
 
-        if (!do_render_border && do_render_title) {
+        internal::begin_panel_look(true);
+
+        if (!framed && do_render_title) {
             auto const title_rect = g_ctx->layout.reserve_layout_lines(1);
-            auto const style = view.active ? style_of(im_role::title_focused) : style_of(im_role::title);
-            g_ctx->renderer.cmd_fill_rect(title_rect, ' ', style);
-            g_ctx->renderer.cmd_draw_text_in_rect(
-                title_rect, to_unicode(view.current_title), style, im_halign::center, im_valign::top);
+            internal::draw_inner_title(title_rect, view.current_title, view.active, false);
+            if (look.title_gap > 0) {
+                (void)g_ctx->layout.reserve_layout_lines(look.title_gap);
+            }
         }
 
         // shrink available clip rect by layout width
@@ -791,7 +873,7 @@ void view_begin(std::string_view name, int flags, im_key_id shortcut, int height
             if (auto const wheel = g_ctx->input.mouse_wheel(); wheel != 0 && !popup_open) {
                 auto const mouse = g_ctx->input.mouse_pos();
                 auto const view_rect =
-                    im_rect(layout.rect.min.x - border, top, layout.rect.max.x + border, view.current_bottom);
+                    im_rect(view.current_outer.min.x, top, view.current_outer.max.x, view.current_bottom);
                 if (view_rect.contains(mouse)) {
                     constexpr auto wheel_step = int(3);
                     scroll.offset += wheel * wheel_step;
@@ -823,7 +905,6 @@ void view_end() {
     {
         g_ctx->renderer.pop_clip_rect();
 
-        auto const do_render_border = (im_view_flag_border == (view.current_flags & im_view_flag_border));
         auto const do_render_title = (im_view_flag_title == (view.current_flags & im_view_flag_title));
 
         auto& layout = g_ctx->layout.layout_state_stack.back();
@@ -831,12 +912,12 @@ void view_end() {
             assert(false && "view_end(...) out of order");
             return;
         }
-        auto const border = layout.container.border;
+        auto const framed = view.current_border != im_border::none;
 
         // calculate panel whole size
-        auto const panel_bottom = view.current_bounded ? view.current_bottom : g_ctx->layout.cursor.y + border - 1;
-        auto const panel_rect =
-            im_rect(layout.rect.min - im_vec2(border, border), im_vec2(layout.rect.max.x + border, panel_bottom));
+        auto const panel_bottom =
+            view.current_bounded ? view.current_bottom : g_ctx->layout.cursor.y + view.current_inset_bottom - 1;
+        auto const panel_rect = im_rect(view.current_outer.min, im_vec2(view.current_outer.max.x, panel_bottom));
 
         g_ctx->layout.layout_state_stack.pop_back();
 
@@ -846,11 +927,15 @@ void view_end() {
             g_ctx->view_hits.push_back({.id = view.current_id, .view_id = view.current_id, .rect = visible_panel});
         }
 
+        if (view.current_look.bg) {
+            g_ctx->renderer.cmd_fill_rect(view.current_fill, panel_rect, ' ', style_of(im_role::text));
+        }
+        internal::draw_panel_bars(panel_rect, view.active);
+
         auto const border_style = view.active ? style_of(im_role::border_focused) : style_of(im_role::border);
 
-        if (do_render_border) {
-            g_ctx->renderer.cmd_draw_rect(
-                panel_rect, border_style, view.active ? view.border_active : view.border_inactive);
+        if (framed) {
+            g_ctx->renderer.cmd_draw_rect(panel_rect, border_style, view.current_border);
 
             if (do_render_title) {
                 auto const style = view.active ? style_of(im_role::title_focused) : style_of(im_role::title);
@@ -861,8 +946,9 @@ void view_end() {
                 auto const halign = view.title_align == im_align::left    ? im_halign::left
                                     : view.title_align == im_align::right ? im_halign::right
                                                                           : im_halign::center;
+                auto const title = std::format(" {} ", view.current_title);
                 g_ctx->renderer.cmd_draw_text_in_rect(view.title_align == im_align::center ? panel_rect : title_rect,
-                    to_unicode(view.current_title), style, halign, im_valign::top);
+                    to_unicode(title), style, halign, im_valign::top);
             }
         }
 
@@ -885,16 +971,19 @@ void view_end() {
             // keep offset valid for next frame if content shrank
             scroll.offset = std::clamp(scroll.offset, 0, std::max(0, scroll.content_height - viewport_height));
 
-            if (do_render_border && scroll.content_height > viewport_height && viewport_height > 0) {
+            // scrollbar on the right edge: on the frame, or in the right padding / bar of a frameless view
+            if (view.current_inset_right > 0 && scroll.content_height > viewport_height && viewport_height > 0) {
                 static constexpr auto thumb_ch = std::uint32_t(L'┃');
                 auto const thumb_height = std::max(1, viewport_height * viewport_height / scroll.content_height);
                 auto const max_offset = scroll.content_height - viewport_height;
                 auto const thumb_pos = (viewport_height - thumb_height) * scroll.offset / max_offset;
                 auto const x = panel_rect.max.x;
                 auto const y = view.current_viewport.min.y + thumb_pos;
-                g_ctx->renderer.cmd_fill_rect(im_rect(x, y, x, y + thumb_height - 1), thumb_ch, border_style);
+                g_ctx->renderer.cmd_fill_rect(im_rect(x, y, x, y + thumb_height - 1), thumb_ch,
+                    framed ? border_style : style_of(view.active ? im_role::border_focused : im_role::muted));
             }
         }
+        internal::end_panel_look();
 
         auto const& parent_layout = g_ctx->layout.layout_state_stack.back();
         g_ctx->layout.cursor = im_vec2(parent_layout.rect.min.x, panel_bottom + 1);
@@ -980,6 +1069,18 @@ void set_view_style(im_border inactive, im_border active, im_align title_align) 
     g_ctx->view.border_inactive = inactive;
     g_ctx->view.border_active = active;
     g_ctx->view.title_align = title_align;
+}
+
+void set_view_look(im_view_look const& look) {
+    g_ctx->view.look = look;
+}
+
+void set_popup_look(im_view_look const& look) {
+    g_ctx->view.popup_look = look;
+}
+
+void set_next_view_look(im_view_look const& look) {
+    g_ctx->view.next_look = look;
 }
 
 void enable_vim_keys(bool enabled) {
@@ -1105,14 +1206,28 @@ auto popup_begin(std::string_view id, std::string_view title, int width) -> bool
     auto const screen = get_screen_rect();
     auto const it = popup.heights.find(pid);
     popup.measuring = (it == popup.heights.end());
-    auto const w = std::clamp(width, 4, std::max(4, screen.width()));
-    auto const h = (popup.measuring ? 1 : it->second) + 2;
+
+    view.current_look = internal::take_look(true);
+    auto const& look = view.current_look;
+    view.current_border = look.border ? *look.border : view.border_active;
+    auto const framed = view.current_border != im_border::none;
+    auto const pad_x = std::max(0, look.pad_x);
+    auto const pad_y = std::max(0, look.pad_y);
+    auto const inset_left = (framed || look.bar_left ? 1 : 0) + pad_x;
+    auto const inset_right = (framed || look.bar_right ? 1 : 0) + pad_x;
+    auto const inset_y = (framed ? 1 : 0) + pad_y;
+    view.current_inset_bottom = inset_y;
+    view.current_inset_right = inset_right;
+
+    auto const w = std::clamp(width, inset_left + inset_right + 2, std::max(4, screen.width()));
+    auto const h = (popup.measuring ? 1 : it->second) + 2 * inset_y;
     auto const left = screen.min.x + std::max(0, (screen.width() - w) / 2);
     auto const top = screen.min.y + std::max(0, (screen.height() - h) / 2);
 
     popup.current_id = pid;
-    popup.current_title = std::format(" {} ", title);
+    popup.current_title = std::string(title);
     popup.current_rect = im_rect(left, top, left + w - 1, top + h - 1);
+    view.current_outer = popup.current_rect;
 
     // own layout, surrounding layout is restored in popup_end
     popup.saved_cursor = g_ctx->layout.cursor;
@@ -1120,8 +1235,8 @@ auto popup_begin(std::string_view id, std::string_view title, int width) -> bool
     popup.saved_same_line = g_ctx->layout.same_line;
     auto& layout = g_ctx->layout.layout_state_stack.emplace_back();
     layout.type = im_layout_type::container;
-    layout.rect = im_rect(left + 1, top + 1, left + w - 2, top + 1);
-    layout.container = im_layout_data_container{.border = 1, .fixed_height = false};
+    layout.rect = im_rect(left + inset_left, top + inset_y, left + w - 1 - inset_right, top + inset_y);
+    layout.container = im_layout_data_container{.border = framed ? 1 : 0, .fixed_height = false};
     g_ctx->layout.cursor = layout.rect.min;
     g_ctx->layout.last_cursor_y = layout.rect.min.y;
     g_ctx->layout.same_line = false;
@@ -1135,8 +1250,19 @@ auto popup_begin(std::string_view id, std::string_view title, int width) -> bool
     g_ctx->hash_id.push_id(id);
 
     popup.saved_layer = g_ctx->renderer.layer();
-    g_ctx->renderer.set_layer(2);
-    g_ctx->renderer.push_clip_rect(im_rect(left + 1, top + 1, left + w - 2, screen.max.y).intersection(screen), false);
+    g_ctx->renderer.set_layer(im_renderer::layer_popup);
+    g_ctx->renderer.push_clip_rect(
+        im_rect(layout.rect.min.x, layout.rect.min.y, layout.rect.max.x, screen.max.y).intersection(screen), false);
+
+    // background is drawn below the content in popup_end
+    internal::begin_panel_look(false);
+    if (!framed && !popup.current_title.empty()) {
+        auto const title_rect = g_ctx->layout.reserve_layout_lines(1);
+        internal::draw_inner_title(title_rect, popup.current_title, true, true);
+        if (look.title_gap > 0) {
+            (void)g_ctx->layout.reserve_layout_lines(look.title_gap);
+        }
+    }
     return true;
 }
 
@@ -1152,28 +1278,40 @@ void popup_end() {
     g_ctx->hash_id.pop_id();
 
     auto& rect = popup.current_rect;
-    auto const content_height = g_ctx->layout.cursor.y - (rect.min.y + 1);
+    auto const content_top = g_ctx->layout.layout_state_stack.back().rect.min.y;
+    auto const content_height = g_ctx->layout.cursor.y - content_top;
     popup.heights[popup.current_id] = content_height;
-    rect.max.y = rect.min.y + content_height + 1;
+    rect.max.y = content_top + content_height - 1 + view.current_inset_bottom;
+    auto const framed = view.current_border != im_border::none;
 
     // background and frame below content
     auto const screen = get_screen_rect();
-    g_ctx->renderer.set_layer(1);
+    g_ctx->renderer.set_layer(im_renderer::layer_popup_background);
     g_ctx->renderer.push_clip_rect(screen, false);
     g_ctx->renderer.cmd_fill_rect(rect, ' ', style_of(im_role::text));
-    g_ctx->renderer.cmd_draw_rect(rect, style_of(im_role::border_focused), g_ctx->view.border_active);
-    g_ctx->renderer.cmd_draw_text_in_rect(
-        rect, to_unicode(popup.current_title), style_of(im_role::title_focused), im_halign::center, im_valign::top);
+    internal::draw_panel_bars(rect, true);
+    if (framed) {
+        g_ctx->renderer.cmd_draw_rect(rect, style_of(im_role::border_focused), view.current_border);
+        auto const title = std::format(" {} ", popup.current_title);
+        g_ctx->renderer.cmd_draw_text_in_rect(
+            rect, to_unicode(title), style_of(im_role::title_focused), im_halign::center, im_valign::top);
+    }
     g_ctx->renderer.pop_clip_rect();
     g_ctx->renderer.set_layer(popup.saved_layer);
+    internal::end_panel_look();
 
     if (popup.measuring) {
         // height was unknown: don't show misplaced popup, next frame is centered
-        g_ctx->renderer.clear_layer(1);
-        g_ctx->renderer.clear_layer(2);
+        g_ctx->renderer.clear_layer(im_renderer::layer_popup_background);
+        g_ctx->renderer.clear_layer(im_renderer::layer_popup);
         g_ctx->next_frame_requested = true;
-    } else if (auto const visible = rect.intersection(screen); visible) {
-        g_ctx->view_hits.push_back({.id = popup.current_id, .view_id = popup.current_id, .rect = visible});
+    } else {
+        if (view.current_look.backdrop > 0.0f) {
+            g_ctx->renderer.set_backdrop(im_renderer::layer_popup_background, view.current_look.backdrop);
+        }
+        if (auto const visible = rect.intersection(screen); visible) {
+            g_ctx->view_hits.push_back({.id = popup.current_id, .view_id = popup.current_id, .rect = visible});
+        }
     }
 
     g_ctx->layout.layout_state_stack.pop_back();
@@ -1188,6 +1326,71 @@ void popup_end() {
     if (popup.close_requested) {
         close_popup_now();
     }
+}
+
+void overlay_begin(im_vec2 pos, int width, im_view_look const& look) {
+    auto& view = g_ctx->view;
+    auto& overlay = g_ctx->overlay;
+    if (view.current_id != im_id() || g_ctx->popup.current_id != im_id() || overlay.open) [[unlikely]] {
+        assert(false && "overlay_begin(...) inside view, popup or overlay");
+        return;
+    }
+    overlay.open = true;
+    view.current_look = look;
+    view.current_border = look.border.value_or(im_border::none);
+    auto const framed = view.current_border != im_border::none;
+    auto const pad_x = std::max(0, look.pad_x);
+    auto const inset_left = (framed || look.bar_left ? 1 : 0) + pad_x;
+    auto const inset_right = (framed || look.bar_right ? 1 : 0) + pad_x;
+    auto const inset_y = (framed ? 1 : 0) + std::max(0, look.pad_y);
+    view.current_inset_bottom = inset_y;
+    view.current_outer = im_rect(pos.x, pos.y, pos.x + std::max(1, width) - 1, pos.y);
+
+    overlay.saved_cursor = g_ctx->layout.cursor;
+    overlay.saved_last_cursor_y = g_ctx->layout.last_cursor_y;
+    overlay.saved_same_line = g_ctx->layout.same_line;
+    auto& layout = g_ctx->layout.layout_state_stack.emplace_back();
+    layout.type = im_layout_type::container;
+    layout.rect = im_rect(view.current_outer.min.x + inset_left, pos.y + inset_y,
+        view.current_outer.max.x - inset_right, pos.y + inset_y);
+    layout.container = im_layout_data_container{.border = framed ? 1 : 0, .fixed_height = false};
+    g_ctx->layout.cursor = layout.rect.min;
+    g_ctx->layout.last_cursor_y = layout.rect.min.y;
+    g_ctx->layout.same_line = false;
+
+    overlay.saved_layer = g_ctx->renderer.layer();
+    g_ctx->renderer.set_layer(im_renderer::layer_overlay);
+    g_ctx->renderer.push_clip_rect(get_screen_rect(), false);
+    internal::begin_panel_look(true);
+    g_ctx->renderer.push_clip_rect(im_rect(layout.rect.min.x, layout.rect.min.y, layout.rect.max.x, pos.y + 1000));
+}
+
+void overlay_end() {
+    auto& view = g_ctx->view;
+    auto& overlay = g_ctx->overlay;
+    if (!overlay.open) [[unlikely]] {
+        assert(false && "overlay_end(...) without overlay_begin(...)");
+        return;
+    }
+    g_ctx->renderer.pop_clip_rect();
+    auto const rect = im_rect(view.current_outer.min,
+        im_vec2(view.current_outer.max.x, g_ctx->layout.cursor.y + view.current_inset_bottom - 1));
+    if (view.current_look.bg) {
+        g_ctx->renderer.cmd_fill_rect(view.current_fill, rect, ' ', style_of(im_role::text));
+    }
+    internal::draw_panel_bars(rect, true);
+    if (view.current_border != im_border::none) {
+        g_ctx->renderer.cmd_draw_rect(rect, style_of(im_role::border), view.current_border);
+    }
+    internal::end_panel_look();
+    g_ctx->renderer.pop_clip_rect();
+    g_ctx->renderer.set_layer(overlay.saved_layer);
+
+    g_ctx->layout.layout_state_stack.pop_back();
+    g_ctx->layout.cursor = overlay.saved_cursor;
+    g_ctx->layout.last_cursor_y = overlay.saved_last_cursor_y;
+    g_ctx->layout.same_line = overlay.saved_same_line;
+    overlay.open = false;
 }
 
 void panel_begin() {
@@ -1260,8 +1463,8 @@ void label(std::span<im_text const> parts, im_align align) {
     for (auto const& part : parts) {
         total += text_width(to_unicode(part.text));
     }
-    // left: as wide as the text; center / right: the whole width
-    auto const width = align == im_align::left ? total : internal::item_width(fill());
+    // left: as wide as the text; center / right: the whole width; or set_next_item_width(...)
+    auto const width = align == im_align::left && g_ctx->next_item_width == 0 ? total : internal::item_width(fill());
     auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(width, 1));
     if (!g_ctx->renderer.is_visible(widget_rect)) {
         return;
@@ -1441,7 +1644,7 @@ auto text_input(std::string_view placeholder, std::string& input, int flags) -> 
         }
         t.text.erase(t.text.begin() + first, t.text.begin() + last);
     };
-    static constexpr int input_prompt_width = 2; // "> "
+    auto const input_prompt_width = (flags & im_input_flag_no_prompt) != 0 ? 0 : 2; // "> "
 
     auto& widget = g_ctx->widget;
     auto& text_input = g_ctx->text_input;
@@ -1637,7 +1840,7 @@ auto text_input(std::string_view placeholder, std::string& input, int flags) -> 
     }
 
     if (g_ctx->renderer.is_visible(widget_rect)) {
-        auto const prompt = to_unicode("> ");
+        auto const prompt = to_unicode(input_prompt_width > 0 ? "> " : "");
         auto rect = widget_rect;
 
         if (widget.active) {
@@ -1891,7 +2094,8 @@ auto table_impl(std::string_view label, std::span<im_table_column const> columns
     auto& widget = g_ctx->widget;
     auto const ncols = int(columns.size());
 
-    auto const header_rows = options.header_gap ? 2 : 1;
+    auto const header_rows = options.header ? (options.header_gap ? 2 : 1) : 0;
+    auto const row_pad = std::max(0, options.row_pad);
     auto const rows = std::max(1, height > 0 ? height : count);
     auto const widget_rect = g_ctx->layout.add_widget_item(im_vec2(internal::item_width(fill()), rows + header_rows));
     auto const rows_rect = widget_rect.crop_top(header_rows);
@@ -1923,7 +2127,9 @@ auto table_impl(std::string_view label, std::span<im_table_column const> columns
     if (!widths) [[unlikely]] {
         return activated;
     }
-    auto const available = std::max(0, widget_rect.width() - (ncols - 1));
+    auto const cells_rect =
+        im_rect(widget_rect.min.x + row_pad, widget_rect.min.y, widget_rect.max.x - row_pad, widget_rect.max.y);
+    auto const available = std::max(0, cells_rect.width() - (ncols - 1));
     auto used = 0, fills = 0;
     for (int c = 0; c < ncols; ++c) {
         auto const& w = columns[std::size_t(c)].width;
@@ -1946,14 +2152,14 @@ auto table_impl(std::string_view label, std::span<im_table_column const> columns
     auto const align = [](im_align a) {
         return a == im_align::right ? im_halign::right : a == im_align::center ? im_halign::center : im_halign::left;
     };
-    auto const draw_row = [&](int y, auto&& text_at, im_style const& style) {
-        for (int c = 0, x = widget_rect.min.x; c < ncols && x <= widget_rect.max.x; ++c) {
-            auto const cell = im_rect(x, y, std::min(x + widths[c] - 1, widget_rect.max.x), y);
+    auto const draw_row = [&](int y, auto&& text_at, auto&& style_at) {
+        for (int c = 0, x = cells_rect.min.x; c < ncols && x <= cells_rect.max.x; ++c) {
+            auto const cell = im_rect(x, y, std::min(x + widths[c] - 1, cells_rect.max.x), y);
             if (cell) {
                 // text is cut by its column, not by the next one
                 g_ctx->renderer.push_clip_rect(cell);
                 g_ctx->renderer.cmd_draw_text_in_rect(
-                    cell, to_unicode(text_at(c)), style, align(columns[std::size_t(c)].align), im_valign::top);
+                    cell, to_unicode(text_at(c)), style_at(c), align(columns[std::size_t(c)].align), im_valign::top);
                 g_ctx->renderer.pop_clip_rect();
             }
             x += widths[c] + 1;
@@ -1965,14 +2171,18 @@ auto table_impl(std::string_view label, std::span<im_table_column const> columns
     auto const header_style = style_of(im_role::header);
 
     g_ctx->renderer.cmd_fill_rect(widget_rect, ' ', style);
-    auto const header = im_rect(widget_rect.min.x, widget_rect.min.y, widget_rect.max.x, widget_rect.min.y);
-    g_ctx->renderer.cmd_fill_rect(header, ' ', header_style);
-    draw_row(
-        widget_rect.min.y,
-        [&](int c) {
-            return columns[std::size_t(c)].title;
-        },
-        header_style);
+    if (options.header) {
+        auto const header = im_rect(widget_rect.min.x, widget_rect.min.y, widget_rect.max.x, widget_rect.min.y);
+        g_ctx->renderer.cmd_fill_rect(header, ' ', header_style);
+        draw_row(
+            widget_rect.min.y,
+            [&](int c) {
+                return columns[std::size_t(c)].title;
+            },
+            [&](int) {
+                return header_style;
+            });
+    }
 
     for (int row = 0; row < rows && offset + row < count; ++row) {
         auto const index = offset + row;
@@ -1992,7 +2202,13 @@ auto table_impl(std::string_view label, std::span<im_table_column const> columns
             [&](int c) {
                 return cell_at(index, c);
             },
-            row_style);
+            [&](int c) {
+                auto const& column_role = columns[std::size_t(c)].role;
+                if (index == selected || row_role != im_role::text || !column_role) {
+                    return row_style;
+                }
+                return style_of(*column_role);
+            });
     }
 
     return activated;

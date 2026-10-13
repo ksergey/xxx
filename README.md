@@ -28,6 +28,11 @@ Earlier versions were built on [termbox/termbox2](https://github.com/termbox/ter
 - View frames (rounded, plain, thick, double) for inactive / active views, titles left, center or right
   (`set_view_style`); labels made of styled parts (`label({{"q", im_role::text, im_attr_bold}, {" quit"}})`);
   table rows with their own role and a gap under the header (`im_table_options`); optional j / k / g / G
+- Panel looks for views and popups (`im_view_look`: `set_view_look`, `set_popup_look`, `set_next_view_look`):
+  frameless panels with a background the widgets inside inherit, padding, a `┃` bar on the active one, the
+  title inside; popups can darken the screen behind them. Overlays (`overlay_begin` / `overlay_end`) put
+  non-interactive panels anywhere, e.g. toasts and sidebars. Tables without a header, with row padding and
+  column roles; text inputs without the `> ` prompt
 - Headless backend for testing UI without a terminal
 - Debug builds mark widgets with colliding ids (same label twice) with a red `!`
 

@@ -467,7 +467,8 @@ auto button(std::string_view label) -> bool;
 auto text_input(std::string_view placeholder, std::string& input, int flags = 0) -> bool;
 
 /// text_input flags
-constexpr auto im_input_flag_password = int(1 << 0); // show '*' instead of chars
+constexpr auto im_input_flag_password = int(1 << 0);  // show '*' instead of chars
+constexpr auto im_input_flag_no_prompt = int(1 << 1); // no "> " in front of the text
 
 /// Widget: tab bar " one  two  three ", selected tab highlighted
 /// Left / Right switch tabs when focused (wrapping), click selects.
@@ -501,14 +502,53 @@ enum class im_align { left, center, right };
 
 /// Frame of views and popups
 enum class im_border : std::uint8_t {
-    rounded,    // ╭─╮ (default)
-    plain,      // ┌─┐
-    thick,      // ┏━┓
-    double_line // ╔═╗
+    rounded,     // ╭─╮ (default)
+    plain,       // ┌─┐
+    thick,       // ┏━┓
+    double_line, // ╔═╗
+    none         // no frame: the title is the first line inside (see im_view_look)
 };
 
 /// How views look: frame of inactive views, frame of the active view (and popups), where titles go
 void set_view_style(im_border inactive, im_border active, im_align title_align = im_align::center);
+
+/// Look of a view or a popup beyond its frame: panels with a background, padding and side bars
+/// (like "┃ panel" of modern TUIs). The default look changes nothing: frames from set_view_style(...).
+struct im_view_look {
+    /// unset: frames from set_view_style(...); im_border::none - no frame, the title is the first line inside
+    std::optional<im_border> border;
+    /// panel background; widgets inside inherit it (unset backgrounds follow im_role::text)
+    std::optional<im_color> bg;
+    /// inner padding, cells
+    int pad_x = 0;
+    int pad_y = 0;
+    /// "┃" along the left / right edge: border_focused color when the view is active, border otherwise
+    bool bar_left = false;
+    bool bar_right = false;
+    /// bars only on the active view (inactive: blank edge)
+    bool bars_active_only = false;
+    /// blank lines between the title and the content (frameless views and popups)
+    int title_gap = 0;
+    /// popups: darken the rest of the screen, 0 - off, 1 - black (RGB colors are scaled, others dimmed)
+    float backdrop = 0.0f;
+};
+
+/// Default look of views
+void set_view_look(im_view_look const& look);
+
+/// Default look of popups (frameless popups show "esc" on the right of the title)
+void set_popup_look(im_view_look const& look);
+
+/// Look of the next view_begin(...) / popup_begin(...) only
+void set_next_view_look(im_view_look const& look);
+
+/// Begin a non-interactive overlay at a screen position, e.g. a toast in a corner: drawn on top of views,
+/// below popups; height fits the content (labels and the like, no focusable widgets).
+/// Look: no frame unless look.border is set. Call outside of views and popups, end with overlay_end().
+void overlay_begin(im_vec2 pos, int width, im_view_look const& look = {});
+
+/// End overlay
+void overlay_end();
 
 /// Part of a label with its own style, e.g. a key in bold in a help line
 struct im_text {
@@ -517,7 +557,8 @@ struct im_text {
     std::uint32_t attrs = 0; // added to the role's attributes, e.g. im_attr_bold
 };
 
-/// Label made of parts; with center / right alignment it takes the whole width
+/// Label made of parts; with center / right alignment it takes the whole width.
+/// set_next_item_width(...) sets the width for any alignment (e.g. a bar with a background)
 void label(std::span<im_text const> parts, im_align align = im_align::left);
 /// @overload
 void label(std::initializer_list<im_text> parts, im_align align = im_align::left);
@@ -530,6 +571,8 @@ struct im_table_column {
     std::string_view title;
     im_width width = fill(); // cells(n), ratio(r) of table width, fill(n): the rest, shared by fill columns
     im_align align = im_align::left;
+    /// role of the column text (rows with their own row role and the selected row keep theirs)
+    std::optional<im_role> role = {};
 };
 
 /// Widget: table with underlined header; rows are selectable like in list(...)
@@ -551,6 +594,10 @@ struct im_table_options {
     std::span<im_role const> row_roles = {};
     /// blank line between the header and the rows
     bool header_gap = false;
+    /// show the header row
+    bool header = true;
+    /// cells kept blank at the left and right of every row (the selected row is highlighted across them)
+    int row_pad = 0;
 };
 
 /// @overload

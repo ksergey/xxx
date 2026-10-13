@@ -132,9 +132,11 @@ private:
     im_rect clip_rect_;
     im_style clear_style_;
     // commands are drawn layer by layer: later layers on top regardless of submit order
-    static constexpr int layers_count = 3;
+    static constexpr int layers_count = 4;
     std::array<std::vector<render_cmd>, layers_count> commands_;
     int layer_ = 0;
+    int backdrop_layer_ = 0;
+    float backdrop_amount_ = 0.0f;
 
 public:
     im_renderer(im_renderer const&) = delete;
@@ -178,13 +180,56 @@ public:
         clear_style_ = style;
     }
 
-    /// Layer for following commands: 0 - main ui, 1 - popup background, 2 - popup content
+    /// Layers, bottom to top
+    static constexpr int layer_main = 0;
+    static constexpr int layer_overlay = 1; // overlay_begin(...): toasts and the like
+    static constexpr int layer_popup_background = 2;
+    static constexpr int layer_popup = 3;
+
+    /// Layer for following commands
     void set_layer(int layer) noexcept {
         layer_ = std::clamp(layer, 0, layers_count - 1);
     }
 
     [[nodiscard]] auto layer() const noexcept -> int {
         return layer_;
+    }
+
+    /// Darken layers below \c layer when rendering (popup backdrop): RGB colors are scaled by 1 - amount,
+    /// palette and default colors get im_attr_dim. Reset every frame.
+    void set_backdrop(int layer, float amount) noexcept {
+        backdrop_layer_ = std::clamp(layer, 0, layers_count);
+        backdrop_amount_ = std::clamp(amount, 0.0f, 1.0f);
+    }
+
+    /// Place for a command whose geometry is known later (e.g. background of a view that fits its content):
+    /// drawn in submit order, as if it was submitted now
+    struct cmd_slot {
+        int layer = 0;
+        std::size_t index = 0;
+    };
+
+    [[nodiscard]] auto cmd_reserve() -> cmd_slot {
+        auto& layer = commands_[std::size_t(layer_)];
+        layer.emplace_back();
+        return cmd_slot{.layer = layer_, .index = layer.size() - 1};
+    }
+
+    /// Fill rect in a reserved slot (clipped by the current clip rect)
+    void cmd_fill_rect(cmd_slot slot, im_rect const& rect, std::uint32_t ch, im_style const& style) {
+        auto& layer = commands_[std::size_t(slot.layer)];
+        if (slot.index >= layer.size()) [[unlikely]] {
+            return;
+        }
+        auto const c_rect = clip_rect_.intersection(this->adjust(rect));
+        auto& cmd = layer[slot.index];
+        if (!c_rect) {
+            cmd.type = render_cmd_type::none;
+            return;
+        }
+        cmd.type = render_cmd_type::fill_rect;
+        cmd.style = style;
+        cmd.fill_rect_data = render_cmd_fill_rect_data{.rect = c_rect, .ch = ch};
     }
 
     /// Drop commands submitted to layer this frame
@@ -211,6 +256,9 @@ public:
 
     /// Append command to draw rect
     void cmd_draw_rect(im_rect const& rect, im_style const& style, im_border border = im_border::rounded) {
+        if (border == im_border::none) {
+            return;
+        }
         auto const a_rect = this->adjust(rect);
         auto const c_rect = clip_rect_.intersection(a_rect);
         if (!c_rect) {
@@ -380,10 +428,12 @@ private:
         cmd.draw_surface_data = {.src_rect = src_rect, .rect = rect, .data = data};
     }
 
+    [[nodiscard]] static auto darken(im_style style, float amount) noexcept -> im_style;
+
     static void do_fill_rect(im_backend& backend, render_cmd const& cmd);
     static void do_draw_rect(im_backend& backend, render_cmd const& cmd);
     static void do_draw_text(im_backend& backend, render_cmd const& cmd);
-    static void do_draw_surface(im_backend& backend, render_cmd const& cmd);
+    static void do_draw_surface(im_backend& backend, render_cmd const& cmd, float dim = 0.0f);
 };
 
 } // namespace xxx

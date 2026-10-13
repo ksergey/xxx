@@ -33,18 +33,51 @@ void im_renderer::start_new_frame(im_rect const& clip_rect) {
         layer.clear();
     }
     layer_ = 0;
+    backdrop_layer_ = 0;
+    backdrop_amount_ = 0.0f;
+}
+
+auto im_renderer::darken(im_style style, float amount) noexcept -> im_style {
+    auto const scale = [amount](std::uint32_t value) {
+        auto const color = im_color(value);
+        if (!color.is_rgb()) {
+            return value;
+        }
+        auto const k = 1.0f - amount;
+        auto const channel = [&](int shift) {
+            return std::uint32_t(float((value >> shift) & 0xffu) * k + 0.5f) << shift;
+        };
+        return channel(16) | channel(8) | channel(0);
+    };
+    if (!im_color(style.fg).is_rgb()) {
+        style.attrs |= im_attr_dim;
+    }
+    style.fg = scale(style.fg);
+    style.bg = scale(style.bg);
+    return style;
 }
 
 void im_renderer::render(im_backend& backend) {
-    backend.clear(clear_style_);
+    auto const dimmed = backdrop_amount_ > 0.0f && backdrop_layer_ > 0;
+    backend.clear(dimmed ? darken(clear_style_, backdrop_amount_) : clear_style_);
 
-    for (auto const& cmd : commands_ | std::views::join) {
-        switch (cmd.type) {
-        case render_cmd_type::fill_rect: do_fill_rect(backend, cmd); break;
-        case render_cmd_type::draw_rect: do_draw_rect(backend, cmd); break;
-        case render_cmd_type::draw_text: do_draw_text(backend, cmd); break;
-        case render_cmd_type::draw_surface: do_draw_surface(backend, cmd); break;
-        default: break;
+    for (int layer = 0; layer < layers_count; ++layer) {
+        auto const dim = dimmed && layer < backdrop_layer_;
+        for (auto cmd : commands_[std::size_t(layer)]) {
+            if (dim) {
+                if (cmd.type == render_cmd_type::draw_surface) {
+                    do_draw_surface(backend, cmd, backdrop_amount_);
+                    continue;
+                }
+                cmd.style = darken(cmd.style, backdrop_amount_);
+            }
+            switch (cmd.type) {
+            case render_cmd_type::fill_rect: do_fill_rect(backend, cmd); break;
+            case render_cmd_type::draw_rect: do_draw_rect(backend, cmd); break;
+            case render_cmd_type::draw_text: do_draw_text(backend, cmd); break;
+            case render_cmd_type::draw_surface: do_draw_surface(backend, cmd); break;
+            default: break;
+            }
         }
     }
 
@@ -107,7 +140,7 @@ void im_renderer::do_draw_text(im_backend& backend, render_cmd const& cmd) {
     }
 }
 
-void im_renderer::do_draw_surface(im_backend& backend, render_cmd const& cmd) {
+void im_renderer::do_draw_surface(im_backend& backend, render_cmd const& cmd, float dim) {
     auto const& src_rect = cmd.draw_surface_data.src_rect;
     auto const& rect = cmd.draw_surface_data.rect;
     auto const& data = cmd.draw_surface_data.data;
@@ -133,7 +166,8 @@ void im_renderer::do_draw_surface(im_backend& backend, render_cmd const& cmd) {
     for (int y = 0; y < take_y; ++y) {
         auto const* const line = data.data() + std::size_t(drop_y + y) * std::size_t(src_width) + std::size_t(drop_x);
         for (int x = 0; x < take_x; ++x) {
-            backend.set_cell(rect.min.x + x, rect.min.y + y, line[x].ch, line[x].style);
+            backend.set_cell(
+                rect.min.x + x, rect.min.y + y, line[x].ch, dim > 0.0f ? darken(line[x].style, dim) : line[x].style);
         }
     }
 }

@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -71,6 +72,18 @@ struct im_context {
         im_border border_inactive = im_border::rounded;
         im_border border_active = im_border::rounded;
         im_align title_align = im_align::center;
+        im_view_look look;                     // default look of views
+        im_view_look popup_look;               // default look of popups
+        std::optional<im_view_look> next_look; // set_next_view_look(...)
+
+        // look of the current view (or popup), valid between begin and end
+        im_view_look current_look;
+        im_border current_border = im_border::rounded;
+        im_rect current_outer; // panel rect, bottom is known at the end
+        int current_inset_bottom = 0;
+        int current_inset_right = 0;
+        im_renderer::cmd_slot current_fill;
+        bool current_style_pushed = false;
     } view;
 
     struct {
@@ -159,6 +172,15 @@ struct im_context {
         int saved_last_cursor_y = 0;
         bool saved_same_line = false;
     } popup;
+
+    // overlay_begin / overlay_end
+    struct {
+        bool open = false;
+        int saved_layer = 0;
+        im_vec2 saved_cursor;
+        int saved_last_cursor_y = 0;
+        bool saved_same_line = false;
+    } overlay;
 
     // id collision detector: ids registered while building a frame, checked in render()
     struct registered_id {
